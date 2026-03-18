@@ -5,6 +5,8 @@ use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\users as UsersController;
+use App\Http\Controllers\RolesController;
+
 Route::get('/', function () {
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
@@ -23,8 +25,14 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
-Route::middleware(['auth', 'permission:users'])->group(function () {
-    Route::get('/users', [UsersController::class, 'index'])->name('users');
+route::middleware(['auth', 'permission:administration'])->group(function () {
+    Route::middleware(['auth', 'permission:users'])->group(function () {
+        Route::get('/users', [UsersController::class, 'index'])->name('users');
+    });
+    Route::middleware(['auth', 'permission:roles'])->group(function () {
+        Route::get('/roles', [RolesController::class, 'index'])->name('roles');
+        Route::patch('/roles/{role}/permissions', [RolesController::class, 'updatePermissions'])->name('roles.permissions.update');
+    });
 });
 
-require __DIR__.'/auth.php';
+require __DIR__ . '/auth.php';

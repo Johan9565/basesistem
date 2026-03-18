@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use MongoDB\Laravel\Eloquent\Model;
+use App\Models\PermissionsModel;
 class RoleModel extends Model
 {
     use HasFactory;
@@ -26,4 +27,5 @@ class RoleModel extends Model
     {
         return $this->hasMany(PermissionsModel::class, 'role_id');
     }
+
 }
