@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import CheckboxToggle from '@/Components/CheckboxToggle.vue';
 import { Head, router } from '@inertiajs/vue3';
 
 defineProps({
@@ -83,12 +84,7 @@ function updatePermissions(role, permission, event) {
                                                 </span>
                                             </div>
 
-                                            <input
-                                                type="checkbox"
-                                                class="toggle toggle-primary toggle-sm"
-                                                :checked="role.permissions?.some(p => p.id === permission.id)"
-                                                @change="updatePermissions(role, permission, $event)"
-                                            />
+                                            <CheckboxToggle :checked="role.permissions?.some(p => p.id === permission.id)" @change="updatePermissions(role, permission, $event)" />
                                         </label>
                                     </div>
                                 </div>

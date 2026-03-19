@@ -14,3 +14,70 @@
 @theme {
     --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
+
+/* Variables editables desde /components - se sobreescriben desde BD */
+:root {
+    --btn-primary-bg: #1f2937;
+    --btn-primary-hover: #374151;
+    --btn-primary-text: #ffffff;
+    --btn-primary-ring: #6366f1;
+    --btn-secondary-bg: #ffffff;
+    --btn-secondary-border: #d1d5db;
+    --btn-secondary-text: #374151;
+    --btn-danger-bg: #dc2626;
+    --btn-danger-hover: #b91c1c;
+    --input-border: #d1d5db;
+    --input-focus-ring: #6366f1;
+    --checkbox-checked-bg: #6366f1;
+    --checkbox-border: #d1d5db;
+    --toggle-checked-bg: #6366f1;
+    --toggle-bg: #d1d5db;
+    --badge-primary: #6366f1;
+    --badge-primary-content: #ffffff;
+}
+
+.btn-primary {
+    background-color: var(--btn-primary-bg);
+    color: var(--btn-primary-text);
+}
+.btn-primary:hover, .btn-primary:focus {
+    background-color: var(--btn-primary-hover);
+}
+.btn-secondary {
+    background-color: var(--btn-secondary-bg);
+    border-color: var(--btn-secondary-border);
+    color: var(--btn-secondary-text);
+}
+.btn-danger {
+    background-color: var(--btn-danger-bg);
+}
+.btn-danger:hover {
+    background-color: var(--btn-danger-hover);
+}
+
+/* Checkbox - colores personalizables */
+.checkbox-primary {
+    --input-color: var(--checkbox-checked-bg, var(--color-primary));
+}
+.checkbox {
+    border-color: var(--checkbox-border, var(--input-color, color-mix(in oklab, var(--color-base-content) 20%, #0000)));
+}
+.checkbox:checked,
+.checkbox[aria-checked="true"] {
+    background-color: var(--checkbox-checked-bg, var(--input-color));
+}
+
+/* Toggle - colores personalizables */
+.toggle-primary {
+    --input-color: var(--toggle-bg, color-mix(in oklab, var(--color-base-content) 50%, #0000));
+}
+.toggle-primary:checked,
+.toggle-primary[aria-checked="true"] {
+    --input-color: var(--toggle-checked-bg, var(--color-primary));
+}
+
+/* Badge - colores personalizables */
+.badge-primary {
+    --badge-color: var(--badge-primary, var(--color-primary));
+    --badge-fg: var(--badge-primary-content, var(--color-primary-content));
+}

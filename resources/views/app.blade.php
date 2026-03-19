@@ -16,6 +16,10 @@
         @inertiaHead
     </head>
     <body class="font-sans antialiased">
+        @php $theme = $componentTheme ?? []; @endphp
+        @if(!empty($theme))
+        <style id="component-theme">:root { @foreach($theme as $var => $val)@if($var && $val !== null && $val !== ''){{ $var }}: {{ $val }}; @endif @endforeach }</style>
+        @endif
         @inertia
     </body>
 </html>
