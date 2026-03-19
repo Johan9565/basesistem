@@ -10,10 +10,13 @@ class ComponentsController extends Controller
 {
     public function index()
     {
-        $theme = ComponentThemeModel::first()?->styles ?? [];
+        $doc = ComponentThemeModel::first();
+        $theme = $doc?->styles ?? [];
+        $activeTheme = $doc?->active_theme ?? 'dark';
 
         return Inertia::render('Components/Index', [
             'theme' => $theme,
+            'activeTheme' => $activeTheme,
         ]);
     }
 
@@ -26,9 +29,34 @@ class ComponentsController extends Controller
 
         $doc = ComponentThemeModel::first();
         if (!$doc) {
-            ComponentThemeModel::create(['styles' => $validated['styles']]);
+            ComponentThemeModel::create([
+                'styles' => $validated['styles'],
+                'active_theme' => 'custom',
+            ]);
         } else {
-            $doc->update(['styles' => $validated['styles']]);
+            $doc->update([
+                'styles' => $validated['styles'],
+                'active_theme' => 'custom',
+            ]);
+        }
+
+        return back();
+    }
+
+    public function updateActiveTheme(Request $request)
+    {
+        $validated = $request->validate([
+            'active_theme' => 'required|string|max:50',
+        ]);
+
+        $doc = ComponentThemeModel::first();
+        if (!$doc) {
+            ComponentThemeModel::create([
+                'styles' => [],
+                'active_theme' => $validated['active_theme'],
+            ]);
+        } else {
+            $doc->update(['active_theme' => $validated['active_theme']]);
         }
 
         return back();

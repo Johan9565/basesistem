@@ -25,8 +25,9 @@ class AppServiceProvider extends ServiceProvider
         Vite::prefetch(concurrency: 3);
 
         View::composer('app', function ($view) {
-            $theme = ComponentThemeModel::first()?->styles ?? [];
-            $view->with('componentTheme', $theme);
+            $doc = ComponentThemeModel::first();
+            $view->with('componentTheme', $doc?->styles ?? []);
+            $view->with('activeTheme', $doc?->active_theme ?? 'dark');
         });
     }
 }

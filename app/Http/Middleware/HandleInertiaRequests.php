@@ -7,6 +7,7 @@ use Inertia\Middleware;
 use Tighten\Ziggy\Ziggy;
 use App\Models\ModulesModel;
 use App\Models\PermissionsModel;
+use App\Models\ComponentThemeModel;
 class HandleInertiaRequests extends Middleware
 {
     /**
@@ -85,9 +86,12 @@ class HandleInertiaRequests extends Middleware
             }
         }
 
+        $themeDoc = ComponentThemeModel::first();
+
         return [
             ...parent::share($request),
             'flash' => $request->session()->get('flash'),
+            'activeTheme' => $themeDoc?->active_theme ?? 'dark',
             'auth' => [
                 'user'  => $user,
                 'role'  => $role?->role ?? null,

@@ -1,5 +1,10 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-theme="dark">
+@php
+    $activeTheme = $activeTheme ?? 'dark';
+    $darkThemes = ['dark', 'forest', 'business', 'cyberpunk', 'custom'];
+    $isDark = in_array($activeTheme, $darkThemes);
+@endphp
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-theme="{{ $activeTheme }}" @if($isDark) class="dark" @endif>
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">

@@ -5,7 +5,9 @@ import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
+import ThemeSelector from '@/Components/ThemeSelector.vue';
 import { Link, usePage } from '@inertiajs/vue3';
+import Toast from 'primevue/toast';
 
 const showingNavigationDropdown = ref(false);
 
@@ -16,25 +18,26 @@ const can  = computed(() => page.props.auth?.can  ?? []);
 
 <template>
     <div>
-        <div class="min-h-screen bg-gray-100 dark:bg-gray-900">
+            <Toast />
+        <div class="min-h-screen bg-base-200">
             <nav
-                class="border-b border-gray-100 bg-white dark:border-gray-700 dark:bg-gray-800"
+                class="border-b border-base-300 bg-base-100"
             >
                 <!-- Primary Navigation Menu -->
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                    <div class="flex h-16 justify-between">
-                        <div class="flex">
+                    <div class="flex h-16 items-center justify-between">
+                        <div class="flex items-center">
                             <!-- Logo -->
                             <div class="flex shrink-0 items-center">
                                 <Link :href="route('dashboard')">
                                     <ApplicationLogo
-                                        class="block h-9 w-auto fill-current text-gray-800 dark:text-gray-200"
+                                        class="block h-9 w-auto fill-current text-base-content"
                                     />
                                 </Link>
                             </div>
 
                             <!-- Navigation Links -->
-                            <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                            <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex sm:items-center">
                                 <template v-for="modulo in menu" :key="modulo.id">
                                     <!-- Dropdown (relation == 0) -->
                                     <Dropdown
@@ -44,7 +47,7 @@ const can  = computed(() => page.props.auth?.can  ?? []);
                                     >
                                         <template #trigger>
                                             <button
-                                                class="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium leading-5 text-gray-500 transition duration-150 ease-in-out hover:border-gray-300 hover:text-gray-700 focus:outline-hidden dark:text-gray-400 dark:hover:border-gray-700 dark:hover:text-gray-300"
+                                                class="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium leading-5 text-base-content/70 transition duration-150 ease-in-out hover:border-base-300 hover:text-base-content focus:outline-hidden"
                                             >
                                                 <i v-if="modulo.icon" v-html="modulo.icon" class="mr-2"></i>
                                                 {{ modulo.name }}
@@ -62,10 +65,9 @@ const can  = computed(() => page.props.auth?.can  ?? []);
                                                 <i v-if="child.icon" v-html="child.icon" class="mr-2"></i>
                                                 {{ child.name }}
                                             </DropdownLink>
-                                            <!-- Sin hijos aún -->
                                             <span
                                                 v-if="!modulo.children?.length"
-                                                class="block px-4 py-2 text-sm text-gray-400 dark:text-gray-500"
+                                                class="block px-4 py-2 text-sm text-base-content/60"
                                             >
                                                 Sin opciones
                                             </span>
@@ -85,7 +87,8 @@ const can  = computed(() => page.props.auth?.can  ?? []);
                             </div>
                         </div>
 
-                        <div class="hidden sm:ms-6 sm:flex sm:items-center">
+                        <div class="hidden sm:ms-6 sm:flex sm:items-center sm:gap-1">
+                            <ThemeSelector />
                             <!-- Settings Dropdown -->
                             <div class="relative ms-3">
                                 <Dropdown align="right" width="48">
@@ -93,7 +96,7 @@ const can  = computed(() => page.props.auth?.can  ?? []);
                                         <span class="inline-flex rounded-md">
                                             <button
                                                 type="button"
-                                                class="inline-flex items-center rounded-md border border-transparent bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-hidden dark:bg-gray-800 dark:text-gray-400 dark:hover:text-gray-300"
+                                                class="inline-flex items-center rounded-md border border-transparent bg-base-100 px-3 py-2 text-sm font-medium leading-4 text-base-content/70 transition duration-150 ease-in-out hover:text-base-content focus:outline-hidden"
                                             >
                                                 {{ $page.props.auth.user.name }}
 
@@ -138,7 +141,7 @@ const can  = computed(() => page.props.auth?.can  ?? []);
                                     showingNavigationDropdown =
                                         !showingNavigationDropdown
                                 "
-                                class="inline-flex items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-100 hover:text-gray-500 focus:bg-gray-100 focus:text-gray-500 focus:outline-hidden dark:text-gray-500 dark:hover:bg-gray-900 dark:hover:text-gray-400 dark:focus:bg-gray-900 dark:focus:text-gray-400"
+                                class="inline-flex items-center justify-center rounded-md p-2 text-base-content/60 transition duration-150 ease-in-out hover:bg-base-200 hover:text-base-content focus:bg-base-200 focus:text-base-content focus:outline-hidden"
                             >
                                 <svg
                                     class="h-6 w-6"
@@ -186,7 +189,7 @@ const can  = computed(() => page.props.auth?.can  ?? []);
                     <template v-for="modulo in menu" :key="modulo.id">
                         <!-- Dropdown mobile: título no clickeable + hijos indentados -->
                         <template v-if="modulo.is_dropdown">
-                            <div class="border-t border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:border-gray-600 dark:text-gray-500">
+                            <div class="border-t border-base-300 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-base-content/60">
                                 <i v-if="modulo.icon" v-html="modulo.icon" class="mr-1"></i>
                                 {{ modulo.name }}
                             </div>
@@ -216,15 +219,15 @@ const can  = computed(() => page.props.auth?.can  ?? []);
 
                     <!-- Responsive Settings Options -->
                     <div
-                        class="border-t border-gray-200 pb-1 pt-4 dark:border-gray-600"
+                        class="border-t border-base-300 pb-1 pt-4"
                     >
                         <div class="px-4">
                             <div
-                                class="text-base font-medium text-gray-800 dark:text-gray-200"
+                                class="text-base font-medium text-base-content"
                             >
                                 {{ $page.props.auth.user.name }}
                             </div>
-                            <div class="text-sm font-medium text-gray-500">
+                            <div class="text-sm font-medium text-base-content/70">
                                 {{ $page.props.auth.user.email }}
                             </div>
                         </div>
@@ -247,7 +250,7 @@ const can  = computed(() => page.props.auth?.can  ?? []);
 
             <!-- Page Heading -->
             <header
-                class="bg-white shadow dark:bg-gray-800"
+                class="bg-base-100 shadow"
                 v-if="$slots.header"
             >
                 <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">

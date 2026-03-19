@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* dark: usa la clase .dark en html (no prefers-color-scheme) */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @source "../views/**/*.blade.php";
 @source "../js/**/*.js";
 @source "../js/**/*.vue";
@@ -7,7 +10,7 @@
 @source "../../storage/framework/views/*.php";
 
 @plugin "daisyui" {
-    themes: dark --default, light;
+    themes: dark --default, light, cupcake, forest, business, retro, cyberpunk, valentine;
     logs: false;
 }
 
