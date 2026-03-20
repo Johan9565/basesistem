@@ -120,14 +120,14 @@ const can  = computed(() => page.props.auth?.can  ?? []);
                                         <DropdownLink
                                             :href="route('profile.edit')"
                                         >
-                                            Profile
+                                            Perfil
                                         </DropdownLink>
                                         <DropdownLink
                                             :href="route('logout')"
                                             method="post"
                                             as="button"
                                         >
-                                            Log Out
+                                            Cerrar sesión
                                         </DropdownLink>
                                     </template>
                                 </Dropdown>
