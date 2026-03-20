@@ -155,6 +155,12 @@ Luego limpiar caché: `./vendor/bin/sail php artisan config:clear`
 
 ---
 
+## Tiempo real (Laravel Reverb)
+
+La app incluye **Reverb** para WebSockets y broadcasting. Instalación de credenciales, arranque del servidor con Sail, variables de entorno y despliegue en producción están descritas en **[docs/REVERB.md](docs/REVERB.md)** (basado en la [documentación oficial de Reverb](https://laravel.com/docs/13.x/reverb)).
+
+---
+
 ## Sistema de Roles y Permisos
 
 ### Arquitectura general
