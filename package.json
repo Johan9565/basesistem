@@ -11,9 +11,9 @@
         "@tailwindcss/vite": "^4.0.0",
         "@vitejs/plugin-vue": "^6.0.0",
         "@vue/server-renderer": "^3.4.0",
+        "autoprefixer": "^10.4.12",
         "axios": "^1.11.0",
         "concurrently": "^9.0.1",
-        "autoprefixer": "^10.4.12",
         "laravel-vite-plugin": "^2.0.0",
         "postcss": "^8.4.31",
         "tailwindcss": "^4.0.0",
@@ -23,6 +23,7 @@
     "dependencies": {
         "@primeuix/themes": "^2.0.3",
         "@primevue/themes": "^4.5.4",
+        "cropperjs": "^1.6.2",
         "daisyui": "^5.0.0",
         "primeicons": "^7.0.0",
         "primevue": "^4.5.4"

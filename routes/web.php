@@ -25,6 +25,8 @@ Route::get('/dashboard', function () {
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::post('/profile/avatar', [ProfileController::class, 'updateAvatar'])->name('profile.avatar');
+    Route::post('/profile/banner', [ProfileController::class, 'updateBanner'])->name('profile.banner');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 Route::middleware(['auth', 'permission:administration'])->group(function () {
@@ -47,7 +49,7 @@ Route::middleware(['auth', 'permission:administration'])->group(function () {
         Route::get('/dependencies', [DependenciesController::class, 'index'])->name('dependencies');
         Route::post('/dependencies', [DependenciesController::class, 'store'])->name('dependencies.store');
         Route::patch('/dependencies/{dependency}', [DependenciesController::class, 'update'])->name('dependencies.update');
-        Route::delete('/dependencies/{dependency}', [DependenciesController::class, 'destroy'])->name('dependencies.destroy');
+        // Route::delete('/dependencies/{dependency}', [DependenciesController::class, 'destroy'])->name('dependencies.destroy');
     });
 });
 Route::middleware(['auth'])->group(function () {

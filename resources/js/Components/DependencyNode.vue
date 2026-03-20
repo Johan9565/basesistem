@@ -81,14 +81,14 @@ function onDelete() {
                         severity="info"
                         @click.stop="onEdit"
                     />
-                    <Button
+                    <!-- <Button
                         type="button"
                         icon="pi pi-trash"
                         label="Eliminar"
                         size="small"
                         severity="danger"
                         @click.stop="onDelete"
-                    />
+                    /> -->
                 </div>
             </summary>
             <ul class="ml-4 mt-3 space-y-2 border-l border-base-300 pl-4">
@@ -131,14 +131,14 @@ function onDelete() {
                     severity="info"
                     @click.stop="onEdit"
                 />
-                <Button
+                     <!-- <Button
                     type="button"
                     icon="pi pi-trash"
                     label="Eliminar"
                     size="small"
                     severity="danger"
                     @click.stop="onDelete"
-                />
+                /> -->
             </div>
         </div>
     </li>

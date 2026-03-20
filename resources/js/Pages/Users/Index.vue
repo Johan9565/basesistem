@@ -2,8 +2,9 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
+import WrappingSelect from '@/Components/WrappingSelect.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
@@ -21,6 +22,19 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    areas: {
+        type: Array,
+        default: () => [],
+    },
+    filters: {
+        type: Object,
+        default: () => ({
+            search: '',
+            role_id: '',
+            status: '',
+            area_id: '',
+        }),
+    },
 });
 
 const createDialogVisible = ref(false);
@@ -33,18 +47,97 @@ const statusOptions = [
     { label: 'Inactivo', value: 0 },
 ];
 
+const filterStatusOptions = [
+    { label: 'Todos', value: '' },
+    { label: 'Activo', value: '1' },
+    { label: 'Inactivo', value: '0' },
+];
+
+const roleFilterOptions = computed(() => [
+    { label: 'Todos los roles', value: '' },
+    ...props.roles.map((r) => ({ label: r.name, value: r.id })),
+]);
+
+const areaFilterOptions = computed(() => [
+    { label: 'Todas las áreas', value: '' },
+    ...(props.areas ?? []).map((a) => ({ label: a.name, value: a.id })),
+]);
+
+function normalizeFilterStatus(status) {
+    if (status === 0 || status === '0') return '0';
+    if (status === 1 || status === '1') return '1';
+    return '';
+}
+
+const filterSearch = ref(props.filters.search ?? '');
+const filterRoleId = ref(props.filters.role_id ?? '');
+const filterStatus = ref(normalizeFilterStatus(props.filters.status));
+const filterAreaId = ref(props.filters.area_id ?? '');
+
+watch(
+    () => props.filters,
+    (f) => {
+        filterSearch.value = f.search ?? '';
+        filterRoleId.value = f.role_id ?? '';
+        filterStatus.value = normalizeFilterStatus(f.status);
+        filterAreaId.value = f.area_id ?? '';
+    },
+    { deep: true },
+);
+
+const hasActiveFilters = computed(
+    () =>
+        (filterSearch.value ?? '').trim() !== '' ||
+        (filterRoleId.value ?? '') !== '' ||
+        (filterStatus.value ?? '') !== '' ||
+        (filterAreaId.value ?? '') !== '',
+);
+
+function applyFilters() {
+    const params = {};
+    const q = (filterSearch.value ?? '').trim();
+    if (q) params.search = q;
+    if (filterRoleId.value) params.role_id = filterRoleId.value;
+    if (filterStatus.value !== '') params.status = filterStatus.value;
+    if (filterAreaId.value) params.area_id = filterAreaId.value;
+
+    router.get(route('users'), params, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
+
+function clearFilters() {
+    filterSearch.value = '';
+    filterRoleId.value = '';
+    filterStatus.value = '';
+    filterAreaId.value = '';
+    router.get(route('users'), {}, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
+
 const form = useForm({
     name: '',
+    ape_pat: '',
+    ape_mat: '',
     email: '',
     password: '',
     password_confirmation: '',
     role_id: props.roles?.[0]?.id ?? '',
+    area_id: props.areas?.[0]?.id ?? '',
     status: 1,
 });
 
 function openCreateDialog() {
     if (props.roles?.length && !form.role_id) {
         form.role_id = props.roles[0].id;
+    }
+    if (props.areas?.length && !form.area_id) {
+        form.area_id = props.areas[0].id;
     }
 
     form.status = 1;
@@ -59,6 +152,9 @@ function closeCreateDialog() {
     if (props.roles?.length) {
         form.role_id = props.roles[0].id;
     }
+    if (props.areas?.length) {
+        form.area_id = props.areas[0].id;
+    }
 }
 
 function submit() {
@@ -71,8 +167,11 @@ function submit() {
 function openEditDialog(user) {
     selectedUserId.value = user.id;
     form.name = user.name ?? '';
+    form.ape_pat = user.ape_pat ?? '';
+    form.ape_mat = user.ape_mat ?? '';
     form.email = user.email ?? '';
     form.role_id = user.role_id ?? '';
+    form.area_id = user.area_id ?? '';
     form.status = user.status ?? 1;
     form.password = null;
     form.password_confirmation = null;
@@ -88,6 +187,9 @@ function closeEditDialog() {
 
     if (props.roles?.length) {
         form.role_id = props.roles[0].id;
+    }
+    if (props.areas?.length) {
+        form.area_id = props.areas[0].id;
     }
 }
 
@@ -146,8 +248,11 @@ function toggleUserStatus(user) {
 
     selectedUserId.value = user.id;
     form.name = user.name ?? '';
+    form.ape_pat = user.ape_pat ?? '';
+    form.ape_mat = user.ape_mat ?? '';
     form.email = user.email ?? '';
     form.role_id = user.role_id ?? '';
+    form.area_id = user.area_id ?? '';
     form.status = nextStatus;
     form.password = null;
     form.password_confirmation = null;
@@ -219,13 +324,85 @@ function dialItemsFor(user) {
                             severity="secondary" />
                     </div>
 
+                    <!-- Filtros -->
+                    <div
+                        class="flex flex-col gap-4 border-b border-gray-200 px-6 py-4 dark:border-gray-700 sm:flex-row sm:flex-wrap sm:items-end"
+                    >
+                        <div class="min-w-48 flex-1">
+                            <InputLabel value="Buscar" />
+                            <InputText
+                                v-model="filterSearch"
+                                class="mt-1 block w-full"
+                                placeholder="Nombre, apellidos o correo"
+                                @keyup.enter="applyFilters"
+                            />
+                        </div>
+                        <div class="min-w-44 sm:w-48">
+                            <InputLabel value="Rol" />
+                            <Select
+                                v-model="filterRoleId"
+                                :options="roleFilterOptions"
+                                optionLabel="label"
+                                optionValue="value"
+                                class="mt-1 block w-full"
+                            />
+                        </div>
+                        <div class="min-w-40 sm:w-40">
+                            <InputLabel value="Estado" />
+                            <Select
+                                v-model="filterStatus"
+                                :options="filterStatusOptions"
+                                optionLabel="label"
+                                optionValue="value"
+                                class="mt-1 block w-full"
+                            />
+                        </div>
+                        <div class="min-w-44 sm:w-48">
+                            <InputLabel value="Área" />
+                            <WrappingSelect
+                                v-model="filterAreaId"
+                                panel-preset="filter"
+                                :options="areaFilterOptions"
+                                optionLabel="label"
+                                optionValue="value"
+                                filter
+                                filterPlaceholder="Buscar área..."
+                                class="mt-1 block w-full"
+                            />
+                        </div>
+                        <div class="flex flex-wrap gap-2 pb-0.5">
+                            <Button type="button" label="Aplicar" icon="pi pi-filter" @click="applyFilters" />
+                            <Button
+                                type="button"
+                                label="Limpiar"
+                                icon="pi pi-times"
+                                class="p-button-text"
+                                :disabled="!hasActiveFilters"
+                                @click="clearFilters"
+                            />
+                        </div>
+                    </div>
+
                     <Dialog v-model:visible="createDialogVisible" modal header="Agregar usuario"
                         :style="{ width: '32rem' }" @hide="closeCreateDialog">
                         <form @submit.prevent="submit" class="space-y-4">
                             <div>
                                 <InputLabel value="Nombre" />
-                                <InputText v-model="form.name" class="mt-1 block w-full" autocomplete="name" />
+                                <InputText v-model="form.name" class="mt-1 block w-full" autocomplete="given-name" />
                                 <InputError :message="form.errors.name" class="mt-2" />
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <InputLabel value="Apellido paterno" />
+                                    <InputText v-model="form.ape_pat" class="mt-1 block w-full" autocomplete="family-name" />
+                                    <InputError :message="form.errors.ape_pat" class="mt-2" />
+                                </div>
+                                <div>
+                                    <InputLabel value="Apellido materno" />
+                                    <InputText v-model="form.ape_mat" class="mt-1 block w-full" />
+                                    <InputError :message="form.errors.ape_mat" class="mt-2" />
+                                </div>
                             </div>
 
                             <div>
@@ -240,6 +417,20 @@ function dialItemsFor(user) {
                                 <Select v-model="form.role_id" :options="props.roles" optionLabel="name"
                                     optionValue="id" class="mt-1 block w-full" />
                                 <InputError :message="form.errors.role_id" class="mt-2" />
+                            </div>
+
+                            <div>
+                                <InputLabel value="Área" />
+                                <WrappingSelect
+                                    v-model="form.area_id"
+                                    panel-preset="!max-w-[min(12rem,calc(100vw-2rem))] min-w-0 overflow-hidden"
+                                    :options="props.areas"
+                                    optionLabel="name"
+                                    optionValue="id"
+                                    class="mt-1 block w-full"
+                                    placeholder="Selecciona un área"
+                                />
+                                <InputError :message="form.errors.area_id" class="mt-2" />
                             </div>
 
                             <div>
@@ -282,8 +473,21 @@ function dialItemsFor(user) {
                         <form @submit.prevent="submitEdit" class="space-y-4">
                             <div>
                                 <InputLabel value="Nombre" />
-                                <InputText v-model="form.name" class="mt-1 block w-full" autocomplete="name" />
+                                <InputText v-model="form.name" class="mt-1 block w-full" autocomplete="given-name" />
                                 <InputError :message="form.errors.name" class="mt-2" />
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <InputLabel value="Apellido paterno" />
+                                    <InputText v-model="form.ape_pat" class="mt-1 block w-full" autocomplete="family-name" />
+                                    <InputError :message="form.errors.ape_pat" class="mt-2" />
+                                </div>
+                                <div>
+                                    <InputLabel value="Apellido materno" />
+                                    <InputText v-model="form.ape_mat" class="mt-1 block w-full" />
+                                    <InputError :message="form.errors.ape_mat" class="mt-2" />
+                                </div>
                             </div>
 
                             <div>
@@ -298,6 +502,21 @@ function dialItemsFor(user) {
                                 <Select v-model="form.role_id" :options="props.roles" optionLabel="name"
                                     optionValue="id" class="mt-1 block w-full" />
                                 <InputError :message="form.errors.role_id" class="mt-2" />
+                            </div>
+
+                            <div>
+                                <InputLabel value="Área" />
+                                <WrappingSelect
+                                    v-model="form.area_id"
+                                    panel-preset="!max-w-[min(12rem,calc(100vw-2rem))] min-w-0 overflow-hidden"
+                                    :options="props.areas"
+                                    optionLabel="name"
+                                    optionValue="id"
+                                    class="mt-1 block w-full"
+                                    filter
+                                    filterPlaceholder="Buscar área..."
+                                />
+                                <InputError :message="form.errors.area_id" class="mt-2" />
                             </div>
 
                             <div>
@@ -359,7 +578,7 @@ function dialItemsFor(user) {
                     <!-- Lista (sin tabla) -->
                     <div class="grid ">
                         <div v-if="users.length === 0" class="px-6 py-10 text-center text-sm text-gray-400 dark:text-gray-500">
-                            No hay usuarios registrados.
+                            {{ hasActiveFilters ? 'No hay usuarios que coincidan con los filtros.' : 'No hay usuarios registrados.' }}
                         </div>
 
                         <div v-else class="grid  lg:grid-cols-2">
@@ -380,7 +599,7 @@ function dialItemsFor(user) {
 
                                             <div class="min-w-0">
                                                 <div class="truncate text-sm font-bold text-base-content">
-                                                    {{ user.name }}
+                                                    {{ user.name }} {{ user.ape_pat }} {{ user.ape_mat }}
                                                 </div>
                                                 <div class="break-all text-sm text-base-content/70">
                                                     {{ user.email }}

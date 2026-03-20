@@ -22,11 +22,16 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
+        'ape_pat',
+        'ape_mat',
+        'area_id',
         'email',
         'password',
         'role_id',
         'status',
         'active',
+        'profile_photo_path',
+        'profile_banner_path',
     ];
 
     /**
@@ -37,6 +42,8 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'profile_photo_path',
+        'profile_banner_path',
     ];
 
     /**

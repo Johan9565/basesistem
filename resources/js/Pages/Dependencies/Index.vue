@@ -5,6 +5,7 @@ import { computed, ref } from 'vue';
 import DependencyNode from '@/Components/DependencyNode.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
+import WrappingSelect from '@/Components/WrappingSelect.vue';
 
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
@@ -287,16 +288,15 @@ function deleteDependency(id) {
 
                 <div>
                     <InputLabel value="Padre (opcional)" />
-                    <Select
+                    <WrappingSelect
                         v-model="form.parent_id"
+                        panel-preset="!max-w-[min(12rem,calc(100vw-2rem))] min-w-0 overflow-hidden"
                         :options="parentOptionsForCreate"
                         optionLabel="label"
                         optionValue="value"
+                        class="mt-1 block w-full"
                         filter
                         filterPlaceholder="Buscar dependencia..."
-                        :pt="parentSelectPt"
-                        :virtualScrollerOptions="{ itemSize: 38 }"
-                        class="mt-1 block w-full"
                     />
                     <InputError :message="form.errors.parent_id" class="mt-2" />
                 </div>
@@ -348,7 +348,7 @@ function deleteDependency(id) {
 
                 <div>
                     <InputLabel value="Padre (opcional)" />
-                    <Select
+                    <WrappingSelect
                         v-model="form.parent_id"
                         :options="parentOptionsForEdit"
                         optionLabel="label"
