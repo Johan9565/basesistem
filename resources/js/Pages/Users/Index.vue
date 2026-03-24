@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import WrappingSelect from '@/Components/WrappingSelect.vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
 import Button from 'primevue/button';
@@ -15,6 +15,7 @@ import SpeedDial from 'primevue/speeddial';
 import { useToast } from 'primevue/usetoast';
 
 const toast = useToast();
+const page = usePage();
 
 const props = defineProps({
     users: Array,
@@ -205,11 +206,16 @@ function submitEdit() {
     form.patch(route('users.update', selectedUserId.value), {
         preserveScroll: true,
         onSuccess: () => {
+            const authId = String(page.props.auth?.user?.id ?? '');
+            const editedId = String(selectedUserId.value ?? '');
             toast.add({
                 severity: 'success',
-                summary: 'Actualizado',
-                detail: 'El usuario se actualizó correctamente.',
-                life: 3000,
+                summary: 'Listo',
+                detail:
+                    authId === editedId
+                        ? 'Tus datos se guardaron correctamente.'
+                        : 'Cambios guardados. Si el usuario está en línea, recibirá un aviso en su sesión.',
+                life: 4000,
             });
             closeEditDialog();
         },
@@ -261,13 +267,20 @@ function toggleUserStatus(user) {
     form.patch(route('users.update', selectedUserId.value), {
         preserveScroll: true,
         onSuccess: () => {
+            const authId = String(page.props.auth?.user?.id ?? '');
+            const editedId = String(user.id ?? '');
             toast.add({
                 severity: 'success',
                 summary: 'Estado actualizado',
-                detail: `${user.name ?? 'Usuario'} ahora está ${
-                    nextStatus == 1 ? 'Activo' : 'Inactivo'
-                }.`,
-                life: 3000,
+                detail:
+                    authId === editedId
+                        ? `${user.name ?? 'Usuario'} ahora está ${
+                              nextStatus == 1 ? 'activo' : 'inactivo'
+                          }.`
+                        : `${user.name ?? 'Usuario'} ahora está ${
+                              nextStatus == 1 ? 'activo' : 'inactivo'
+                          }. Si está conectado, también verá un aviso por notificación.`,
+                life: 4000,
             });
             closeEditDialog();
         },

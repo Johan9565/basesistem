@@ -8,6 +8,7 @@ use App\Http\Controllers\users as UsersController;
 use App\Http\Controllers\RolesController;
 use App\Http\Controllers\ComponentsController;
 use App\Http\Controllers\DependenciesController;
+use App\Http\Controllers\NotificationsController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -54,6 +55,12 @@ Route::middleware(['auth', 'permission:administration'])->group(function () {
 });
 Route::middleware(['auth'])->group(function () {
     Route::post('/theme', [ComponentsController::class, 'updateActiveTheme'])->name('theme.update');
+
+    Route::prefix('notifications')->name('notifications.')->group(function () {
+        Route::get('/feed', [NotificationsController::class, 'feed'])->name('feed');
+        Route::patch('/{notification}/read', [NotificationsController::class, 'markAsRead'])->name('read');
+        Route::post('/mark-all-read', [NotificationsController::class, 'markAllRead'])->name('mark-all-read');
+    });
 });
 
 

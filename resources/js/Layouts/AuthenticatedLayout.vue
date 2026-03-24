@@ -1,24 +1,194 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import ThemeSelector from '@/Components/ThemeSelector.vue';
-import { Link, usePage } from '@inertiajs/vue3';
+import NotificationBell from '@/Components/NotificationBell.vue';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import Toast from 'primevue/toast';
+import Button from 'primevue/button';
+import { useToast } from 'primevue/usetoast';
+import {
+    NOTIFICACION_TO_USER_EVENT,
+    PROFILE_HIGHLIGHT_FIELDS_EVENT,
+} from '@/composables/useNotificacionToUser';
 
 const showingNavigationDropdown = ref(false);
 
 const page = usePage();
-const menu = computed(() => page.props.auth?.menu ?? []);
-const can  = computed(() => page.props.auth?.can  ?? []);
+// En visitas parciales o al volver el foco a la pestaña, `page.props` puede ser undefined un instante.
+const menu = computed(() => page.props?.auth?.menu ?? []);
+const can = computed(() => page.props?.auth?.can ?? []);
+const toast = useToast();
+
+function broadcastUrls(payload) {
+    const raw = payload.urls;
+    if (Array.isArray(raw) && raw.length) {
+        return raw.filter((u) => typeof u === 'string' && u !== '');
+    }
+    if (payload.url) {
+        return [String(payload.url)];
+    }
+    return [];
+}
+
+/** Enlaces con etiqueta (payload.links) o solo URLs legadas (url / urls). */
+function broadcastLinks(payload) {
+    const raw = payload.links;
+    if (Array.isArray(raw) && raw.length) {
+        return raw.filter(
+            (l) => l && typeof l.href === 'string' && l.href !== '',
+        );
+    }
+    const urls = broadcastUrls(payload);
+    return urls.map((href, i) => ({
+        label: `Enlace ${i + 1}`,
+        href,
+    }));
+}
+
+function openToastLink(message, lnk) {
+    if (!lnk?.href) {
+        return;
+    }
+    router.visit(lnk.href, { preserveScroll: true });
+    toast.remove(message);
+}
+
+function pathnameMatchesCurrentPaths(paths) {
+    if (!paths?.length) {
+        return true;
+    }
+    const path = window.location.pathname;
+    return paths.some(
+        (p) => path === p || path.startsWith(p.endsWith('/') ? p : `${p}/`),
+    );
+}
+
+onMounted(() => {
+    const echo = window.Echo;
+    const userId = page.props?.auth?.user?.id;
+    if (!echo || userId == null || userId === '') {
+        return;
+    }
+
+    const uid = String(userId);
+    const channelName = `notifications_create_office.${uid}`;
+
+    echo.private(channelName).listen('.notificacion.to.user', (payload) => {
+        const authId = String(uid);
+        const recipientId = String(payload.meta?.recipientId ?? '');
+        if (recipientId !== '' && recipientId !== authId) {
+            return;
+        }
+
+        const scopedPaths = payload.currentPaths ?? [];
+        const scopedContextMatched =
+            !scopedPaths.length || pathnameMatchesCurrentPaths(scopedPaths);
+
+        window.dispatchEvent(
+            new CustomEvent(NOTIFICACION_TO_USER_EVENT, {
+                detail: { ...payload, scopedContextMatched },
+            }),
+        );
+
+        const toastLinks = broadcastLinks(payload);
+        const toastMessage = {
+            severity: 'info',
+            summary: 'Notificación',
+            detail: payload.message,
+            life: toastLinks.length ? 20_000 : 8000,
+            links: toastLinks,
+        };
+
+        toast.add(toastMessage);
+
+        const globalInertia = payload.meta?.inertiaGlobal;
+        const scopedInertia = payload.meta?.inertia;
+        const highlightKeys = payload.meta?.highlightDisplayKeys;
+
+        const globalOnly = globalInertia?.only?.length ? globalInertia.only : [];
+        const scopedOnly =
+            scopedContextMatched && scopedInertia?.only?.length
+                ? scopedInertia.only
+                : [];
+        const mergedOnly = [...new Set([...globalOnly, ...scopedOnly])];
+
+        const preserveScroll =
+            scopedInertia?.preserveScroll !== false &&
+            globalInertia?.preserveScroll !== false;
+
+        if (mergedOnly.length) {
+            router.reload({
+                only: mergedOnly,
+                preserveScroll,
+                onSuccess: () => {
+                    if (scopedContextMatched && highlightKeys?.length) {
+                        window.dispatchEvent(
+                            new CustomEvent(PROFILE_HIGHLIGHT_FIELDS_EVENT, {
+                                detail: { keys: highlightKeys },
+                            }),
+                        );
+                    }
+                },
+            });
+        } else if (scopedContextMatched && highlightKeys?.length) {
+            window.dispatchEvent(
+                new CustomEvent(PROFILE_HIGHLIGHT_FIELDS_EVENT, {
+                    detail: { keys: highlightKeys },
+                }),
+            );
+        }
+    });
+});
+
+onUnmounted(() => {
+    const echo = window.Echo;
+    const userId = page.props?.auth?.user?.id;
+    if (!echo || userId == null || userId === '') {
+        return;
+    }
+    echo.leave(`notifications_create_office.${String(userId)}`);
+});
 </script>
 
 <template>
     <div>
-            <Toast />
+        <Toast position="top-right">
+            <template #message="{ message }">
+                <div
+                    class="flex flex-1 flex-col gap-2 pe-6"
+                    :class="message.links?.length ? 'pt-0.5' : ''"
+                >
+                    <div class="font-medium leading-snug">
+                        {{ message.summary }}
+                    </div>
+                    <div
+                        v-if="message.detail"
+                        class="text-sm leading-snug opacity-90"
+                    >
+                        {{ message.detail }}
+                    </div>
+                    <div
+                        v-if="message.links?.length"
+                        class="flex flex-wrap gap-1"
+                    >
+                        <Button
+                            v-for="(lnk, i) in message.links"
+                            :key="i"
+                            type="button"
+                            :label="lnk.label"
+                            size="small"
+                            severity="secondary"
+                            @click.stop="openToastLink(message, lnk)"
+                        />
+                    </div>
+                </div>
+            </template>
+        </Toast>
         <div class="min-h-screen bg-base-200">
             <nav
                 class="border-b border-base-300 bg-base-100"
@@ -58,7 +228,7 @@ const can  = computed(() => page.props.auth?.can  ?? []);
                                         </template>
                                         <template #content>
                                             <DropdownLink
-                                                v-for="child in modulo.children"
+                                                v-for="child in modulo.children ?? []"
                                                 :key="child.id"
                                                 :href="route(child.route)"
                                             >
@@ -88,6 +258,7 @@ const can  = computed(() => page.props.auth?.can  ?? []);
                         </div>
 
                         <div class="hidden sm:ms-6 sm:flex sm:items-center sm:gap-1">
+                            <NotificationBell />
                             <ThemeSelector />
                             <!-- Settings Dropdown -->
                             <div class="relative ms-3">
@@ -98,7 +269,7 @@ const can  = computed(() => page.props.auth?.can  ?? []);
                                                 type="button"
                                                 class="inline-flex items-center rounded-md border border-transparent bg-base-100 px-3 py-2 text-sm font-medium leading-4 text-base-content/70 transition duration-150 ease-in-out hover:text-base-content focus:outline-hidden"
                                             >
-                                                {{ $page.props.auth.user.name }}
+                                                {{ $page.props?.auth?.user?.name }}
 
                                                 <svg
                                                     class="-me-0.5 ms-2 h-4 w-4"
@@ -135,7 +306,8 @@ const can  = computed(() => page.props.auth?.can  ?? []);
                         </div>
 
                         <!-- Hamburger -->
-                        <div class="-me-2 flex items-center sm:hidden">
+                        <div class="-me-2 flex items-center gap-1 sm:hidden">
+                            <NotificationBell />
                             <button
                                 @click="
                                     showingNavigationDropdown =
@@ -194,7 +366,7 @@ const can  = computed(() => page.props.auth?.can  ?? []);
                                 {{ modulo.name }}
                             </div>
                             <ResponsiveNavLink
-                                v-for="child in modulo.children"
+                                v-for="child in modulo.children ?? []"
                                 :key="child.id"
                                 :href="route(child.route)"
                                 :active="route().current(child.route)"
@@ -225,10 +397,10 @@ const can  = computed(() => page.props.auth?.can  ?? []);
                             <div
                                 class="text-base font-medium text-base-content"
                             >
-                                {{ $page.props.auth.user.name }}
+                                {{ $page.props?.auth?.user?.name }}
                             </div>
                             <div class="text-sm font-medium text-base-content/70">
-                                {{ $page.props.auth.user.email }}
+                                {{ $page.props?.auth?.user?.email }}
                             </div>
                         </div>
 

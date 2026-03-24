@@ -1,9 +1,10 @@
 <script setup>
 import ProfileImageCropModal from '@/Components/ProfileImageCropModal.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { PROFILE_HIGHLIGHT_FIELDS_EVENT } from '@/composables/useNotificacionToUser';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps({
     mustVerifyEmail: {
@@ -46,6 +47,37 @@ const display = computed(() => {
 });
 
 const user = computed(() => page.props.auth?.user);
+
+const highlightedDisplayKeys = ref(new Set());
+let highlightClearTimer;
+
+function isFieldHighlighted(key) {
+    return highlightedDisplayKeys.value.has(key);
+}
+
+function fieldHighlightClass(key) {
+    return isFieldHighlighted(key)
+        ? 'rounded-lg ring-2 ring-amber-400 ring-offset-2 ring-offset-white p-1 -m-1 transition-shadow duration-300 dark:ring-amber-300 dark:ring-offset-gray-900'
+        : '';
+}
+
+function onProfileFieldsHighlight(event) {
+    const keys = event.detail?.keys ?? [];
+    clearTimeout(highlightClearTimer);
+    highlightedDisplayKeys.value = new Set(keys);
+    highlightClearTimer = setTimeout(() => {
+        highlightedDisplayKeys.value = new Set();
+    }, 5500);
+}
+
+onMounted(() => {
+    window.addEventListener(PROFILE_HIGHLIGHT_FIELDS_EVENT, onProfileFieldsHighlight);
+});
+
+onUnmounted(() => {
+    window.removeEventListener(PROFILE_HIGHLIGHT_FIELDS_EVENT, onProfileFieldsHighlight);
+    clearTimeout(highlightClearTimer);
+});
 
 const avatarInitial = computed(() => {
     const n = (display.value.name || '').trim();
@@ -276,7 +308,10 @@ function onCropApplied(file) {
                             </h2>
 
                             <div class="flex flex-col lg:flex-row gap-2 justify-center w-full">
-                                <div class="w-full mb-4 mt-6">
+                                <div
+                                    class="w-full mb-4 mt-6"
+                                    :class="fieldHighlightClass('name')"
+                                >
                                     <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Nombre</label>
                                     <input
                                         type="text"
@@ -286,7 +321,10 @@ function onCropApplied(file) {
                                         :class="inputReadonlyClass"
                                     />
                                 </div>
-                                <div class="w-full mb-4 lg:mt-6">
+                                <div
+                                    class="w-full mb-4 lg:mt-6"
+                                    :class="fieldHighlightClass('ape_pat')"
+                                >
                                     <label class="mb-2 dark:text-gray-300 text-sm font-medium block">
                                         Apellido paterno
                                     </label>
@@ -301,7 +339,10 @@ function onCropApplied(file) {
                             </div>
 
                             <div class="flex flex-col lg:flex-row gap-2 justify-center w-full">
-                                <div class="w-full mb-4">
+                                <div
+                                    class="w-full mb-4"
+                                    :class="fieldHighlightClass('ape_mat')"
+                                >
                                     <label class="mb-2 dark:text-gray-300 text-sm font-medium block">
                                         Apellido materno
                                     </label>
@@ -313,7 +354,10 @@ function onCropApplied(file) {
                                         :class="inputReadonlyClass"
                                     />
                                 </div>
-                                <div class="w-full mb-4">
+                                <div
+                                    class="w-full mb-4"
+                                    :class="fieldHighlightClass('email')"
+                                >
                                     <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Correo</label>
                                     <input
                                         type="text"
@@ -326,13 +370,19 @@ function onCropApplied(file) {
                             </div>
 
                             <div class="flex flex-col lg:flex-row gap-2 justify-center w-full">
-                                <div class="w-full mb-4">
+                                <div
+                                    class="w-full mb-4"
+                                    :class="fieldHighlightClass('role')"
+                                >
                                     <h3 class="dark:text-gray-300 mb-2 text-sm font-medium">Rol</h3>
                                     <div :class="[inputReadonlyClass, 'mt-0!']">
                                         {{ display.role || '—' }}
                                     </div>
                                 </div>
-                                <div class="w-full mb-4">
+                                <div
+                                    class="w-full mb-4"
+                                    :class="fieldHighlightClass('area')"
+                                >
                                     <h3 class="dark:text-gray-300 mb-2 text-sm font-medium">Área</h3>
                                     <div :class="[inputReadonlyClass, 'mt-0!']">
                                         {{ display.area || '—' }}
@@ -340,7 +390,10 @@ function onCropApplied(file) {
                                 </div>
                             </div>
 
-                            <div class="w-full mb-2">
+                            <div
+                                class="w-full mb-2"
+                                :class="fieldHighlightClass('status')"
+                            >
                                 <h3 class="dark:text-gray-300 mb-2 text-sm font-medium">Estado</h3>
                                 <div :class="[inputReadonlyClass, 'mt-0!']">
                                     {{ display.status || '—' }}

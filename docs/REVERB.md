@@ -1,5 +1,7 @@
 # Laravel Reverb — Configuración y despliegue
 
+> Índice de documentación: [docs/README.md](./README.md)
+
 Este proyecto usa **Laravel Reverb** como servidor WebSocket compatible con el protocolo Pusher, integrado con el **event broadcasting** de Laravel. Guía oficial: [Laravel Reverb (docs 13.x)](https://laravel.com/docs/13.x/reverb) y [Broadcasting](https://laravel.com/docs/broadcasting).
 
 > El proyecto corre sobre **Laravel 12**; el comportamiento y las variables de entorno coinciden en esencia con la [guía de Reverb para Laravel 13.x](https://laravel.com/docs/13.x/reverb).

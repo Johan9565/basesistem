@@ -8,6 +8,8 @@ use Tighten\Ziggy\Ziggy;
 use App\Models\ModulesModel;
 use App\Models\PermissionsModel;
 use App\Models\ComponentThemeModel;
+use App\Models\NotificationsModel;
+
 class HandleInertiaRequests extends Middleware
 {
     /**
@@ -35,7 +37,13 @@ class HandleInertiaRequests extends Middleware
         $user = $request->user();
         $userMenu        = [];
         $userPermissions = []; // slugs del campo "module" del permiso (para v-if en Vue)
-
+        $notificationUnreadCount = $user
+            ? NotificationsModel::where('user_id', (string) $user->getKey())
+                ->where('created_at', '>=', now()->startOfMonth())
+                ->where('created_at', '<=', now())
+                ->where('is_read', false)
+                ->count()
+            : 0;
         $role = $user?->role_data()->first();
 
         if ($user && $role) {
@@ -90,15 +98,17 @@ class HandleInertiaRequests extends Middleware
 
         return [
             ...parent::share($request),
+            'csrf_token' => csrf_token(),
             'flash' => $request->session()->get('flash'),
             'activeTheme' => $themeDoc?->active_theme ?? 'dark',
             'auth' => [
                 'user'  => $user,
                 'role'  => $role?->role ?? null,
                 'menu'  => $userMenu,
+                'notification_unread_count' => $notificationUnreadCount,
                 'can'   => $userPermissions,
             ],
-            'ziggy' => fn () => [
+            'ziggy' => fn() => [
                 ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
             ],
