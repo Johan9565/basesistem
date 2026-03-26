@@ -101,6 +101,12 @@ class HandleInertiaRequests extends Middleware
             'csrf_token' => csrf_token(),
             'flash' => $request->session()->get('flash'),
             'activeTheme' => $themeDoc?->active_theme ?? 'dark',
+            'branding' => [
+                'logo_url' => $themeDoc?->logo_url,
+                'auth_side_image_url' => $themeDoc?->auth_side_image_url,
+                'auth_side_image_pos_x' => (float) ($themeDoc?->auth_side_image_pos_x ?? 50),
+                'auth_side_image_pos_y' => (float) ($themeDoc?->auth_side_image_pos_y ?? 50),
+            ],
             'auth' => [
                 'user'  => $user,
                 'role'  => $role?->role ?? null,

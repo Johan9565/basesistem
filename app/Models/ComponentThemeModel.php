@@ -11,5 +11,12 @@ class ComponentThemeModel extends Model
     protected $collection = 'component_theme';
     protected $table      = 'component_theme';
 
-    protected $fillable = ['styles', 'active_theme'];
+    protected $fillable = [
+        'styles',
+        'active_theme',
+        'logo_url',
+        'auth_side_image_url',
+        'auth_side_image_pos_x',
+        'auth_side_image_pos_y',
+    ];
 }

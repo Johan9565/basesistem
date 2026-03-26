@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\AccountStateController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
@@ -36,6 +37,13 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    Route::get('account/deactivated', [AccountStateController::class, 'deactivated'])
+        ->name('account.deactivated');
+    Route::get('account/password-required', [AccountStateController::class, 'passwordRequiredCreate'])
+        ->name('account.password-required');
+    Route::post('account/password-required', [AccountStateController::class, 'passwordRequiredStore'])
+        ->name('account.password-required.store');
+
     Route::get('verify-email', EmailVerificationPromptController::class)
         ->name('verification.notice');
 

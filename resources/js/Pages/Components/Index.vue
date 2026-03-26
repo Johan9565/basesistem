@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
-import { ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
@@ -31,7 +31,157 @@ const props = defineProps({
         type: String,
         default: 'dark',
     },
+    branding: {
+        type: Object,
+        default: () => ({
+            logo_url: null,
+            auth_side_image_url: null,
+            auth_side_image_pos_x: 50,
+            auth_side_image_pos_y: 50,
+        }),
+    },
 });
+
+const localBranding = ref({
+    logo_url: props.branding?.logo_url ?? '',
+    auth_side_image_url: props.branding?.auth_side_image_url ?? '',
+    auth_side_image_pos_x: Number(props.branding?.auth_side_image_pos_x ?? 50),
+    auth_side_image_pos_y: Number(props.branding?.auth_side_image_pos_y ?? 50),
+});
+
+watch(
+    () => [
+        props.branding?.logo_url ?? '',
+        props.branding?.auth_side_image_url ?? '',
+        Number(props.branding?.auth_side_image_pos_x ?? 50),
+        Number(props.branding?.auth_side_image_pos_y ?? 50),
+    ],
+    ([logo, side, posX, posY]) => {
+        localBranding.value.logo_url = logo;
+        localBranding.value.auth_side_image_url = side;
+        localBranding.value.auth_side_image_pos_x = posX;
+        localBranding.value.auth_side_image_pos_y = posY;
+    },
+);
+
+const brandingUploadProcessing = ref(false);
+const logoPickPreviewUrl = ref(null);
+const sidePickPreviewUrl = ref(null);
+
+const logoPreviewSrc = computed(
+    () => logoPickPreviewUrl.value || localBranding.value.logo_url || '',
+);
+const sidePreviewSrc = computed(
+    () => sidePickPreviewUrl.value || localBranding.value.auth_side_image_url || '',
+);
+
+const tabs = [
+    { id: 'branding', label: 'Branding' },
+    { id: 'tema', label: 'Tema' },
+    { id: 'botones', label: 'Botones' },
+    { id: 'formularios', label: 'Formularios' },
+    { id: 'primevue', label: 'PrimeVue' },
+    { id: 'navegacion', label: 'Navegación' },
+    { id: 'otros', label: 'Otros' },
+];
+const activeTab = ref('branding');
+
+function resolveBrandingSrc(value) {
+    if (!value) return '';
+    if (/^(https?:)?\/\//.test(value) || value.startsWith('data:')) return value;
+    if (value.startsWith('/')) return value;
+    return `/storage/${value}`;
+}
+
+function clearPreview(which) {
+    if (which === 'logo' && logoPickPreviewUrl.value) {
+        URL.revokeObjectURL(logoPickPreviewUrl.value);
+        logoPickPreviewUrl.value = null;
+    }
+    if (which === 'side' && sidePickPreviewUrl.value) {
+        URL.revokeObjectURL(sidePickPreviewUrl.value);
+        sidePickPreviewUrl.value = null;
+    }
+}
+
+onBeforeUnmount(() => {
+    clearPreview('logo');
+    clearPreview('side');
+});
+
+function saveBranding() {
+    router.patch(route('components.branding.update'), {
+        logo_url: localBranding.value.logo_url ?? '',
+        auth_side_image_url: localBranding.value.auth_side_image_url ?? '',
+        auth_side_image_pos_x: Number(localBranding.value.auth_side_image_pos_x ?? 50),
+        auth_side_image_pos_y: Number(localBranding.value.auth_side_image_pos_y ?? 50),
+    }, {
+        preserveScroll: true,
+    });
+}
+
+function uploadBrandingFile(asset, event) {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (asset === 'logo') {
+        clearPreview('logo');
+        logoPickPreviewUrl.value = URL.createObjectURL(file);
+    } else {
+        clearPreview('side');
+        sidePickPreviewUrl.value = URL.createObjectURL(file);
+    }
+
+    brandingUploadProcessing.value = true;
+    router.post(route('components.branding.upload'), {
+        asset,
+        upload: file,
+    }, {
+        forceFormData: true,
+        preserveScroll: true,
+        onFinish: () => {
+            brandingUploadProcessing.value = false;
+            input.value = '';
+        },
+        onSuccess: () => {
+            if (asset === 'logo') clearPreview('logo');
+            else clearPreview('side');
+        },
+    });
+}
+
+function cssBackgroundImageStyle(url) {
+    const u = String(url ?? '').replace(/'/g, "\\'");
+    const x = Number(localBranding.value.auth_side_image_pos_x ?? 50);
+    const y = Number(localBranding.value.auth_side_image_pos_y ?? 50);
+    const clampedX = Number.isFinite(x) ? Math.min(100, Math.max(0, x)) : 50;
+    const clampedY = Number.isFinite(y) ? Math.min(100, Math.max(0, y)) : 50;
+    return {
+        backgroundImage: `url('${u}')`,
+        backgroundPosition: `${clampedX}% ${clampedY}%`,
+    };
+}
+
+const isDraggingSideImage = ref(false);
+function dragSideImage(event) {
+    const el = event.currentTarget;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    localBranding.value.auth_side_image_pos_x = Math.min(100, Math.max(0, Number(x.toFixed(2))));
+    localBranding.value.auth_side_image_pos_y = Math.min(100, Math.max(0, Number(y.toFixed(2))));
+}
+
+function startDragSideImage(event) {
+    isDraggingSideImage.value = true;
+    dragSideImage(event);
+}
+
+function stopDragSideImage() {
+    isDraggingSideImage.value = false;
+}
 
 const THEME_KEYS = [
     { key: '--btn-primary-bg', label: 'Botón primario - fondo', default: '#1f2937' },
@@ -143,9 +293,88 @@ watch(() => props.theme, (t) => {
         </template>
 
         <div class="py-8">
-            <div class="mx-auto max-w-7xl space-y-12 px-4 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
+                <section class="rounded-lg bg-base-100 p-3 shadow sm:p-4">
+                    <div class="flex flex-wrap gap-2">
+                        <button
+                            v-for="tab in tabs"
+                            :key="tab.id"
+                            type="button"
+                            class="rounded-md px-3 py-1.5 text-sm transition"
+                            :class="activeTab === tab.id
+                                ? 'bg-primary text-primary-content'
+                                : 'bg-base-200 text-base-content hover:bg-base-300'"
+                            @click="activeTab = tab.id"
+                        >
+                            {{ tab.label }}
+                        </button>
+                    </div>
+                </section>
+
+                <section v-show="activeTab === 'branding'" class="rounded-lg bg-base-100 p-6 shadow">
+                    <h3 class="mb-4 text-lg font-semibold text-base-content">Logo e imágenes de acceso</h3>
+                    <div class="grid gap-8 lg:grid-cols-2">
+                        <div>
+                            <h4 class="text-sm font-medium text-base-content">Logo</h4>
+                            <input
+                                v-model="localBranding.logo_url"
+                                type="text"
+                                class="mt-2 w-full rounded border border-base-300 bg-base-100 px-3 py-2 text-sm shadow-xs focus:border-primary focus:ring-primary"
+                                placeholder="https://... o /storage/..."
+                            />
+                            <input
+                                type="file"
+                                accept="image/*"
+                                class="mt-3 block w-full text-xs file:mr-2 file:rounded file:border-0 file:bg-base-200 file:px-2 file:py-1"
+                                :disabled="brandingUploadProcessing"
+                                @change="uploadBrandingFile('logo', $event)"
+                            />
+                            <img
+                                v-if="logoPreviewSrc"
+                                :src="resolveBrandingSrc(logoPreviewSrc)"
+                                alt="Preview logo"
+                                class="mt-3 max-h-24 w-auto object-contain"
+                            />
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-medium text-base-content">Imagen lateral (login, password required, cuenta desactivada)</h4>
+                            <input
+                                v-model="localBranding.auth_side_image_url"
+                                type="text"
+                                class="mt-2 w-full rounded border border-base-300 bg-base-100 px-3 py-2 text-sm shadow-xs focus:border-primary focus:ring-primary"
+                                placeholder="https://... o /storage/..."
+                            />
+                            <input
+                                type="file"
+                                accept="image/*"
+                                class="mt-3 block w-full text-xs file:mr-2 file:rounded file:border-0 file:bg-base-200 file:px-2 file:py-1"
+                                :disabled="brandingUploadProcessing"
+                                @change="uploadBrandingFile('auth_side', $event)"
+                            />
+                            <div
+                                v-if="sidePreviewSrc"
+                                class="mt-3 min-h-[220px] rounded bg-base-200 bg-cover bg-no-repeat"
+                                :class="isDraggingSideImage ? 'cursor-grabbing' : 'cursor-grab'"
+                                :style="cssBackgroundImageStyle(resolveBrandingSrc(sidePreviewSrc))"
+                                @mousedown.prevent="startDragSideImage"
+                                @mousemove.prevent="isDraggingSideImage && dragSideImage($event)"
+                                @mouseup="stopDragSideImage"
+                                @mouseleave="stopDragSideImage"
+                            />
+
+
+                            <p class="mt-1 text-xs text-base-content/60">
+                                Arrastra la imagen para mover el encuadre. Guarda para aplicar en login.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="mt-5">
+                        <PrimaryButton type="button" @click="saveBranding">Guardar branding</PrimaryButton>
+                    </div>
+                </section>
+
                 <!-- Selector de tema y Custom -->
-                <section class="rounded-lg bg-base-100 p-6 shadow">
+                <section v-show="activeTab === 'tema'" class="rounded-lg bg-base-100 p-6 shadow">
                     <h3 class="mb-4 text-lg font-semibold text-base-content">Tema de la aplicación</h3>
                     <div class="flex flex-wrap items-center gap-4">
                         <div class="flex items-center gap-2">
@@ -167,7 +396,7 @@ watch(() => props.theme, (t) => {
                 </section>
 
                 <!-- Botones -->
-                <section class="rounded-lg bg-base-100 p-6 shadow">
+                <section v-show="activeTab === 'botones'" class="rounded-lg bg-base-100 p-6 shadow">
                     <h3 class="mb-4 text-lg font-semibold text-base-content">Botones</h3>
                     <div class="flex flex-wrap gap-4">
                         <div class="flex flex-col items-center gap-2">
@@ -207,7 +436,7 @@ watch(() => props.theme, (t) => {
                 </section>
 
                 <!-- Formularios -->
-                <section class="rounded-lg bg-base-100 p-6 shadow">
+                <section v-show="activeTab === 'formularios'" class="rounded-lg bg-base-100 p-6 shadow">
                     <h3 class="mb-4 text-lg font-semibold text-base-content">Formularios</h3>
                     <div class="max-w-md space-y-4">
                         <div>
@@ -248,7 +477,7 @@ watch(() => props.theme, (t) => {
                 </section>
 
                 <!-- PrimeVue -->
-                <section class="rounded-lg bg-base-100 p-6 shadow">
+                <section v-show="activeTab === 'primevue'" class="rounded-lg bg-base-100 p-6 shadow">
                     <h3 class="mb-4 text-lg font-semibold text-base-content">PrimeVue</h3>
                     <p class="mb-4 text-xs text-base-content/60">
                         Componentes de la librería PrimeVue (tema Aura). Se estilizan con el preset configurado en app.js.
@@ -372,7 +601,7 @@ watch(() => props.theme, (t) => {
                 </section>
 
                 <!-- Navegación -->
-                <section class="rounded-lg bg-base-100 p-6 shadow">
+                <section v-show="activeTab === 'navegacion'" class="rounded-lg bg-base-100 p-6 shadow">
                     <h3 class="mb-4 text-lg font-semibold text-base-content">Navegación</h3>
                     <p class="mb-4 text-xs text-base-content/60">Sin variables de color personalizables (usa estilos de Tailwind/DaisyUI).</p>
                     <div class="flex flex-wrap gap-4">
@@ -395,7 +624,7 @@ watch(() => props.theme, (t) => {
                 </section>
 
                 <!-- Logo y otros -->
-                <section class="rounded-lg bg-base-100 p-6 shadow">
+                <section v-show="activeTab === 'otros'" class="rounded-lg bg-base-100 p-6 shadow">
                     <h3 class="mb-4 text-lg font-semibold text-base-content">Otros</h3>
                     <div class="flex flex-wrap items-center gap-8">
                         <div class="flex flex-col items-center gap-2">
