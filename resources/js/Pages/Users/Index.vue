@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import WrappingSelect from '@/Components/WrappingSelect.vue';
-import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
 import Button from 'primevue/button';
@@ -18,7 +18,18 @@ const toast = useToast();
 const page = usePage();
 
 const props = defineProps({
-    users: Array,
+    users: {
+        type: Object,
+        default: () => ({
+            data: [],
+            links: [],
+            current_page: 1,
+            last_page: 1,
+            total: 0,
+            from: null,
+            to: null,
+        }),
+    },
     roles: {
         type: Array,
         default: () => [],
@@ -94,8 +105,10 @@ const hasActiveFilters = computed(
         (filterAreaId.value ?? '') !== '',
 );
 
+const userList = computed(() => props.users?.data ?? []);
+
 function applyFilters() {
-    const params = {};
+    const params = { page: 1 };
     const q = (filterSearch.value ?? '').trim();
     if (q) params.search = q;
     if (filterRoleId.value) params.role_id = filterRoleId.value;
@@ -114,7 +127,7 @@ function clearFilters() {
     filterRoleId.value = '';
     filterStatus.value = '';
     filterAreaId.value = '';
-    router.get(route('users'), {}, {
+    router.get(route('users'), { page: 1 }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -329,9 +342,7 @@ function dialItemsFor(user) {
                     <div
                         class="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
                         <p class="text-sm text-gray-500 dark:text-gray-400">
-                            {{ users.length }} usuario{{ users.length !== 1 ? 's' : '' }} registrado{{ users.length !==
-                            1 ? 's'
-                            : '' }}
+                            {{ users.total }} usuario{{ users.total !== 1 ? 's' : '' }} registrado{{ users.total !== 1 ? 's' : '' }}
                         </p>
                         <Button label="Agregar usuario" icon="pi pi-user-plus" class="w-fit " @click="openCreateDialog"
                             severity="secondary" />
@@ -590,13 +601,13 @@ function dialItemsFor(user) {
 
                     <!-- Lista (sin tabla) -->
                     <div class="grid ">
-                        <div v-if="users.length === 0" class="px-6 py-10 text-center text-sm text-gray-400 dark:text-gray-500">
+                        <div v-if="userList.length === 0" class="px-6 py-10 text-center text-sm text-gray-400 dark:text-gray-500">
                             {{ hasActiveFilters ? 'No hay usuarios que coincidan con los filtros.' : 'No hay usuarios registrados.' }}
                         </div>
 
                         <div v-else class="grid  lg:grid-cols-2">
                             <div
-                                v-for="user in users"
+                                v-for="user in userList"
                                 :key="user.id"
                                 class="card bg-base-100 overflow-visible"
                                 style="border-radius: 0rem;"
@@ -651,6 +662,42 @@ function dialItemsFor(user) {
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Paginación -->
+                    <div
+                        v-if="users.last_page > 1"
+                        class="flex flex-col items-center gap-3 border-t border-gray-200 px-6 py-4 dark:border-gray-700 sm:flex-row sm:justify-between"
+                    >
+                        <p class="text-center text-sm text-gray-500 dark:text-gray-400 sm:text-left">
+                            <template v-if="users.total">
+                                Mostrando {{ users.from }}–{{ users.to }} de {{ users.total }}
+                            </template>
+                        </p>
+                        <nav class="flex flex-wrap items-center justify-center gap-1" aria-label="Paginación">
+                            <template v-for="(link, i) in users.links" :key="i">
+                                <Link
+                                    v-if="link.url"
+                                    :href="link.url"
+                                    class="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md border border-gray-300 px-2.5 text-sm font-medium transition-colors hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
+                                    :class="link.active
+                                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-indigo-400 dark:bg-indigo-950 dark:text-indigo-200'
+                                        : 'text-gray-700 dark:text-gray-200'"
+                                    preserve-scroll
+                                    preserve-state
+                                >
+                                    <span v-html="link.label" />
+                                </Link>
+                                <span
+                                    v-else
+                                    class="inline-flex min-h-9 min-w-9 items-center justify-center px-2.5 text-sm"
+                                    :class="link.active
+                                        ? 'font-semibold text-indigo-600 dark:text-indigo-400'
+                                        : 'text-gray-400 dark:text-gray-500'"
+                                    v-html="link.label"
+                                />
+                            </template>
+                        </nav>
                     </div>
                 </div>
             </div>

@@ -57,22 +57,25 @@ class users extends Controller
             }
         }
 
-        $users = $query->orderBy('name')->get()->map(function ($user) {
-            $role = $user->role_data()->first();
-            $areaId = $user->area_id ?? null;
+        $users = $query->orderBy('name')
+            ->paginate(12)
+            ->withQueryString()
+            ->through(function ($user) {
+                $role = $user->role_data()->first();
+                $areaId = $user->area_id ?? null;
 
-            return [
-                'id' => (string) $user->id,
-                'name' => $user->name,
-                'ape_pat' => $user->ape_pat ?? '',
-                'ape_mat' => $user->ape_mat ?? '',
-                'email' => $user->email,
-                'role' => $role ? $role->role : '—',
-                'role_id' => $role ? (string) $role->getKey() : '',
-                'status' => $user->status ?? 1,
-                'area_id' => $areaId ? (string) $areaId : '',
-            ];
-        });
+                return [
+                    'id' => (string) $user->id,
+                    'name' => $user->name,
+                    'ape_pat' => $user->ape_pat ?? '',
+                    'ape_mat' => $user->ape_mat ?? '',
+                    'email' => $user->email,
+                    'role' => $role ? $role->role : '—',
+                    'role_id' => $role ? (string) $role->getKey() : '',
+                    'status' => $user->status ?? 1,
+                    'area_id' => $areaId ? (string) $areaId : '',
+                ];
+            });
 
         $roles = RoleModel::where('status', 1)
             ->get(['id', 'name', 'role'])
