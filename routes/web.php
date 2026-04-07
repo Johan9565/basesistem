@@ -9,6 +9,9 @@ use App\Http\Controllers\RolesController;
 use App\Http\Controllers\ComponentsController;
 use App\Http\Controllers\DependenciesController;
 use App\Http\Controllers\NotificationsController;
+use App\Http\Controllers\ProgramController;
+use App\Http\Controllers\IndicatorController;
+use App\Http\Controllers\MetricController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -30,6 +33,37 @@ Route::middleware('auth')->group(function () {
     Route::post('/profile/banner', [ProfileController::class, 'updateBanner'])->name('profile.banner');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
+
+Route::middleware(['auth', 'permission:programs'])
+    ->group(function () {
+        // Nombre `programs` debe coincidir con `modules.route` y `permissions.module` (menú Ziggy).
+        Route::get('/programs/create', [ProgramController::class, 'create'])->name('programs.create');
+        Route::post('/programs', [ProgramController::class, 'store'])->name('programs.store');
+        Route::get('/programs', [ProgramController::class, 'index'])->name('programs');
+        Route::get('/programs/{program}', [ProgramController::class, 'show'])->name('programs.show');
+        Route::get('/programs/{program}/indicators/create', [IndicatorController::class, 'create'])
+            ->name('indicators.create');
+        Route::post('/programs/{program}/indicators', [IndicatorController::class, 'store'])
+            ->name('indicators.store');
+        Route::get('/programs/{program}/indicators', [IndicatorController::class, 'index'])->name('indicators.index');
+        Route::get('/programs/{program}/indicators/{codigo}/edit', [IndicatorController::class, 'edit'])
+            ->name('indicators.edit');
+        Route::patch('/programs/{program}/indicators/{codigo}', [IndicatorController::class, 'update'])
+            ->name('indicators.update');
+        Route::post('/programs/{program}/metrics/years', [MetricController::class, 'storeYear'])
+            ->name('metrics.years.store');
+        Route::get('/programs/{program}/metrics/targets/{year}', [MetricController::class, 'editTargets'])
+            ->name('metrics.targets');
+        Route::patch('/programs/{program}/metrics/targets/{year}', [MetricController::class, 'updateTargets'])
+            ->name('metrics.targets.update');
+        Route::get('/programs/{program}/metrics/tracking/{year}', [MetricController::class, 'editTracking'])
+            ->name('metrics.tracking');
+        Route::patch('/programs/{program}/metrics/tracking', [MetricController::class, 'updateTracking'])
+            ->name('metrics.tracking.update');
+        Route::get('/programs/{program}/metrics/export/{year}', [MetricController::class, 'exportCsv'])
+            ->name('metrics.export');
+    });
+
 Route::middleware(['auth', 'permission:administration'])->group(function () {
     Route::middleware(['auth', 'permission:users'])->group(function () {
         Route::get('/users', [UsersController::class, 'index'])->name('users');
