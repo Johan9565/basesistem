@@ -96,6 +96,12 @@ class HandleInertiaRequests extends Middleware
 
         $themeDoc = ComponentThemeModel::first();
 
+        $ziggy = (new Ziggy)->toArray();
+
+        // When the app is mounted under a sub-path (e.g. /mir) behind a reverse proxy,
+        // force Ziggy's base URL to the configured APP_URL so front-end routing stays under /mir.
+        $ziggy['url'] = rtrim((string) config('app.url'), '/');
+
         return [
             ...parent::share($request),
             'csrf_token' => csrf_token(),
@@ -115,8 +121,8 @@ class HandleInertiaRequests extends Middleware
                 'can'   => $userPermissions,
             ],
             'ziggy' => fn() => [
-                ...(new Ziggy)->toArray(),
-                'location' => $request->url(),
+                ...$ziggy,
+                'location' => $request->fullUrl(),
             ],
         ];
     }
