@@ -10,7 +10,9 @@ import NotificationBell from '@/Components/NotificationBell.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import Toast from 'primevue/toast';
 import Button from 'primevue/button';
+import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
+import { tApp } from '@/i18n/locales';
 import {
     NOTIFICACION_TO_USER_EVENT,
     PROFILE_HIGHLIGHT_FIELDS_EVENT,
@@ -23,6 +25,43 @@ const page = usePage();
 const menu = computed(() => page.props?.auth?.menu ?? []);
 const can = computed(() => page.props?.auth?.can ?? []);
 const toast = useToast();
+
+const selectedLanguage = ref('en');
+
+function t(key) {
+    return tApp(selectedLanguage.value, key);
+}
+
+const languageOptions = computed(() => [
+    { label: t('english'), value: 'en' },
+    { label: t('spanish'), value: 'es' },
+]);
+
+function applyLanguage(lang) {
+    if (typeof document !== 'undefined') {
+        document.documentElement.setAttribute('lang', lang);
+    }
+    if (typeof window !== 'undefined') {
+        window.localStorage?.setItem('app_language', lang);
+        window.dispatchEvent(
+            new CustomEvent('app:language-changed', { detail: { lang } }),
+        );
+    }
+}
+
+function detectInitialLanguage() {
+    const stored =
+        typeof window !== 'undefined'
+            ? window.localStorage?.getItem('app_language')
+            : null;
+    if (stored === 'en' || stored === 'es') {
+        return stored;
+    }
+
+    const nav =
+        typeof navigator !== 'undefined' ? navigator.language?.toLowerCase() : '';
+    return nav.startsWith('es') ? 'es' : 'en';
+}
 
 function broadcastUrls(payload) {
     const raw = payload.urls;
@@ -69,6 +108,9 @@ function pathnameMatchesCurrentPaths(paths) {
 }
 
 onMounted(() => {
+    selectedLanguage.value = detectInitialLanguage();
+    applyLanguage(selectedLanguage.value);
+
     const echo = window.Echo;
     const userId = page.props?.auth?.user?.id;
     if (!echo || userId == null || userId === '') {
@@ -260,6 +302,14 @@ onUnmounted(() => {
                         <div class="hidden sm:ms-6 sm:flex sm:items-center sm:gap-1">
                             <NotificationBell />
                             <ThemeSelector />
+                            <Select
+                                v-model="selectedLanguage"
+                                :options="languageOptions"
+                                optionLabel="label"
+                                optionValue="value"
+                                class="w-36"
+                                @update:modelValue="applyLanguage"
+                            />
                             <!-- Settings Dropdown -->
                             <div class="relative ms-3">
                                 <Dropdown align="right" width="48">

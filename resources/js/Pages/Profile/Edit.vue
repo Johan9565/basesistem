@@ -3,7 +3,7 @@ import ProfileImageCropModal from '@/Components/ProfileImageCropModal.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { PROFILE_HIGHLIGHT_FIELDS_EVENT } from '@/composables/useNotificacionToUser';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -31,6 +31,7 @@ const display = computed(() => {
             ...p,
             avatar_url: p.avatar_url ?? null,
             banner_url: p.banner_url ?? null,
+            settings: p.settings ?? null,
         };
     }
     return {
@@ -38,15 +39,92 @@ const display = computed(() => {
         ape_pat: u?.ape_pat ?? '—',
         ape_mat: u?.ape_mat ?? '—',
         email: u?.email ?? '—',
-        role: page.props.auth?.role ?? '—',
-        area: '—',
         status: '—',
         avatar_url: null,
         banner_url: null,
+        settings: u?.settings ?? null,
     };
 });
 
 const user = computed(() => page.props.auth?.user);
+
+const settingsFromServer = computed(() => display.value.settings ?? {});
+const form = useForm({
+    name: user.value?.name ?? '',
+    ape_pat: user.value?.ape_pat ?? '',
+    ape_mat: user.value?.ape_mat ?? '',
+    email: user.value?.email ?? '',
+    settings: {
+        whatsapp_business_id: settingsFromServer.value?.whatsapp_business_id ?? '',
+        timezone: settingsFromServer.value?.timezone ?? '',
+        working_hours: settingsFromServer.value?.working_hours ?? {},
+        services: settingsFromServer.value?.services ?? [],
+        bot_config: {
+            tone: settingsFromServer.value?.bot_config?.tone ?? '',
+            language: settingsFromServer.value?.bot_config?.language ?? 'es',
+            system_prompt_extra: settingsFromServer.value?.bot_config?.system_prompt_extra ?? '',
+        },
+    },
+});
+
+const workingHoursJson = ref(
+    JSON.stringify(settingsFromServer.value?.working_hours ?? {}, null, 2),
+);
+const servicesJson = ref(
+    JSON.stringify(settingsFromServer.value?.services ?? [], null, 2),
+);
+const settingsJsonError = ref('');
+
+watch(
+    () => settingsFromServer.value,
+    (s) => {
+        // Solo refrescamos cuando el formulario aún no fue tocado, para evitar pisar edición en curso.
+        if (form.isDirty) return;
+        form.settings = {
+            whatsapp_business_id: s?.whatsapp_business_id ?? '',
+            timezone: s?.timezone ?? '',
+            working_hours: s?.working_hours ?? {},
+            services: s?.services ?? [],
+            bot_config: {
+                tone: s?.bot_config?.tone ?? '',
+                language: s?.bot_config?.language ?? 'es',
+                system_prompt_extra: s?.bot_config?.system_prompt_extra ?? '',
+            },
+        };
+        workingHoursJson.value = JSON.stringify(form.settings.working_hours ?? {}, null, 2);
+        servicesJson.value = JSON.stringify(form.settings.services ?? [], null, 2);
+    },
+    { deep: true },
+);
+
+function submitProfile() {
+    settingsJsonError.value = '';
+
+    let workingHours;
+    let services;
+    try {
+        workingHours = JSON.parse(workingHoursJson.value || '{}');
+    } catch {
+        settingsJsonError.value = 'El JSON de "Horario de trabajo" es inválido.';
+        return;
+    }
+    try {
+        services = JSON.parse(servicesJson.value || '[]');
+    } catch {
+        settingsJsonError.value = 'El JSON de "Servicios" es inválido.';
+        return;
+    }
+
+    form.settings = {
+        ...(form.settings ?? {}),
+        working_hours: workingHours,
+        services,
+    };
+
+    form.patch(route('profile.update'), {
+        preserveScroll: true,
+    });
+}
 
 const highlightedDisplayKeys = ref(new Set());
 let highlightClearTimer;
@@ -102,6 +180,9 @@ const bannerStyle = computed(() => {
 
 const inputReadonlyClass =
     'mt-2 px-4 py-2 w-full border-2 rounded-lg dark:text-gray-200 dark:border-gray-600 dark:bg-gray-800/80 bg-gray-50 text-gray-800 border-gray-300 cursor-default focus:outline-none focus:ring-0';
+
+const inputEditableClass =
+    'mt-2 px-4 py-2 w-full border-2 rounded-lg dark:text-gray-200 dark:border-gray-600 dark:bg-gray-800/80 bg-white text-gray-800 border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400';
 
 const cardClass =
     'rounded-xl shadow-2xl p-4 sm:p-6 h-fit dark:bg-gray-800/40 border border-gray-200/50 dark:border-gray-700/50';
@@ -195,7 +276,7 @@ function onCropApplied(file) {
 
         <section class="py-8 my-auto sm:py-10">
             <div class="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div class="grid grid-cols-1 items-start gap-8 lg:grid-cols-2 lg:gap-10">
+                <div class="grid grid-cols-1 items-start gap-8">
                     <!-- Columna: perfil -->
                     <div :class="cardClass">
                         <div class="py-2">
@@ -203,7 +284,7 @@ function onCropApplied(file) {
                                 Perfil
                             </h1>
                             <h2 class="text-grey text-sm mb-4 dark:text-gray-400">
-                                Información de tu cuenta (solo lectura)
+                                Edita tu información y configuración. El rol no se puede cambiar.
                             </h2>
 
                             <div
@@ -315,11 +396,10 @@ function onCropApplied(file) {
                                     <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Nombre</label>
                                     <input
                                         type="text"
-                                        readonly
-                                        tabindex="-1"
-                                        :value="display.name || '—'"
-                                        :class="inputReadonlyClass"
+                                        v-model="form.name"
+                                        :class="inputEditableClass"
                                     />
+                                    <p v-if="form.errors.name" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ form.errors.name }}</p>
                                 </div>
                                 <div
                                     class="w-full mb-4 lg:mt-6"
@@ -330,11 +410,10 @@ function onCropApplied(file) {
                                     </label>
                                     <input
                                         type="text"
-                                        readonly
-                                        tabindex="-1"
-                                        :value="display.ape_pat || '—'"
-                                        :class="inputReadonlyClass"
+                                        v-model="form.ape_pat"
+                                        :class="inputEditableClass"
                                     />
+                                    <p v-if="form.errors.ape_pat" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ form.errors.ape_pat }}</p>
                                 </div>
                             </div>
 
@@ -348,11 +427,10 @@ function onCropApplied(file) {
                                     </label>
                                     <input
                                         type="text"
-                                        readonly
-                                        tabindex="-1"
-                                        :value="display.ape_mat || '—'"
-                                        :class="inputReadonlyClass"
+                                        v-model="form.ape_mat"
+                                        :class="inputEditableClass"
                                     />
+                                    <p v-if="form.errors.ape_mat" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ form.errors.ape_mat }}</p>
                                 </div>
                                 <div
                                     class="w-full mb-4"
@@ -360,33 +438,18 @@ function onCropApplied(file) {
                                 >
                                     <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Correo</label>
                                     <input
-                                        type="text"
-                                        readonly
-                                        tabindex="-1"
-                                        :value="display.email || '—'"
-                                        :class="inputReadonlyClass"
+                                        type="email"
+                                        v-model="form.email"
+                                        :class="inputEditableClass"
                                     />
+                                    <p v-if="form.errors.email" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ form.errors.email }}</p>
                                 </div>
                             </div>
 
                             <div class="flex flex-col lg:flex-row gap-2 justify-center w-full">
                                 <div
                                     class="w-full mb-4"
-                                    :class="fieldHighlightClass('role')"
                                 >
-                                    <h3 class="dark:text-gray-300 mb-2 text-sm font-medium">Rol</h3>
-                                    <div :class="[inputReadonlyClass, 'mt-0!']">
-                                        {{ display.role || '—' }}
-                                    </div>
-                                </div>
-                                <div
-                                    class="w-full mb-4"
-                                    :class="fieldHighlightClass('area')"
-                                >
-                                    <h3 class="dark:text-gray-300 mb-2 text-sm font-medium">Área</h3>
-                                    <div :class="[inputReadonlyClass, 'mt-0!']">
-                                        {{ display.area || '—' }}
-                                    </div>
                                 </div>
                             </div>
 
@@ -398,6 +461,102 @@ function onCropApplied(file) {
                                 <div :class="[inputReadonlyClass, 'mt-0!']">
                                     {{ display.status || '—' }}
                                 </div>
+                            </div>
+
+                            <div class="border-t border-gray-200/70 dark:border-gray-700/70 pt-4 mt-6">
+                                <h3 class="dark:text-gray-200 text-sm font-semibold mb-3">Configuración</h3>
+
+                                <div>
+                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">WhatsApp Business ID</label>
+                                    <input
+                                        v-model="form.settings.whatsapp_business_id"
+                                        type="text"
+                                        :class="inputEditableClass"
+                                        placeholder="123456789"
+                                    />
+                                </div>
+
+                                <div class="mt-3">
+                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Timezone</label>
+                                    <input
+                                        v-model="form.settings.timezone"
+                                        type="text"
+                                        :class="inputEditableClass"
+                                        placeholder="America/Cancun"
+                                    />
+                                </div>
+
+                                <div class="mt-3">
+                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Horario de trabajo (JSON)</label>
+                                    <textarea
+                                        v-model="workingHoursJson"
+                                        rows="7"
+                                        class="mt-2 px-4 py-2 w-full border-2 rounded-lg font-mono text-xs dark:text-gray-200 dark:border-gray-600 dark:bg-gray-800/80 bg-white text-gray-800 border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                        placeholder='{ "monday": { "start": "09:00", "end": "18:00" }, "sunday": null }'
+                                    />
+                                </div>
+
+                                <div class="mt-3">
+                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Servicios (JSON)</label>
+                                    <textarea
+                                        v-model="servicesJson"
+                                        rows="7"
+                                        class="mt-2 px-4 py-2 w-full border-2 rounded-lg font-mono text-xs dark:text-gray-200 dark:border-gray-600 dark:bg-gray-800/80 bg-white text-gray-800 border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                        placeholder='[{ "name": "Sesión de Retrato", "duration_minutes": 60, "price": 1500, "currency": "MXN" }]'
+                                    />
+                                </div>
+
+                                <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Tono del bot</label>
+                                        <input
+                                            v-model="form.settings.bot_config.tone"
+                                            type="text"
+                                            :class="inputEditableClass"
+                                            placeholder="profesional pero amigable"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Idioma</label>
+                                        <input
+                                            v-model="form.settings.bot_config.language"
+                                            type="text"
+                                            :class="inputEditableClass"
+                                            placeholder="es"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="mt-3">
+                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">System prompt extra</label>
+                                    <textarea
+                                        v-model="form.settings.bot_config.system_prompt_extra"
+                                        rows="3"
+                                        class="mt-2 px-4 py-2 w-full border-2 rounded-lg dark:text-gray-200 dark:border-gray-600 dark:bg-gray-800/80 bg-white text-gray-800 border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                        placeholder="Menciona que el estudio está cerca..."
+                                    />
+                                </div>
+
+                                <p v-if="settingsJsonError" class="mt-3 text-xs text-red-600 dark:text-red-400">
+                                    {{ settingsJsonError }}
+                                </p>
+                                <p v-if="form.errors.settings" class="mt-3 text-xs text-red-600 dark:text-red-400">
+                                    {{ form.errors.settings }}
+                                </p>
+                            </div>
+
+                            <div class="flex items-center gap-3 pt-4">
+                                <button
+                                    type="button"
+                                    @click="submitProfile"
+                                    :disabled="form.processing"
+                                    class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-60"
+                                >
+                                    Guardar cambios
+                                </button>
+                                <span v-if="form.recentlySuccessful" class="text-xs text-green-700 dark:text-green-300">
+                                    Guardado.
+                                </span>
                             </div>
 
                             <div
@@ -423,12 +582,10 @@ function onCropApplied(file) {
                             >
                                 {{ status }}
                             </div>
-                        </div>
-                    </div>
 
-                    <div class="lg:sticky lg:top-24">
-                        <div :class="cardClass">
-                            <UpdatePasswordForm embedded />
+                            <div class="mt-8 border-t border-gray-200/70 pt-6 dark:border-gray-700/70">
+                                <UpdatePasswordForm embedded />
+                            </div>
                         </div>
                     </div>
                 </div>

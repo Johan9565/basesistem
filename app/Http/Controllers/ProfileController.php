@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
-use App\Models\DependenciesModel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,25 +22,15 @@ class ProfileController extends Controller
         $user = $request->user();
         $role = $user->role_data()->first();
 
-        $areaLabel = '—';
-        if (! empty($user->area_id)) {
-            try {
-                $dep = DependenciesModel::find($user->area_id);
-                if ($dep) {
-                    $areaLabel = $dep->name;
-                }
-            } catch (\Throwable $e) {
-                // id inválido u otro error: mantener —
-            }
-        }
-
         $avatarUrl = null;
         $bannerUrl = null;
+        /** @var \Illuminate\Filesystem\FilesystemAdapter $publicDisk */
+        $publicDisk = Storage::disk('public');
         if (! empty($user->profile_photo_path)) {
-            $avatarUrl = Storage::disk('public')->url($user->profile_photo_path);
+            $avatarUrl = $publicDisk->url($user->profile_photo_path);
         }
         if (! empty($user->profile_banner_path)) {
-            $bannerUrl = Storage::disk('public')->url($user->profile_banner_path);
+            $bannerUrl = $publicDisk->url($user->profile_banner_path);
         }
 
         return Inertia::render('Profile/Edit', [
@@ -52,11 +41,10 @@ class ProfileController extends Controller
                 'ape_pat' => $user->ape_pat ?? '',
                 'ape_mat' => $user->ape_mat ?? '',
                 'email' => $user->email ?? '',
-                'role' => $role ? $role->role : '—',
-                'area' => $areaLabel,
                 'status' => ((int) ($user->status ?? 1)) === 1 ? 'Activo' : 'Inactivo',
                 'avatar_url' => $avatarUrl,
                 'banner_url' => $bannerUrl,
+                'settings' => $user->settings ?? null,
             ],
         ]);
     }

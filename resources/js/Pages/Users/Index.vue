@@ -34,17 +34,12 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
-    areas: {
-        type: Array,
-        default: () => [],
-    },
     filters: {
         type: Object,
         default: () => ({
             search: '',
             role_id: '',
             status: '',
-            area_id: '',
         }),
     },
 });
@@ -70,11 +65,6 @@ const roleFilterOptions = computed(() => [
     ...props.roles.map((r) => ({ label: r.name, value: r.id })),
 ]);
 
-const areaFilterOptions = computed(() => [
-    { label: 'Todas las áreas', value: '' },
-    ...(props.areas ?? []).map((a) => ({ label: a.name, value: a.id })),
-]);
-
 function normalizeFilterStatus(status) {
     if (status === 0 || status === '0') return '0';
     if (status === 1 || status === '1') return '1';
@@ -84,7 +74,6 @@ function normalizeFilterStatus(status) {
 const filterSearch = ref(props.filters.search ?? '');
 const filterRoleId = ref(props.filters.role_id ?? '');
 const filterStatus = ref(normalizeFilterStatus(props.filters.status));
-const filterAreaId = ref(props.filters.area_id ?? '');
 
 watch(
     () => props.filters,
@@ -92,7 +81,6 @@ watch(
         filterSearch.value = f.search ?? '';
         filterRoleId.value = f.role_id ?? '';
         filterStatus.value = normalizeFilterStatus(f.status);
-        filterAreaId.value = f.area_id ?? '';
     },
     { deep: true },
 );
@@ -101,11 +89,12 @@ const hasActiveFilters = computed(
     () =>
         (filterSearch.value ?? '').trim() !== '' ||
         (filterRoleId.value ?? '') !== '' ||
-        (filterStatus.value ?? '') !== '' ||
-        (filterAreaId.value ?? '') !== '',
+        (filterStatus.value ?? '') !== '',
 );
 
 const userList = computed(() => props.users?.data ?? []);
+const authUserId = computed(() => String(page.props.auth?.user?.id ?? ''));
+const isEditingSelf = computed(() => String(selectedUserId.value ?? '') !== '' && String(selectedUserId.value) === authUserId.value);
 
 function applyFilters() {
     const params = { page: 1 };
@@ -113,7 +102,6 @@ function applyFilters() {
     if (q) params.search = q;
     if (filterRoleId.value) params.role_id = filterRoleId.value;
     if (filterStatus.value !== '') params.status = filterStatus.value;
-    if (filterAreaId.value) params.area_id = filterAreaId.value;
 
     router.get(route('users'), params, {
         preserveState: true,
@@ -126,7 +114,6 @@ function clearFilters() {
     filterSearch.value = '';
     filterRoleId.value = '';
     filterStatus.value = '';
-    filterAreaId.value = '';
     router.get(route('users'), { page: 1 }, {
         preserveState: true,
         preserveScroll: true,
@@ -142,16 +129,12 @@ const form = useForm({
     password: '',
     password_confirmation: '',
     role_id: props.roles?.[0]?.id ?? '',
-    area_id: props.areas?.[0]?.id ?? '',
     status: 1,
 });
 
 function openCreateDialog() {
     if (props.roles?.length && !form.role_id) {
         form.role_id = props.roles[0].id;
-    }
-    if (props.areas?.length && !form.area_id) {
-        form.area_id = props.areas[0].id;
     }
 
     form.status = 1;
@@ -165,9 +148,6 @@ function closeCreateDialog() {
 
     if (props.roles?.length) {
         form.role_id = props.roles[0].id;
-    }
-    if (props.areas?.length) {
-        form.area_id = props.areas[0].id;
     }
 }
 
@@ -185,7 +165,6 @@ function openEditDialog(user) {
     form.ape_mat = user.ape_mat ?? '';
     form.email = user.email ?? '';
     form.role_id = user.role_id ?? '';
-    form.area_id = user.area_id ?? '';
     form.status = user.status ?? 1;
     form.password = null;
     form.password_confirmation = null;
@@ -201,9 +180,6 @@ function closeEditDialog() {
 
     if (props.roles?.length) {
         form.role_id = props.roles[0].id;
-    }
-    if (props.areas?.length) {
-        form.area_id = props.areas[0].id;
     }
 }
 
@@ -271,7 +247,6 @@ function toggleUserStatus(user) {
     form.ape_mat = user.ape_mat ?? '';
     form.email = user.email ?? '';
     form.role_id = user.role_id ?? '';
-    form.area_id = user.area_id ?? '';
     form.status = nextStatus;
     form.password = null;
     form.password_confirmation = null;
@@ -381,19 +356,6 @@ function dialItemsFor(user) {
                                 class="mt-1 block w-full"
                             />
                         </div>
-                        <div class="min-w-44 sm:w-48">
-                            <InputLabel value="Área" />
-                            <WrappingSelect
-                                v-model="filterAreaId"
-                                panel-preset="filter"
-                                :options="areaFilterOptions"
-                                optionLabel="label"
-                                optionValue="value"
-                                filter
-                                filterPlaceholder="Buscar área..."
-                                class="mt-1 block w-full"
-                            />
-                        </div>
                         <div class="flex flex-wrap gap-2 pb-0.5">
                             <Button type="button" label="Aplicar" icon="pi pi-filter" @click="applyFilters" />
                             <Button
@@ -441,20 +403,6 @@ function dialItemsFor(user) {
                                 <Select v-model="form.role_id" :options="props.roles" optionLabel="name"
                                     optionValue="id" class="mt-1 block w-full" />
                                 <InputError :message="form.errors.role_id" class="mt-2" />
-                            </div>
-
-                            <div>
-                                <InputLabel value="Área" />
-                                <WrappingSelect
-                                    v-model="form.area_id"
-                                    panel-preset="!max-w-[min(12rem,calc(100vw-2rem))] min-w-0 overflow-hidden"
-                                    :options="props.areas"
-                                    optionLabel="name"
-                                    optionValue="id"
-                                    class="mt-1 block w-full"
-                                    placeholder="Selecciona un área"
-                                />
-                                <InputError :message="form.errors.area_id" class="mt-2" />
                             </div>
 
                             <div>
@@ -521,26 +469,11 @@ function dialItemsFor(user) {
                                 <InputError :message="form.errors.email" class="mt-2" />
                             </div>
 
-                            <div>
+                            <div v-if="!isEditingSelf">
                                 <InputLabel value="Rol" />
                                 <Select v-model="form.role_id" :options="props.roles" optionLabel="name"
                                     optionValue="id" class="mt-1 block w-full" />
                                 <InputError :message="form.errors.role_id" class="mt-2" />
-                            </div>
-
-                            <div>
-                                <InputLabel value="Área" />
-                                <WrappingSelect
-                                    v-model="form.area_id"
-                                    panel-preset="!max-w-[min(12rem,calc(100vw-2rem))] min-w-0 overflow-hidden"
-                                    :options="props.areas"
-                                    optionLabel="name"
-                                    optionValue="id"
-                                    class="mt-1 block w-full"
-                                    filter
-                                    filterPlaceholder="Buscar área..."
-                                />
-                                <InputError :message="form.errors.area_id" class="mt-2" />
                             </div>
 
                             <div>

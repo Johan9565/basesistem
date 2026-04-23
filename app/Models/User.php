@@ -30,6 +30,7 @@ class User extends Authenticatable
         'role_id',
         'status',
         'active',
+        'settings',
         'profile_photo_path',
         'profile_banner_path',
     ];
@@ -56,6 +57,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password'          => 'hashed',
+            'settings'          => 'array',
         ];
     }
 

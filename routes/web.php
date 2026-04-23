@@ -9,6 +9,7 @@ use App\Http\Controllers\RolesController;
 use App\Http\Controllers\ComponentsController;
 use App\Http\Controllers\DependenciesController;
 use App\Http\Controllers\NotificationsController;
+use App\Http\Controllers\BookingsController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -57,6 +58,12 @@ Route::middleware(['auth', 'permission:administration'])->group(function () {
 });
 Route::middleware(['auth'])->group(function () {
     Route::post('/theme', [ComponentsController::class, 'updateActiveTheme'])->name('theme.update');
+
+    Route::get('/bookings', [BookingsController::class, 'index'])->name('bookings.index');
+    Route::post('/bookings', [BookingsController::class, 'store'])->name('bookings.store');
+    Route::patch('/bookings/{booking}', [BookingsController::class, 'update'])->name('bookings.update');
+    Route::delete('/bookings/{booking}', [BookingsController::class, 'destroy'])->name('bookings.destroy');
+    Route::get('/bookings/feed', [BookingsController::class, 'feed'])->name('bookings.feed');
 
     Route::prefix('notifications')->name('notifications.')->group(function () {
         Route::get('/feed', [NotificationsController::class, 'feed'])->name('feed');
