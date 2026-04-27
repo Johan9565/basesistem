@@ -55,25 +55,78 @@ const form = useForm({
     ape_mat: user.value?.ape_mat ?? '',
     email: user.value?.email ?? '',
     settings: {
-        whatsapp_business_id: settingsFromServer.value?.whatsapp_business_id ?? '',
-        timezone: settingsFromServer.value?.timezone ?? '',
         working_hours: settingsFromServer.value?.working_hours ?? {},
         services: settingsFromServer.value?.services ?? [],
-        bot_config: {
-            tone: settingsFromServer.value?.bot_config?.tone ?? '',
-            language: settingsFromServer.value?.bot_config?.language ?? 'es',
-            system_prompt_extra: settingsFromServer.value?.bot_config?.system_prompt_extra ?? '',
-        },
     },
 });
 
-const workingHoursJson = ref(
-    JSON.stringify(settingsFromServer.value?.working_hours ?? {}, null, 2),
-);
-const servicesJson = ref(
-    JSON.stringify(settingsFromServer.value?.services ?? [], null, 2),
-);
-const settingsJsonError = ref('');
+const dayOrder = [
+    { key: 'monday', label: 'Lunes' },
+    { key: 'tuesday', label: 'Martes' },
+    { key: 'wednesday', label: 'Miércoles' },
+    { key: 'thursday', label: 'Jueves' },
+    { key: 'friday', label: 'Viernes' },
+    { key: 'saturday', label: 'Sábado' },
+    { key: 'sunday', label: 'Domingo' },
+];
+
+function normalizeWorkingHours(raw) {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const out = {};
+    for (const d of dayOrder) {
+        const v = src?.[d.key];
+        if (!v) {
+            out[d.key] = { enabled: false, start: '09:00', end: '18:00' };
+        } else {
+            out[d.key] = {
+                enabled: true,
+                start: String(v.start ?? '09:00'),
+                end: String(v.end ?? '18:00'),
+            };
+        }
+    }
+    return out;
+}
+
+function denormalizeWorkingHours(ui) {
+    const out = {};
+    const src = ui && typeof ui === 'object' ? ui : {};
+    for (const d of dayOrder) {
+        const v = src?.[d.key];
+        if (!v || !v.enabled) {
+            out[d.key] = null;
+            continue;
+        }
+        out[d.key] = { start: String(v.start || '09:00'), end: String(v.end || '18:00') };
+    }
+    return out;
+}
+
+const workingHoursUi = ref(normalizeWorkingHours(settingsFromServer.value?.working_hours));
+
+function normalizeServices(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((s) => ({
+        name: String(s?.name ?? ''),
+        duration_minutes:
+            s?.duration_minutes === 0 || s?.duration_minutes ? Number(s.duration_minutes) : 60,
+        price: s?.price === 0 || s?.price ? Number(s.price) : null,
+        currency: String(s?.currency ?? 'MXN'),
+    }));
+}
+
+function addService() {
+    form.settings.services = [
+        ...(Array.isArray(form.settings.services) ? form.settings.services : []),
+        { name: '', duration_minutes: 60, price: null, currency: 'MXN' },
+    ];
+}
+
+function removeService(idx) {
+    const arr = Array.isArray(form.settings.services) ? [...form.settings.services] : [];
+    arr.splice(idx, 1);
+    form.settings.services = arr;
+}
 
 watch(
     () => settingsFromServer.value,
@@ -81,44 +134,18 @@ watch(
         // Solo refrescamos cuando el formulario aún no fue tocado, para evitar pisar edición en curso.
         if (form.isDirty) return;
         form.settings = {
-            whatsapp_business_id: s?.whatsapp_business_id ?? '',
-            timezone: s?.timezone ?? '',
             working_hours: s?.working_hours ?? {},
-            services: s?.services ?? [],
-            bot_config: {
-                tone: s?.bot_config?.tone ?? '',
-                language: s?.bot_config?.language ?? 'es',
-                system_prompt_extra: s?.bot_config?.system_prompt_extra ?? '',
-            },
+            services: normalizeServices(s?.services ?? []),
         };
-        workingHoursJson.value = JSON.stringify(form.settings.working_hours ?? {}, null, 2);
-        servicesJson.value = JSON.stringify(form.settings.services ?? [], null, 2);
+        workingHoursUi.value = normalizeWorkingHours(s?.working_hours ?? {});
     },
     { deep: true },
 );
 
 function submitProfile() {
-    settingsJsonError.value = '';
-
-    let workingHours;
-    let services;
-    try {
-        workingHours = JSON.parse(workingHoursJson.value || '{}');
-    } catch {
-        settingsJsonError.value = 'El JSON de "Horario de trabajo" es inválido.';
-        return;
-    }
-    try {
-        services = JSON.parse(servicesJson.value || '[]');
-    } catch {
-        settingsJsonError.value = 'El JSON de "Servicios" es inválido.';
-        return;
-    }
-
     form.settings = {
         ...(form.settings ?? {}),
-        working_hours: workingHours,
-        services,
+        working_hours: denormalizeWorkingHours(workingHoursUi.value),
     };
 
     form.patch(route('profile.update'), {
@@ -274,26 +301,33 @@ function onCropApplied(file) {
             @applied="onCropApplied"
         />
 
-        <section class="py-8 my-auto sm:py-10">
+        <section class="py-6 sm:py-8">
             <div class="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div class="grid grid-cols-1 items-start gap-8">
-                    <!-- Columna: perfil -->
-                    <div :class="cardClass">
-                        <div class="py-2">
-                            <h1 class="lg:text-3xl md:text-2xl text-xl font-extrabold mb-2 dark:text-white">
-                                Perfil
-                            </h1>
-                            <h2 class="text-grey text-sm mb-4 dark:text-gray-400">
-                                Edita tu información y configuración. El rol no se puede cambiar.
-                            </h2>
+                <!-- Header tipo red social: cover + avatar + acciones -->
+                <div class="overflow-hidden rounded-2xl border border-gray-200/60 bg-white shadow-sm dark:border-gray-700/60 dark:bg-gray-900/30">
+                    <div class="relative h-44 sm:h-56" :style="bannerStyle">
+                        <div class="absolute inset-0 bg-linear-to-t from-black/45 via-black/15 to-transparent" />
 
-                            <div
-                                class="w-full rounded-lg min-h-[140px] relative overflow-hidden"
-                                :style="bannerStyle"
+                        <div class="absolute right-3 top-3">
+                            <label
+                                class="flex cursor-pointer items-center gap-2 rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-gray-800 shadow-sm ring-1 ring-gray-200 transition hover:bg-white dark:bg-gray-800/95 dark:text-gray-100 dark:ring-gray-600 dark:hover:bg-gray-800"
+                                title="Cambiar portada"
                             >
-                                <div
-                                    class="group relative z-10 mx-auto -mb-[70px] flex h-[141px] w-[141px] justify-center overflow-hidden rounded-full bg-slate-600 shadow-lg ring-4 ring-white/90 dark:ring-gray-800/90"
-                                >
+                                <span>Editar portada</span>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    class="sr-only"
+                                    @change="onBannerChange"
+                                />
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="relative px-4 pb-4 sm:px-6">
+                        <div class="-mt-12 flex flex-col gap-4 sm:-mt-14 sm:flex-row sm:items-end sm:justify-between">
+                            <div class="flex items-end gap-4">
+                                <div class="group relative h-24 w-24 overflow-hidden rounded-full bg-slate-600 shadow-lg ring-4 ring-white dark:ring-gray-900 sm:h-28 sm:w-28">
                                     <img
                                         v-if="display.avatar_url"
                                         :src="display.avatar_url"
@@ -302,12 +336,13 @@ function onCropApplied(file) {
                                     />
                                     <div
                                         v-else
-                                        class="flex h-full w-full items-center justify-center bg-indigo-600 text-4xl font-bold text-white"
+                                        class="flex h-full w-full items-center justify-center bg-indigo-600 text-3xl font-bold text-white sm:text-4xl"
                                     >
                                         {{ avatarInitial }}
                                     </div>
+
                                     <label
-                                        class="absolute inset-0 z-20 flex cursor-pointer flex-col items-center justify-center gap-1 rounded-full bg-black/55 text-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 active:opacity-100"
+                                        class="absolute inset-0 z-20 flex cursor-pointer flex-col items-center justify-center gap-1 bg-black/55 text-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 active:opacity-100"
                                         title="Cambiar foto de perfil"
                                     >
                                         <input
@@ -316,278 +351,229 @@ function onCropApplied(file) {
                                             class="sr-only"
                                             @change="onAvatarChange"
                                         />
-                                        <svg
-                                            class="h-7 w-7 text-white"
-                                            fill="none"
-                                            stroke-width="1.5"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                            aria-hidden="true"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
-                                            />
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z"
-                                            />
-                                        </svg>
-                                        <span class="px-1 text-[11px] font-semibold leading-tight text-white">
+                                        <span class="px-2 text-[11px] font-semibold leading-tight text-white">
                                             Cambiar foto
                                         </span>
                                     </label>
                                 </div>
-                                <div class="flex justify-end pt-2 pb-1">
-                                    <label
-                                        class="flex cursor-pointer items-center gap-2 rounded-tl-md bg-white/95 px-3 py-1.5 text-sm font-semibold text-gray-800 shadow-sm ring-1 ring-gray-200 transition hover:bg-white dark:bg-gray-800/95 dark:text-gray-100 dark:ring-gray-600 dark:hover:bg-gray-800"
-                                        title="Cambiar portada"
-                                    >
-                                        <span>Portada</span>
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            class="sr-only"
-                                            @change="onBannerChange"
-                                        />
-                                        <svg
-                                            class="h-5 w-5 text-blue-700 dark:text-blue-400"
-                                            fill="none"
-                                            stroke-width="1.5"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                            aria-hidden="true"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
-                                            />
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z"
-                                            />
-                                        </svg>
-                                    </label>
+
+                                <div class="pb-1">
+                                    <h1 class="text-lg font-extrabold text-gray-900 dark:text-white sm:text-2xl">
+                                        {{ form.name || 'Tu perfil' }}
+                                    </h1>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                                        {{ display.status || '—' }}
+                                    </p>
                                 </div>
                             </div>
 
-                            <p
-                                v-if="errors.avatar || errors.banner"
-                                class="mt-3 text-center text-xs text-red-600 dark:text-red-400"
-                            >
-                                <span v-if="errors.avatar">{{ errors.avatar }}</span>
-                                <span v-if="errors.avatar && errors.banner"> · </span>
-                                <span v-if="errors.banner">{{ errors.banner }}</span>
-                            </p>
-
-                            <h2 class="text-center mt-20 sm:mt-16 font-semibold dark:text-gray-300 text-sm px-2">
-                                Elige foto o portada: podrás encuadrar y ver una vista previa antes de guardar.
-                            </h2>
-
-                            <div class="flex flex-col lg:flex-row gap-2 justify-center w-full">
-                                <div
-                                    class="w-full mb-4 mt-6"
-                                    :class="fieldHighlightClass('name')"
-                                >
-                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Nombre</label>
-                                    <input
-                                        type="text"
-                                        v-model="form.name"
-                                        :class="inputEditableClass"
-                                    />
-                                    <p v-if="form.errors.name" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ form.errors.name }}</p>
-                                </div>
-                                <div
-                                    class="w-full mb-4 lg:mt-6"
-                                    :class="fieldHighlightClass('ape_pat')"
-                                >
-                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">
-                                        Apellido paterno
-                                    </label>
-                                    <input
-                                        type="text"
-                                        v-model="form.ape_pat"
-                                        :class="inputEditableClass"
-                                    />
-                                    <p v-if="form.errors.ape_pat" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ form.errors.ape_pat }}</p>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-col lg:flex-row gap-2 justify-center w-full">
-                                <div
-                                    class="w-full mb-4"
-                                    :class="fieldHighlightClass('ape_mat')"
-                                >
-                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">
-                                        Apellido materno
-                                    </label>
-                                    <input
-                                        type="text"
-                                        v-model="form.ape_mat"
-                                        :class="inputEditableClass"
-                                    />
-                                    <p v-if="form.errors.ape_mat" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ form.errors.ape_mat }}</p>
-                                </div>
-                                <div
-                                    class="w-full mb-4"
-                                    :class="fieldHighlightClass('email')"
-                                >
-                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Correo</label>
-                                    <input
-                                        type="email"
-                                        v-model="form.email"
-                                        :class="inputEditableClass"
-                                    />
-                                    <p v-if="form.errors.email" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ form.errors.email }}</p>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-col lg:flex-row gap-2 justify-center w-full">
-                                <div
-                                    class="w-full mb-4"
-                                >
-                                </div>
-                            </div>
-
-                            <div
-                                class="w-full mb-2"
-                                :class="fieldHighlightClass('status')"
-                            >
-                                <h3 class="dark:text-gray-300 mb-2 text-sm font-medium">Estado</h3>
-                                <div :class="[inputReadonlyClass, 'mt-0!']">
-                                    {{ display.status || '—' }}
-                                </div>
-                            </div>
-
-                            <div class="border-t border-gray-200/70 dark:border-gray-700/70 pt-4 mt-6">
-                                <h3 class="dark:text-gray-200 text-sm font-semibold mb-3">Configuración</h3>
-
-                                <div>
-                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">WhatsApp Business ID</label>
-                                    <input
-                                        v-model="form.settings.whatsapp_business_id"
-                                        type="text"
-                                        :class="inputEditableClass"
-                                        placeholder="123456789"
-                                    />
-                                </div>
-
-                                <div class="mt-3">
-                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Timezone</label>
-                                    <input
-                                        v-model="form.settings.timezone"
-                                        type="text"
-                                        :class="inputEditableClass"
-                                        placeholder="America/Cancun"
-                                    />
-                                </div>
-
-                                <div class="mt-3">
-                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Horario de trabajo (JSON)</label>
-                                    <textarea
-                                        v-model="workingHoursJson"
-                                        rows="7"
-                                        class="mt-2 px-4 py-2 w-full border-2 rounded-lg font-mono text-xs dark:text-gray-200 dark:border-gray-600 dark:bg-gray-800/80 bg-white text-gray-800 border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                                        placeholder='{ "monday": { "start": "09:00", "end": "18:00" }, "sunday": null }'
-                                    />
-                                </div>
-
-                                <div class="mt-3">
-                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Servicios (JSON)</label>
-                                    <textarea
-                                        v-model="servicesJson"
-                                        rows="7"
-                                        class="mt-2 px-4 py-2 w-full border-2 rounded-lg font-mono text-xs dark:text-gray-200 dark:border-gray-600 dark:bg-gray-800/80 bg-white text-gray-800 border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                                        placeholder='[{ "name": "Sesión de Retrato", "duration_minutes": 60, "price": 1500, "currency": "MXN" }]'
-                                    />
-                                </div>
-
-                                <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Tono del bot</label>
-                                        <input
-                                            v-model="form.settings.bot_config.tone"
-                                            type="text"
-                                            :class="inputEditableClass"
-                                            placeholder="profesional pero amigable"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Idioma</label>
-                                        <input
-                                            v-model="form.settings.bot_config.language"
-                                            type="text"
-                                            :class="inputEditableClass"
-                                            placeholder="es"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div class="mt-3">
-                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">System prompt extra</label>
-                                    <textarea
-                                        v-model="form.settings.bot_config.system_prompt_extra"
-                                        rows="3"
-                                        class="mt-2 px-4 py-2 w-full border-2 rounded-lg dark:text-gray-200 dark:border-gray-600 dark:bg-gray-800/80 bg-white text-gray-800 border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                                        placeholder="Menciona que el estudio está cerca..."
-                                    />
-                                </div>
-
-                                <p v-if="settingsJsonError" class="mt-3 text-xs text-red-600 dark:text-red-400">
-                                    {{ settingsJsonError }}
-                                </p>
-                                <p v-if="form.errors.settings" class="mt-3 text-xs text-red-600 dark:text-red-400">
-                                    {{ form.errors.settings }}
-                                </p>
-                            </div>
-
-                            <div class="flex items-center gap-3 pt-4">
+                            <div class="flex flex-wrap items-center gap-2">
                                 <button
                                     type="button"
                                     @click="submitProfile"
                                     :disabled="form.processing"
                                     class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-60"
                                 >
-                                    Guardar cambios
+                                    Guardar
                                 </button>
                                 <span v-if="form.recentlySuccessful" class="text-xs text-green-700 dark:text-green-300">
                                     Guardado.
                                 </span>
                             </div>
+                        </div>
+
+                        <p
+                            v-if="errors.avatar || errors.banner"
+                            class="mt-4 text-center text-xs text-red-600 dark:text-red-400"
+                        >
+                            <span v-if="errors.avatar">{{ errors.avatar }}</span>
+                            <span v-if="errors.avatar && errors.banner"> · </span>
+                            <span v-if="errors.banner">{{ errors.banner }}</span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Layout tipo red social: sidebar + feed -->
+                <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
+                    <!-- Sidebar -->
+                    <aside class="lg:col-span-4 space-y-6">
+                        <div class="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm dark:border-gray-700/60 dark:bg-gray-900/30">
+                            <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Información</h2>
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                Edita tu nombre y correo (como en una red social).
+                            </p>
+
+                            <div class="mt-4 space-y-3">
+                                <div :class="fieldHighlightClass('name')">
+                                    <label class="mb-1 dark:text-gray-300 text-xs font-medium block">Nombre</label>
+                                    <input type="text" v-model="form.name" :class="[inputEditableClass, 'mt-0!']" />
+                                    <p v-if="form.errors.name" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ form.errors.name }}</p>
+                                </div>
+                                <div :class="fieldHighlightClass('ape_pat')">
+                                    <label class="mb-1 dark:text-gray-300 text-xs font-medium block">Apellido paterno</label>
+                                    <input type="text" v-model="form.ape_pat" :class="[inputEditableClass, 'mt-0!']" />
+                                    <p v-if="form.errors.ape_pat" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ form.errors.ape_pat }}</p>
+                                </div>
+                                <div :class="fieldHighlightClass('ape_mat')">
+                                    <label class="mb-1 dark:text-gray-300 text-xs font-medium block">Apellido materno</label>
+                                    <input type="text" v-model="form.ape_mat" :class="[inputEditableClass, 'mt-0!']" />
+                                    <p v-if="form.errors.ape_mat" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ form.errors.ape_mat }}</p>
+                                </div>
+                                <div :class="fieldHighlightClass('email')">
+                                    <label class="mb-1 dark:text-gray-300 text-xs font-medium block">Correo</label>
+                                    <input type="email" v-model="form.email" :class="[inputEditableClass, 'mt-0!']" />
+                                    <p v-if="form.errors.email" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ form.errors.email }}</p>
+                                </div>
+                            </div>
 
                             <div
                                 v-if="mustVerifyEmail && user && user.email_verified_at === null"
-                                class="rounded-lg border border-amber-200/80 bg-amber-50/90 px-4 py-3 mt-6 dark:border-amber-900/50 dark:bg-amber-950/30"
+                                class="mt-4 rounded-lg border border-amber-200/80 bg-amber-50/90 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30"
                             >
-                                <p class="text-sm text-gray-800 dark:text-gray-200">
+                                <p class="text-xs text-gray-800 dark:text-gray-200">
                                     Tu correo aún no está verificado.
                                     <Link
                                         :href="route('verification.send')"
                                         method="post"
                                         as="button"
-                                        class="rounded-md text-sm font-medium text-amber-800 underline hover:text-amber-950 dark:text-amber-200 dark:hover:text-amber-100"
+                                        class="rounded-md text-xs font-medium text-amber-800 underline hover:text-amber-950 dark:text-amber-200 dark:hover:text-amber-100"
                                     >
-                                        Reenviar correo de verificación
+                                        Reenviar verificación
                                     </Link>
                                 </p>
                             </div>
+                        </div>
 
-                            <div
-                                v-if="status"
-                                class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 mt-4 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200"
-                            >
-                                {{ status }}
-                            </div>
-
-                            <div class="mt-8 border-t border-gray-200/70 pt-6 dark:border-gray-700/70">
+                        <div class="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm dark:border-gray-700/60 dark:bg-gray-900/30">
+                            <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Seguridad</h2>
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                Cambia tu contraseña.
+                            </p>
+                            <div class="mt-4">
                                 <UpdatePasswordForm embedded />
                             </div>
                         </div>
-                    </div>
+                    </aside>
+
+                    <!-- Feed -->
+                    <main class="lg:col-span-8 space-y-6">
+                        <div class="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm dark:border-gray-700/60 dark:bg-gray-900/30">
+                            <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Horarios</h2>
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                Define por día si atiendes y en qué horario.
+                            </p>
+
+                            <div class="mt-4 space-y-2">
+                                <div
+                                    v-for="d in dayOrder"
+                                    :key="d.key"
+                                    class="flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border border-gray-200/70 dark:border-gray-700/70 bg-white/60 dark:bg-gray-900/20 p-3"
+                                >
+                                    <div class="flex items-center justify-between sm:justify-start sm:w-44">
+                                        <span class="text-sm font-medium dark:text-gray-200">{{ d.label }}</span>
+                                        <label class="inline-flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 sm:hidden">
+                                            <input type="checkbox" v-model="workingHoursUi[d.key].enabled" class="rounded border-gray-300 dark:border-gray-600" />
+                                            Disponible
+                                        </label>
+                                    </div>
+
+                                    <div class="hidden sm:flex items-center gap-2 sm:w-40">
+                                        <input type="checkbox" v-model="workingHoursUi[d.key].enabled" class="rounded border-gray-300 dark:border-gray-600" />
+                                        <span class="text-xs text-gray-600 dark:text-gray-400">Disponible</span>
+                                    </div>
+
+                                    <div class="flex items-center gap-2 flex-1">
+                                        <input
+                                            type="time"
+                                            v-model="workingHoursUi[d.key].start"
+                                            :disabled="!workingHoursUi[d.key].enabled"
+                                            :class="[inputEditableClass, 'mt-0!', 'py-1.5', 'text-sm']"
+                                        />
+                                        <span class="text-xs text-gray-500 dark:text-gray-400">a</span>
+                                        <input
+                                            type="time"
+                                            v-model="workingHoursUi[d.key].end"
+                                            :disabled="!workingHoursUi[d.key].enabled"
+                                            :class="[inputEditableClass, 'mt-0!', 'py-1.5', 'text-sm']"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rounded-2xl border border-gray-200/60 bg-white p-4 shadow-sm dark:border-gray-700/60 dark:bg-gray-900/30">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Servicios</h2>
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                        Agrega los servicios que ofreces.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    class="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+                                    @click="addService"
+                                >
+                                    Agregar
+                                </button>
+                            </div>
+
+                            <div v-if="(form.settings.services ?? []).length === 0" class="mt-4 text-xs text-gray-500 dark:text-gray-400">
+                                No hay servicios aún.
+                            </div>
+
+                            <div v-else class="mt-4 space-y-3">
+                                <div
+                                    v-for="(svc, idx) in form.settings.services"
+                                    :key="idx"
+                                    class="rounded-xl border border-gray-200/70 dark:border-gray-700/70 bg-white/60 dark:bg-gray-900/20 p-4"
+                                >
+                                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                                        <div class="sm:col-span-5">
+                                            <label class="mb-1 dark:text-gray-300 text-xs font-medium block">Nombre</label>
+                                            <input v-model="svc.name" type="text" :class="[inputEditableClass, 'mt-0!', 'py-2', 'text-sm']" placeholder="Sesión de retrato" />
+                                        </div>
+                                        <div class="sm:col-span-3">
+                                            <label class="mb-1 dark:text-gray-300 text-xs font-medium block">Duración (min)</label>
+                                            <input v-model.number="svc.duration_minutes" type="number" min="5" step="5" :class="[inputEditableClass, 'mt-0!', 'py-2', 'text-sm']" />
+                                        </div>
+                                        <div class="sm:col-span-2">
+                                            <label class="mb-1 dark:text-gray-300 text-xs font-medium block">Precio</label>
+                                            <input v-model.number="svc.price" type="number" min="0" step="0.01" :class="[inputEditableClass, 'mt-0!', 'py-2', 'text-sm']" placeholder="0" />
+                                        </div>
+                                        <div class="sm:col-span-2">
+                                            <label class="mb-1 dark:text-gray-300 text-xs font-medium block">Moneda</label>
+                                            <select v-model="svc.currency" :class="[inputEditableClass, 'mt-0!', 'py-2', 'text-sm']">
+                                                <option value="MXN">MXN</option>
+                                                <option value="USD">USD</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 flex justify-end">
+                                        <button
+                                            type="button"
+                                            class="rounded-md px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/30"
+                                            @click="removeService(idx)"
+                                        >
+                                            Quitar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <p v-if="form.errors.settings" class="mt-3 text-xs text-red-600 dark:text-red-400">
+                                {{ form.errors.settings }}
+                            </p>
+                        </div>
+
+                        <div
+                            v-if="status"
+                            class="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200"
+                        >
+                            {{ status }}
+                        </div>
+                    </main>
                 </div>
             </div>
         </section>
