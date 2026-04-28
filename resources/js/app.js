@@ -1,11 +1,14 @@
 import '../css/app.css';
 import 'primeicons/primeicons.css';
+import '@myissue/vue-website-page-builder/style.css';
 import './bootstrap';
 
 import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
+import { createPinia } from 'pinia';
+import { pageBuilder } from '@myissue/vue-website-page-builder';
 import PrimeVue from 'primevue/config';
 import ToastService from 'primevue/toastservice';
 import Aura from '@primeuix/themes/aura';
@@ -39,6 +42,8 @@ createInertiaApp({
         const app = createApp({ render: () => h(App, props) })
             .use(plugin)
             .use(ZiggyVue)
+            .use(createPinia())
+            .use(pageBuilder)
             .use(PrimeVue, {
                 theme: {
                     preset: Aura,

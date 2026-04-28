@@ -10,6 +10,8 @@ use App\Http\Controllers\ComponentsController;
 use App\Http\Controllers\DependenciesController;
 use App\Http\Controllers\NotificationsController;
 use App\Http\Controllers\BookingsController;
+use App\Http\Controllers\UserPageController;
+use App\Http\Controllers\BusinessCardController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -70,7 +72,27 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('/{notification}/read', [NotificationsController::class, 'markAsRead'])->name('read');
         Route::post('/mark-all-read', [NotificationsController::class, 'markAllRead'])->name('mark-all-read');
     });
+
+    // Panel del fotógrafo: constructor de landing (Data-Driven UI)
+    // Alias requerido por módulos en DB (route: "userpage")
+    Route::get('/userpage', [UserPageController::class, 'edit'])->name('userpage');
+    Route::patch('/userpage', [UserPageController::class, 'update'])->name('userpage.update');
+    Route::post('/userpage/upload', [UserPageController::class, 'upload'])->name('userpage.upload');
+    Route::get('/userpage/media', [UserPageController::class, 'media'])->name('userpage.media');
+
+    // Tarjeta de negocio (panel)
+    // Alias requerido por módulos en DB (route: "businescard" / "businesscard")
+    Route::get('/businesscard', [BusinessCardController::class, 'show'])->name('businesscard');
 });
 
 
 require __DIR__ . '/auth.php';
+
+// Público: página del fotógrafo por slug (debe ir al final para no chocar con rutas del panel)
+Route::get('/c/{slug}', [BusinessCardController::class, 'redirect'])
+    ->where('slug', '[A-Za-z0-9\-]+')
+    ->name('businesscard.redirect');
+
+Route::get('/{slug}', [UserPageController::class, 'publicShow'])
+    ->where('slug', '[A-Za-z0-9\-]+')
+    ->name('portfolio.show');

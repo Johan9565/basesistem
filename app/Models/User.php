@@ -31,6 +31,7 @@ class User extends Authenticatable
         'status',
         'active',
         'settings',
+        'portfolio',
         'profile_photo_path',
         'profile_banner_path',
     ];
@@ -57,8 +58,50 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password'          => 'hashed',
-            'settings'          => 'array',
+            // Nota: en Mongo queremos guardar subdocumentos reales, no JSON string.
+            // Los casts tipo `array` en Eloquent tienden a serializar a JSON string.
         ];
+    }
+
+    private function decodeJsonIfString($value)
+    {
+        if (! is_string($value)) {
+            return $value;
+        }
+
+        $trim = trim($value);
+        if ($trim === '' || ($trim[0] !== '{' && $trim[0] !== '[')) {
+            return $value;
+        }
+
+        try {
+            $decoded = json_decode($trim, true, 512, JSON_THROW_ON_ERROR);
+            return $decoded;
+        } catch (\Throwable $e) {
+            return $value;
+        }
+    }
+
+    public function getSettingsAttribute($value)
+    {
+        return $this->decodeJsonIfString($value);
+    }
+
+    public function setSettingsAttribute($value): void
+    {
+        $decoded = $this->decodeJsonIfString($value);
+        $this->attributes['settings'] = $decoded;
+    }
+
+    public function getPortfolioAttribute($value)
+    {
+        return $this->decodeJsonIfString($value);
+    }
+
+    public function setPortfolioAttribute($value): void
+    {
+        $decoded = $this->decodeJsonIfString($value);
+        $this->attributes['portfolio'] = $decoded;
     }
 
     public function role_data()
