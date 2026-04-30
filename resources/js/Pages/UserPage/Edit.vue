@@ -111,11 +111,10 @@ onMounted(async () => {
     <AuthenticatedLayout>
         <Head title="Mi página" />
 
-        <div class="max-w-7xl mx-auto px-4 py-6">
+        <div class=" mx-auto px-4 py-6">
             <div class="flex items-start justify-between gap-4 mb-4">
                 <div>
                     <h1 class="text-2xl font-semibold">Mi página</h1>
-                    <p class="text-sm opacity-70">Editor visual con `@myissue/vue-website-page-builder`.</p>
                 </div>
                 <div class="flex gap-2">
                     <a v-if="publicUrl" class="btn btn-sm btn-primary" :href="publicUrl" target="_blank" rel="noreferrer">Ver pública</a>

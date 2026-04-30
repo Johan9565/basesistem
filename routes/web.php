@@ -83,6 +83,11 @@ Route::middleware(['auth'])->group(function () {
     // Tarjeta de negocio (panel)
     // Alias requerido por módulos en DB (route: "businescard" / "businesscard")
     Route::get('/businesscard', [BusinessCardController::class, 'show'])->name('businesscard');
+
+    // Dev: playground de templates (preview + editor)
+    Route::get('/dev/templates', function () {
+        return Inertia::render('Dev/Templates');
+    })->name('dev.templates');
 });
 
 

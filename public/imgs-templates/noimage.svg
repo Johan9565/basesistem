@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="125.5201 272.4783 227.6296 170.7227" width="227.63" height="170.723">
+  <g transform="matrix(2.0564050674438477, 0, 0, 2.0564050674438477, -299.93572998046875, 191.27296447753906)">
+    <rect width="110.693" height="83.02" x="206.893" y="39.489" style="fill: rgb(56, 65, 82);"></rect>
+    <polygon points="242.868 89.308 256.705 72.703 270.543 89.308" style="fill: rgb(113, 128, 150);"></polygon>
+    <polygon points="267.776 89.308 274.694 81.005 281.614 89.308" style="fill: rgb(113, 128, 150);"></polygon>
+    <circle cx="274.694" cy="74.995" r="2.303" style="fill: rgb(113, 128, 150);"></circle>
+  </g>
+</svg>

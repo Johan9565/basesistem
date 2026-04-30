@@ -1,0 +1,421 @@
+<section data-component-title="Landing Fotografías (Fotógrafo - Mobile First)">
+    <style>
+        /* Ocultar scrollbar en carruseles para mejor vista en móvil */
+        .pbx-hide-scrollbar::-webkit-scrollbar { display: none; }
+        .pbx-hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Animaciones suaves orientadas a móvil (entrada fluida) */
+        .pbx-anim {
+            opacity: 1;
+            transform: none;
+            transition: opacity 800ms cubic-bezier(0.16, 1, 0.3, 1), transform 800ms cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .pbx-anim.pbx-anim--init {
+            opacity: 0;
+            transform: translateY(24px) scale(0.98);
+        }
+        .pbx-anim.is-visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        /* Staggering para listas */
+        .pbx-anim-d1 { transition-delay: 100ms; }
+        .pbx-anim-d2 { transition-delay: 200ms; }
+        .pbx-anim-d3 { transition-delay: 300ms; }
+
+        /* Efectos de tarjetas táctiles/hover */
+        .pbx-card-hover {
+            transition: transform 400ms ease, box-shadow 400ms ease;
+            will-change: transform;
+        }
+        @media (hover: hover) {
+            .pbx-card-hover:hover {
+                transform: translateY(-6px);
+                box-shadow: 0 20px 40px -10px rgba(0,0,0,0.12);
+            }
+        }
+        .pbx-card-hover:active {
+            transform: translateY(-2px) scale(0.98);
+        }
+
+        /* Zoom de imagen editorial */
+        .pbx-img-zoom {
+            transition: transform 700ms ease;
+            will-change: transform;
+        }
+        @media (hover: hover) {
+            .pbx-group:hover .pbx-img-zoom {
+                transform: scale(1.06);
+            }
+        }
+
+        /* Botón WhatsApp pulsante para llamar la atención en móvil */
+        .pbx-btn-pulse {
+            animation: pbxPulse 2s infinite;
+        }
+        @keyframes pbxPulse {
+            0% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.6); }
+            70% { box-shadow: 0 0 0 15px rgba(37, 211, 102, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); }
+        }
+
+        .pbx-float {
+            animation: pbxFloat 4s ease-in-out infinite;
+        }
+        @keyframes pbxFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .pbx-shine {
+            position: relative;
+            overflow: hidden;
+        }
+        .pbx-shine::after {
+            content: "";
+            position: absolute;
+            inset: -30% -60%;
+            transform: rotate(12deg) translateX(-60%);
+            background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.15) 45%, rgba(255, 255, 255, 0.25) 50%, rgba(255, 255, 255, 0.15) 55%, transparent 100%);
+            transition: transform 650ms ease;
+            pointer-events: none;
+        }
+        .pbx-shine:hover::after {
+            transform: rotate(12deg) translateX(60%);
+        }
+
+        /* Lightbox */
+        .pbx-lightbox {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 300ms ease;
+        }
+        .pbx-lightbox.is-open {
+            display: flex;
+            opacity: 1;
+        }
+        .pbx-lightbox__img {
+            max-width: 100%;
+            max-height: 90vh;
+            border-radius: 12px;
+            object-fit: contain;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.8);
+            transform: scale(0.95);
+            transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .pbx-lightbox.is-open .pbx-lightbox__img {
+            transform: scale(1);
+        }
+    </style>
+
+    <!-- HERO (Cinemático, Altura completa en móvil) -->
+    <div class="pbx-relative pbx-min-h-[100dvh] pbx-flex pbx-flex-col pbx-justify-end lg:pbx-justify-center pbx-text-white pbx-overflow-hidden pbx-py-20">
+        <img src="/imgs-templates/noimage.svg" alt="Fondo Fotografía" class="pbx-absolute pbx-inset-0 pbx-w-full pbx-h-full pbx-object-cover pbx-object-center pbx-img-zoom" style="animation: pbxZoomIn 20s linear infinite alternate; height:100vh !important;"/>
+        <style>@keyframes pbxZoomIn { 0% { transform: scale(1); } 100% { transform: scale(1.1); } }</style>
+        
+        <!-- Gradientes para asegurar lectura del texto en móvil -->
+        <div class="pbx-absolute pbx-inset-0 pbx-bg-gradient-to-b pbx-from-black/20 pbx-via-black/30 pbx-to-black/90 lg:pbx-to-black/70" style="pointer-events: none" aria-hidden="true"></div>
+
+        <div class="pbx-relative pbx-z-10 pbx-px-4 lg:pbx-px-10 pbx-w-full pbx-max-w-7xl pbx-mx-auto pbx-pb-8 lg:pbx-pb-0">
+            <div class="pbx-rounded-[2rem] pbx-bg-black/20 pbx-backdrop-blur-xl pbx-border pbx-border-white/10 pbx-p-6 sm:pbx-p-10 lg:pbx-p-12 pbx-max-w-3xl pbx-shadow-2xl">
+                
+                <div class="pbx-space-y-5 lg:pbx-space-y-8 pbx-text-center sm:pbx-text-left">
+                    <div class="pbx-anim" data-animate>
+                        <div class="pbx-inline-flex pbx-items-center pbx-justify-center pbx-gap-2 pbx-rounded-full pbx-bg-white/10 pbx-border pbx-border-white/20 pbx-px-3 sm:pbx-px-4 pbx-py-1.5 sm:pbx-py-2 pbx-text-[11px] sm:pbx-text-xs lg:pbx-text-sm">
+                            <span class="pbx-inline-block pbx-w-1.5 pbx-h-1.5 sm:pbx-w-2 sm:pbx-h-2 pbx-rounded-full pbx-bg-[#25D366] pbx-btn-pulse"></span>
+                            Agenda abierta · Entrega rápida
+                        </div>
+                    </div>
+
+                    <div class="pbx-space-y-3 sm:pbx-space-y-4">
+                        <h1 class="pbx-text-4xl sm:pbx-text-6xl lg:pbx-text-7xl pbx-font-light pbx-tracking-tight pbx-leading-[1.1] pbx-anim pbx-anim-d1" data-animate>
+                            Fotografía que <br class="pbx-hidden lg:pbx-block" />
+                            se siente <span class="pbx-italic pbx-font-serif pbx-opacity-90">real</span>
+                        </h1>
+                        <p class="pbx-text-base sm:pbx-text-lg lg:pbx-text-xl pbx-opacity-80 pbx-font-light pbx-leading-relaxed pbx-max-w-xl pbx-mx-auto sm:pbx-mx-0 pbx-anim pbx-anim-d2" data-animate>
+                            Capturamos tu esencia. Luz natural, dirección suave y estilo editorial para parejas, familias, bodas y marcas.
+                        </p>
+                    </div>
+
+                    <div class="pbx-flex pbx-flex-wrap pbx-justify-center sm:pbx-justify-start pbx-gap-3 pbx-pt-4 sm:pbx-pt-6 pbx-anim pbx-anim-d3" data-animate>
+                        <div>
+                            <a href="https://wa.me/529980000000" target="_blank" class="pbx-shine pbx-inline-flex pbx-items-center pbx-justify-center pbx-bg-white pbx-text-black pbx-px-6 pbx-py-3 pbx-rounded-full pbx-text-sm pbx-font-semibold pbx-transition-transform active:pbx-scale-95 lg:hover:pbx-scale-105">
+                                Cotizar por WhatsApp
+                            </a>
+                        </div>
+                        <div>
+                            <a href="#tipos" class="pbx-inline-flex pbx-items-center pbx-justify-center pbx-rounded-full pbx-px-6 pbx-py-3 pbx-border pbx-border-white/30 pbx-bg-white/10 pbx-text-white pbx-text-sm pbx-font-medium pbx-transition-colors hover:pbx-bg-white/20 active:pbx-scale-95">
+                                Ver tipos de sesión
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="pbx-absolute pbx-bottom-6 pbx-left-0 pbx-right-0 pbx-flex pbx-justify-center pbx-z-10 lg:pbx-hidden">
+            <a href="#portafolio" class="pbx-anim pbx-inline-flex pbx-items-center pbx-justify-center pbx-w-10 pbx-h-10 pbx-rounded-full pbx-bg-white/15 pbx-backdrop-blur pbx-border pbx-border-white/20" data-animate>
+                <span class="pbx-float pbx-text-lg">↓</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- PORTAFOLIO RÁPIDO (CARRUSEL MÓVIL) -->
+    <div class="pbx-py-12 lg:pbx-py-20 pbx-overflow-hidden" id="portafolio">
+        <div class="pbx-mx-auto pbx-max-w-7xl pbx-px-5 lg:pbx-px-10">
+            <div class="pbx-flex pbx-items-end pbx-justify-between pbx-gap-4 pbx-anim" data-animate>
+                <h2 class="pbx-text-3xl lg:pbx-text-4xl pbx-font-semibold pbx-tracking-tight">
+                    Mi estilo
+                </h2>
+            </div>
+        </div>
+
+        <!-- Carrusel diseñado para swiping en móvil (Aspect ratio 4:5 editorial) -->
+        <div class="pbx-mt-8 pbx-hide-scrollbar pbx-anim" data-animate>
+            <div style="display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 16px; padding: 0 20px 32px 20px; margin: 0 auto; max-width: 1280px;">
+                <img class="pbx-rounded-2xl pbx-object-cover pbx-shadow-[0_10px_30px_rgba(0,0,0,0.1)] pbx-card-hover" style="scroll-snap-align: center; width: 75vw; max-width: 340px; aspect-ratio: 4 / 5;" src="/imgs-templates/noimage.svg" alt="Portafolio 1" />
+                <img class="pbx-rounded-2xl pbx-object-cover pbx-shadow-[0_10px_30px_rgba(0,0,0,0.1)] pbx-card-hover" style="scroll-snap-align: center; width: 75vw; max-width: 340px; aspect-ratio: 4 / 5;" src="/imgs-templates/noimage.svg" alt="Portafolio 2" />
+                <img class="pbx-rounded-2xl pbx-object-cover pbx-shadow-[0_10px_30px_rgba(0,0,0,0.1)] pbx-card-hover" style="scroll-snap-align: center; width: 75vw; max-width: 340px; aspect-ratio: 4 / 5;" src="/imgs-templates/noimage.svg" alt="Portafolio 3" />
+                <img class="pbx-rounded-2xl pbx-object-cover pbx-shadow-[0_10px_30px_rgba(0,0,0,0.1)] pbx-card-hover" style="scroll-snap-align: center; width: 75vw; max-width: 340px; aspect-ratio: 4 / 5;" src="/imgs-templates/noimage.svg" alt="Portafolio 4" />
+                <img class="pbx-rounded-2xl pbx-object-cover pbx-shadow-[0_10px_30px_rgba(0,0,0,0.1)] pbx-card-hover" style="scroll-snap-align: center; width: 75vw; max-width: 340px; aspect-ratio: 4 / 5;" src="/imgs-templates/noimage.svg" alt="Portafolio 5" />
+            </div>
+        </div>
+    </div>
+
+    <!-- TIPOS DE SESIÓN (CARDS STACKEADAS EN MÓVIL) -->
+    <div id="tipos" class="pbx-px-5 lg:pbx-px-10 pbx-pb-16 lg:pbx-pb-24">
+        <div class="pbx-mx-auto pbx-max-w-7xl">
+            <div class="pbx-anim" data-animate>
+                <h2 class="pbx-text-3xl lg:pbx-text-4xl pbx-font-semibold pbx-tracking-tight">
+                    Elige tu sesión
+                </h2>
+                <p class="pbx-mt-2 pbx-text-base pbx-opacity-70 pbx-max-w-2xl">
+                    Sesiones personalizadas con entrega digital en alta calidad.
+                </p>
+            </div>
+
+            <div class="pbx-mt-10 pbx-grid pbx-grid-cols-1 md:pbx-grid-cols-2 lg:pbx-grid-cols-3 pbx-gap-6 lg:pbx-gap-8">
+                <!-- Familiar -->
+                <article class="pbx-group pbx-rounded-3xl pbx-bg-white pbx-border pbx-border-gray-100 pbx-shadow-sm pbx-overflow-hidden pbx-card-hover pbx-anim pbx-anim-d1" data-animate>
+                    <div class="pbx-relative pbx-overflow-hidden">
+                        <img src="/imgs-templates/noimage.svg" alt="Sesión familiar" class="pbx-w-full pbx-aspect-[5/4] pbx-object-cover pbx-img-zoom" />
+                        <div class="pbx-absolute pbx-top-4 pbx-right-4 pbx-rounded-full pbx-bg-white/90 pbx-backdrop-blur pbx-text-black pbx-font-semibold pbx-text-xs pbx-px-3 pbx-py-1.5 pbx-shadow-sm">
+                            60–90 min
+                        </div>
+                    </div>
+                    <div class="pbx-p-6 lg:pbx-p-8">
+                        <h3 class="pbx-text-2xl pbx-font-bold pbx-tracking-tight">Familiar</h3>
+                        <p class="pbx-mt-2 pbx-text-sm pbx-opacity-70 pbx-leading-relaxed">
+                            Momentos naturales sin poses rígidas. Ideal para playa, hotel o casa.
+                        </p>
+                        <div class="pbx-mt-6 pbx-pt-6 pbx-border-t pbx-border-gray-100 pbx-flex pbx-items-center pbx-justify-between">
+                            <div>
+                                <div class="pbx-text-xs pbx-font-medium pbx-opacity-60 pbx-uppercase pbx-tracking-wider">Desde</div>
+                                <div class="pbx-text-xl pbx-font-bold">$2,900</div>
+                            </div>
+                            <a href="https://wa.me/529980000000" class="pbx-inline-flex pbx-items-center pbx-justify-center pbx-rounded-xl pbx-px-5 pbx-py-2.5 pbx-bg-gray-900 pbx-text-white pbx-text-sm pbx-font-medium active:pbx-scale-95 pbx-transition-transform">
+                                Reservar
+                            </a>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- Pareja -->
+                <article class="pbx-group pbx-rounded-3xl pbx-bg-white pbx-border pbx-border-gray-100 pbx-shadow-sm pbx-overflow-hidden pbx-card-hover pbx-anim pbx-anim-d2" data-animate>
+                    <div class="pbx-relative pbx-overflow-hidden">
+                        <img src="/imgs-templates/noimage.svg" alt="Sesión pareja" class="pbx-w-full pbx-aspect-[5/4] pbx-object-cover pbx-img-zoom" />
+                        <div class="pbx-absolute pbx-top-4 pbx-right-4 pbx-rounded-full pbx-bg-white/90 pbx-backdrop-blur pbx-text-black pbx-font-semibold pbx-text-xs pbx-px-3 pbx-py-1.5 pbx-shadow-sm">
+                            45–75 min
+                        </div>
+                    </div>
+                    <div class="pbx-p-6 lg:pbx-p-8">
+                        <h3 class="pbx-text-2xl pbx-font-bold pbx-tracking-tight">Pareja</h3>
+                        <p class="pbx-mt-2 pbx-text-sm pbx-opacity-70 pbx-leading-relaxed">
+                            Atardecer, playa o urbano. Dirección guiada, luz natural y tomas candid.
+                        </p>
+                        <div class="pbx-mt-6 pbx-pt-6 pbx-border-t pbx-border-gray-100 pbx-flex pbx-items-center pbx-justify-between">
+                            <div>
+                                <div class="pbx-text-xs pbx-font-medium pbx-opacity-60 pbx-uppercase pbx-tracking-wider">Desde</div>
+                                <div class="pbx-text-xl pbx-font-bold">$2,700</div>
+                            </div>
+                            <a href="https://wa.me/529980000000" class="pbx-inline-flex pbx-items-center pbx-justify-center pbx-rounded-xl pbx-px-5 pbx-py-2.5 pbx-bg-gray-900 pbx-text-white pbx-text-sm pbx-font-medium active:pbx-scale-95 pbx-transition-transform">
+                                Reservar
+                            </a>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- Retrato -->
+                <article class="pbx-group pbx-rounded-3xl pbx-bg-white pbx-border pbx-border-gray-100 pbx-shadow-sm pbx-overflow-hidden pbx-card-hover pbx-anim pbx-anim-d3" data-animate>
+                    <div class="pbx-relative pbx-overflow-hidden">
+                        <img src="/imgs-templates/noimage.svg" alt="Retrato" class="pbx-w-full pbx-aspect-[5/4] pbx-object-cover pbx-img-zoom" />
+                        <div class="pbx-absolute pbx-top-4 pbx-right-4 pbx-rounded-full pbx-bg-white/90 pbx-backdrop-blur pbx-text-black pbx-font-semibold pbx-text-xs pbx-px-3 pbx-py-1.5 pbx-shadow-sm">
+                            30–60 min
+                        </div>
+                    </div>
+                    <div class="pbx-p-6 lg:pbx-p-8">
+                        <h3 class="pbx-text-2xl pbx-font-bold pbx-tracking-tight">Retrato Personal</h3>
+                        <p class="pbx-mt-2 pbx-text-sm pbx-opacity-70 pbx-leading-relaxed">
+                            Look editorial o casual. Ideal para marca personal, redes sociales o graduación.
+                        </p>
+                        <div class="pbx-mt-6 pbx-pt-6 pbx-border-t pbx-border-gray-100 pbx-flex pbx-items-center pbx-justify-between">
+                            <div>
+                                <div class="pbx-text-xs pbx-font-medium pbx-opacity-60 pbx-uppercase pbx-tracking-wider">Desde</div>
+                                <div class="pbx-text-xl pbx-font-bold">$1,900</div>
+                            </div>
+                            <a href="https://wa.me/529980000000" class="pbx-inline-flex pbx-items-center pbx-justify-center pbx-rounded-xl pbx-px-5 pbx-py-2.5 pbx-bg-gray-900 pbx-text-white pbx-text-sm pbx-font-medium active:pbx-scale-95 pbx-transition-transform">
+                                Reservar
+                            </a>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+    </div>
+
+    <!-- GALERÍA GRID -->
+    <div id="galeria" class="pbx-px-2 sm:pbx-px-5 lg:pbx-px-10 pbx-pb-16 lg:pbx-pb-24">
+        <div class="pbx-mx-auto pbx-max-w-7xl">
+            <div class="pbx-anim pbx-px-3 sm:pbx-px-0" data-animate>
+                <h2 class="pbx-text-3xl lg:pbx-text-4xl pbx-font-semibold pbx-tracking-tight">
+                    Momentos capturados
+                </h2>
+                <p class="pbx-mt-2 pbx-text-sm pbx-opacity-70">
+                    Toca cualquier imagen para verla en pantalla completa.
+                </p>
+            </div>
+
+            <!-- Grid optimizado para móvil: 2 columnas apretadas, 4 en desktop -->
+            <div class="pbx-mt-8 pbx-grid pbx-grid-cols-2 md:pbx-grid-cols-3 lg:pbx-grid-cols-4 pbx-gap-2 sm:pbx-gap-4">
+                <button type="button" class="pbx-group pbx-overflow-hidden pbx-rounded-xl pbx-anim pbx-anim-d1" data-animate data-lightbox="/imgs-templates/noimage.svg">
+                    <img class="pbx-w-full pbx-aspect-square pbx-object-cover pbx-transition-transform pbx-duration-700 group-hover:pbx-scale-110" src="/imgs-templates/noimage.svg" alt="Galería" />
+                </button>
+                <button type="button" class="pbx-group pbx-overflow-hidden pbx-rounded-xl pbx-anim pbx-anim-d2" data-animate data-lightbox="/imgs-templates/noimage.svg">
+                    <img class="pbx-w-full pbx-aspect-square pbx-object-cover pbx-transition-transform pbx-duration-700 group-hover:pbx-scale-110" src="/imgs-templates/noimage.svg" alt="Galería" />
+                </button>
+                <button type="button" class="pbx-group pbx-overflow-hidden pbx-rounded-xl pbx-anim pbx-anim-d3" data-animate data-lightbox="/imgs-templates/noimage.svg">
+                    <img class="pbx-w-full pbx-aspect-square pbx-object-cover pbx-transition-transform pbx-duration-700 group-hover:pbx-scale-110" src="/imgs-templates/noimage.svg" alt="Galería" />
+                </button>
+                <button type="button" class="pbx-group pbx-overflow-hidden pbx-rounded-xl pbx-anim pbx-anim-d1" data-animate data-lightbox="/imgs-templates/noimage.svg">
+                    <img class="pbx-w-full pbx-aspect-square pbx-object-cover pbx-transition-transform pbx-duration-700 group-hover:pbx-scale-110" src="/imgs-templates/noimage.svg" alt="Galería" />
+                </button>
+                <button type="button" class="pbx-group pbx-overflow-hidden pbx-rounded-xl pbx-anim pbx-anim-d2" data-animate data-lightbox="/imgs-templates/noimage.svg">
+                    <img class="pbx-w-full pbx-aspect-square pbx-object-cover pbx-transition-transform pbx-duration-700 group-hover:pbx-scale-110" src="/imgs-templates/noimage.svg" alt="Galería" />
+                </button>
+                <button type="button" class="pbx-group pbx-overflow-hidden pbx-rounded-xl pbx-anim pbx-anim-d3" data-animate data-lightbox="/imgs-templates/noimage.svg">
+                    <img class="pbx-w-full pbx-aspect-square pbx-object-cover pbx-transition-transform pbx-duration-700 group-hover:pbx-scale-110" src="/imgs-templates/noimage.svg" alt="Galería" />
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CTA FINAL FLOTANTE / STICKY EN MÓVIL (Sensación de App) -->
+    <div class="pbx-px-5 lg:pbx-px-10 pbx-pb-24">
+        <div class="pbx-mx-auto pbx-max-w-4xl">
+            <div class="pbx-relative pbx-rounded-[2rem] pbx-bg-gray-900 pbx-text-white pbx-p-8 lg:pbx-p-12 pbx-overflow-hidden pbx-shadow-2xl pbx-anim" data-animate>
+                <div class="pbx-absolute pbx-inset-0 pbx-opacity-30" style="background-image: radial-gradient(circle at 80% 20%, rgba(255,255,255,0.4) 0%, transparent 50%);"></div>
+                
+                <div class="pbx-relative pbx-z-10 pbx-flex pbx-flex-col pbx-items-center pbx-text-center pbx-gap-6">
+                    <div>
+                        <h2 class="pbx-text-3xl lg:pbx-text-5xl pbx-font-bold pbx-tracking-tight">
+                            Hagamos magia juntos
+                        </h2>
+                        <p class="pbx-mt-4 pbx-text-base lg:pbx-text-lg pbx-opacity-80 pbx-max-w-xl pbx-mx-auto">
+                            Escríbeme por WhatsApp con tu fecha, idea o locación y empecemos a planear tu sesión perfecta.
+                        </p>
+                    </div>
+                    
+                    <a href="https://wa.me/529980000000" target="_blank" class="pbx-shine pbx-btn-pulse pbx-mt-2 pbx-flex pbx-w-full sm:pbx-w-auto pbx-items-center pbx-justify-center pbx-gap-2 pbx-rounded-2xl pbx-px-8 pbx-py-4 pbx-bg-[#25D366] pbx-text-white pbx-font-bold pbx-text-lg pbx-transition-transform active:pbx-scale-95">
+                        <svg class="pbx-w-6 pbx-h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.441-1.273.606-1.446c.163-.171.358-.214.48-.214.121 0 .242.001.349.006.111.004.258-.041.403.311.149.362.507 1.237.551 1.325.043.087.072.188.014.305-.058.115-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564c.173.087.289.129.332.202.043.073.043.423-.101.827z"/></svg>
+                        Enviar mensaje
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lightbox modal (Móvil optimizado) -->
+    <div class="pbx-lightbox" id="pbxLightbox" aria-hidden="true">
+        <button class="pbx-absolute pbx-top-4 pbx-right-4 pbx-w-10 pbx-h-10 pbx-flex pbx-items-center pbx-justify-center pbx-rounded-full pbx-bg-white/20 pbx-backdrop-blur pbx-text-white pbx-z-50" aria-label="Cerrar">✕</button>
+        <img class="pbx-lightbox__img" id="pbxLightboxImg" alt="Imagen en grande" />
+    </div>
+
+    <script>
+        (function () {
+            try {
+                // Scroll reveal con Intersection Observer (Smooth)
+                var els = Array.prototype.slice.call(
+                    document.querySelectorAll("[data-animate]")
+                );
+                if ("IntersectionObserver" in window) {
+                    var io = new IntersectionObserver(
+                        function (entries) {
+                            entries.forEach(function (entry) {
+                                if (entry.isIntersecting) {
+                                    entry.target.classList.add("is-visible");
+                                    entry.target.classList.remove("pbx-anim--init");
+                                    io.unobserve(entry.target);
+                                }
+                            });
+                        },
+                        { root: null, rootMargin: "0px 0px -10% 0px", threshold: 0.05 }
+                    );
+                    els.forEach(function (el) {
+                        el.classList.add("pbx-anim");
+                        el.classList.add("pbx-anim--init");
+                        io.observe(el);
+                    });
+                } else {
+                    els.forEach(function (el) {
+                        el.classList.add("pbx-anim");
+                        el.classList.remove("pbx-anim--init");
+                        el.classList.add("is-visible");
+                    });
+                }
+
+                // Lightbox interactivo optimizado
+                var lb = document.getElementById("pbxLightbox");
+                var lbImg = document.getElementById("pbxLightboxImg");
+                if (lb && lbImg) {
+                    function closeLb() {
+                        lb.classList.remove("is-open");
+                        lb.setAttribute("aria-hidden", "true");
+                        setTimeout(function() { lbImg.removeAttribute("src"); }, 300); // esperar transición
+                    }
+                    document.addEventListener("click", function (e) {
+                        var btn = e.target && e.target.closest ? e.target.closest("[data-lightbox]") : null;
+                        if (btn) {
+                            var src = btn.getAttribute("data-lightbox");
+                            if (src) {
+                                lbImg.setAttribute("src", src);
+                                // Forzar reflujo para que la transición funcione
+                                void lb.offsetWidth;
+                                lb.classList.add("is-open");
+                                lb.setAttribute("aria-hidden", "false");
+                            }
+                            return;
+                        }
+                        // Cerrar si se da click en el fondo o en el botón cerrar
+                        if (e.target === lb || e.target.closest("button[aria-label='Cerrar']")) {
+                            closeLb();
+                        }
+                    });
+                    document.addEventListener("keydown", function (e) {
+                        if (e.key === "Escape") closeLb();
+                    });
+                }
+            } catch (e) {
+                // fail silently
+            }
+        })();
+    </script>
+</section>
