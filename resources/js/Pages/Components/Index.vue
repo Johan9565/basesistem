@@ -31,6 +31,18 @@ const props = defineProps({
         type: String,
         default: 'dark',
     },
+    landingPalette: {
+        type: Object,
+        default: () => ({}),
+    },
+    landingPalettePreset: {
+        type: String,
+        default: 'azul',
+    },
+    landingPresets: {
+        type: Array,
+        default: () => [],
+    },
     branding: {
         type: Object,
         default: () => ({
@@ -77,6 +89,7 @@ const sidePreviewSrc = computed(
 
 const tabs = [
     { id: 'branding', label: 'Branding' },
+    { id: 'inicio', label: 'Página de inicio' },
     { id: 'tema', label: 'Tema' },
     { id: 'botones', label: 'Botones' },
     { id: 'formularios', label: 'Formularios' },
@@ -85,6 +98,67 @@ const tabs = [
     { id: 'otros', label: 'Otros' },
 ];
 const activeTab = ref('branding');
+
+const LANDING_KEYS = [
+    { key: '--landing-bg', label: 'Fondo general' },
+    { key: '--landing-ink', label: 'Texto principal' },
+    { key: '--landing-primary', label: 'Azul / color primario' },
+    { key: '--landing-primary-deep', label: 'Primario profundo' },
+    { key: '--landing-primary-soft', label: 'Primario suave' },
+    { key: '--landing-accent', label: 'Acento claro' },
+    { key: '--landing-accent-strong', label: 'Acento fuerte' },
+    { key: '--landing-muted', label: 'Texto secundario' },
+    { key: '--landing-cta', label: 'Botones CTA' },
+    { key: '--landing-cta-text', label: 'Texto CTA' },
+    { key: '--landing-surface', label: 'Secciones suaves' },
+    { key: '--landing-footer', label: 'Footer' },
+    { key: '--landing-hero-from', label: 'Overlay del hero' },
+    { key: '--landing-border', label: 'Bordes de tarjetas' },
+];
+
+const localLandingPalette = ref({ ...(props.landingPalette ?? {}) });
+const localLandingPreset = ref(props.landingPalettePreset ?? 'azul');
+const landingSaveTimeout = ref(null);
+const isSyncingLanding = ref(false);
+
+watch(
+    () => [props.landingPalette, props.landingPalettePreset],
+    ([palette, preset]) => {
+        isSyncingLanding.value = true;
+        localLandingPalette.value = { ...(palette ?? {}) };
+        localLandingPreset.value = preset ?? 'azul';
+        setTimeout(() => { isSyncingLanding.value = false; }, 0);
+    },
+    { deep: true },
+);
+
+function saveLandingPalette() {
+    router.patch(route('components.landing-palette.update'), {
+        landing_palette: localLandingPalette.value,
+        landing_palette_preset: localLandingPreset.value,
+    }, {
+        preserveScroll: true,
+    });
+}
+
+function applyLandingPreset(presetId) {
+    const preset = (props.landingPresets ?? []).find((item) => item.id === presetId);
+    if (!preset) return;
+    isSyncingLanding.value = true;
+    localLandingPreset.value = presetId;
+    localLandingPalette.value = { ...preset.colors };
+    setTimeout(() => {
+        isSyncingLanding.value = false;
+        saveLandingPalette();
+    }, 0);
+}
+
+watch(localLandingPalette, () => {
+    if (isSyncingLanding.value) return;
+    localLandingPreset.value = 'custom';
+    if (landingSaveTimeout.value) clearTimeout(landingSaveTimeout.value);
+    landingSaveTimeout.value = setTimeout(saveLandingPalette, 500);
+}, { deep: true });
 
 function resolveBrandingSrc(value) {
     if (!value) return '';
@@ -370,6 +444,94 @@ watch(() => props.theme, (t) => {
                     </div>
                     <div class="mt-5">
                         <PrimaryButton type="button" @click="saveBranding">Guardar branding</PrimaryButton>
+                    </div>
+                </section>
+
+                <section v-show="activeTab === 'inicio'" class="rounded-lg bg-base-100 p-6 shadow">
+                    <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                            <h3 class="text-lg font-semibold text-base-content">Paleta de la página de inicio</h3>
+                            <p class="mt-1 text-sm text-base-content/70">
+                                Estos colores se aplican a la landing pública de Small Animal Clinic.
+                            </p>
+                        </div>
+                        <a
+                            href="/"
+                            target="_blank"
+                            class="text-sm font-medium text-primary hover:underline"
+                        >
+                            Ver página de inicio →
+                        </a>
+                    </div>
+
+                    <div class="mb-6">
+                        <p class="mb-3 text-sm font-medium text-base-content">Presets</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                v-for="preset in landingPresets"
+                                :key="preset.id"
+                                type="button"
+                                class="rounded-md px-3 py-1.5 text-sm transition"
+                                :class="localLandingPreset === preset.id
+                                    ? 'bg-primary text-primary-content'
+                                    : 'bg-base-200 text-base-content hover:bg-base-300'"
+                                @click="applyLandingPreset(preset.id)"
+                            >
+                                {{ preset.label }}
+                            </button>
+                            <span
+                                v-if="localLandingPreset === 'custom'"
+                                class="rounded-md bg-warning/20 px-3 py-1.5 text-sm text-warning-content"
+                            >
+                                Personalizado
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="mb-6 overflow-hidden rounded-2xl border border-base-300">
+                        <div
+                            class="flex h-28 items-end p-4 text-white"
+                            :style="{
+                                background: `linear-gradient(135deg, ${localLandingPalette['--landing-hero-from']}, ${localLandingPalette['--landing-primary']})`,
+                            }"
+                        >
+                            <div>
+                                <p class="text-xs uppercase tracking-[0.2em] opacity-80">Vista previa</p>
+                                <p class="font-semibold">Small Animal Clinic</p>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3 p-4" :style="{ background: localLandingPalette['--landing-bg'] }">
+                            <span
+                                class="rounded-full px-4 py-2 text-xs font-bold"
+                                :style="{
+                                    background: localLandingPalette['--landing-cta'],
+                                    color: localLandingPalette['--landing-cta-text'],
+                                }"
+                            >
+                                Agendar cita
+                            </span>
+                            <span class="text-xs font-medium" :style="{ color: localLandingPalette['--landing-muted'] }">
+                                Cancún · atención veterinaria
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <div v-for="item in LANDING_KEYS" :key="item.key" class="flex items-center gap-3">
+                            <label class="min-w-0 flex-1 truncate text-xs text-base-content/70">{{ item.label }}</label>
+                            <input
+                                :value="localLandingPalette[item.key]"
+                                type="text"
+                                class="w-24 rounded border border-base-300 bg-base-100 px-2 py-1.5 text-xs shadow-xs focus:border-primary focus:ring-primary"
+                                @input="localLandingPalette[item.key] = ($event.target).value"
+                            />
+                            <input
+                                :value="localLandingPalette[item.key]"
+                                type="color"
+                                class="h-8 w-10 shrink-0 cursor-pointer rounded border border-base-300 bg-base-100 p-0.5"
+                                @input="localLandingPalette[item.key] = ($event.target).value"
+                            />
+                        </div>
                     </div>
                 </section>
 

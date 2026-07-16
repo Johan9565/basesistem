@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\ComponentThemeModel;
+use App\Support\LandingPalette;
 
 class ComponentsController extends Controller
 {
@@ -42,6 +43,16 @@ class ComponentsController extends Controller
         return Inertia::render('Components/Index', [
             'theme' => $theme,
             'activeTheme' => $activeTheme,
+            'landingPalette' => LandingPalette::resolve($doc?->landing_palette),
+            'landingPalettePreset' => $doc?->landing_palette_preset ?? 'azul',
+            'landingPresets' => collect(LandingPalette::presets())
+                ->map(fn ($preset, $id) => [
+                    'id' => $id,
+                    'label' => $preset['label'],
+                    'colors' => $preset['colors'],
+                ])
+                ->values()
+                ->all(),
             'branding' => [
                 'logo_url' => $doc?->logo_url,
                 'auth_side_image_url' => $doc?->auth_side_image_url,
@@ -49,6 +60,35 @@ class ComponentsController extends Controller
                 'auth_side_image_pos_y' => (float) ($doc?->auth_side_image_pos_y ?? 50),
             ],
         ]);
+    }
+
+    public function updateLandingPalette(Request $request)
+    {
+        $validated = $request->validate([
+            'landing_palette' => 'required|array',
+            'landing_palette.*' => 'nullable|string|max:32',
+            'landing_palette_preset' => 'nullable|string|max:50',
+        ]);
+
+        $palette = LandingPalette::resolve($validated['landing_palette']);
+        $preset = $validated['landing_palette_preset'] ?? 'custom';
+
+        $doc = ComponentThemeModel::first();
+        if (! $doc) {
+            ComponentThemeModel::create([
+                'styles' => [],
+                'active_theme' => 'dark',
+                'landing_palette' => $palette,
+                'landing_palette_preset' => $preset,
+            ]);
+        } else {
+            $doc->update([
+                'landing_palette' => $palette,
+                'landing_palette_preset' => $preset,
+            ]);
+        }
+
+        return back();
     }
 
     public function updateTheme(Request $request)

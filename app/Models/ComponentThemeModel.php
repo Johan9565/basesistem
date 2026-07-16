@@ -14,6 +14,8 @@ class ComponentThemeModel extends Model
     protected $fillable = [
         'styles',
         'active_theme',
+        'landing_palette',
+        'landing_palette_preset',
         'logo_url',
         'auth_side_image_url',
         'auth_side_image_pos_x',

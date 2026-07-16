@@ -3,12 +3,14 @@
 namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Inertia\Middleware;
 use Tighten\Ziggy\Ziggy;
 use App\Models\ModulesModel;
 use App\Models\PermissionsModel;
 use App\Models\ComponentThemeModel;
 use App\Models\NotificationsModel;
+use App\Support\LandingPalette;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -65,7 +67,18 @@ class HandleInertiaRequests extends Middleware
                 $allModules = ModulesModel::where('status', 1)
                     ->whereIn('route', $userPermissions)
                     ->orderBy('order_index', 'asc')
-                    ->get();
+                    ->get()
+                    // Solo módulos con ruta Laravel real, o dropdowns (relation = 0)
+                    ->filter(function ($module) {
+                        if ((string) $module->relation === '0' || $module->relation === 0) {
+                            return true;
+                        }
+
+                        return is_string($module->route)
+                            && $module->route !== ''
+                            && Route::has($module->route);
+                    })
+                    ->values();
 
                 // Rutas de módulos dropdown (relation == 0)
                 $dropdownRoutes = $allModules
@@ -90,6 +103,8 @@ class HandleInertiaRequests extends Middleware
                             ->toArray();
                         return $data;
                     })
+                    // Ocultar dropdowns vacíos (sin hijos visibles)
+                    ->filter(fn($module) => !($module['is_dropdown'] ?? false) || !empty($module['children']))
                     ->values();
             }
         }
@@ -101,6 +116,8 @@ class HandleInertiaRequests extends Middleware
             'csrf_token' => csrf_token(),
             'flash' => $request->session()->get('flash'),
             'activeTheme' => $themeDoc?->active_theme ?? 'dark',
+            'landingPalette' => LandingPalette::resolve($themeDoc?->landing_palette),
+            'landingPalettePreset' => $themeDoc?->landing_palette_preset ?? 'azul',
             'branding' => [
                 'logo_url' => $themeDoc?->logo_url,
                 'auth_side_image_url' => $themeDoc?->auth_side_image_url,
