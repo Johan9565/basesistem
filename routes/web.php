@@ -45,6 +45,7 @@ Route::middleware(['auth', 'permission:administration'])->group(function () {
         Route::get('/components', [ComponentsController::class, 'index'])->name('components');
         Route::patch('/components/theme', [ComponentsController::class, 'updateTheme'])->name('components.theme.update');
         Route::patch('/components/active-theme', [ComponentsController::class, 'updateActiveTheme'])->name('components.active-theme.update');
+        Route::patch('/components/landing-palette', [ComponentsController::class, 'updateLandingPalette'])->name('components.landing-palette.update');
         Route::patch('/components/branding', [ComponentsController::class, 'updateBranding'])->name('components.branding.update');
         Route::post('/components/branding/upload', [ComponentsController::class, 'uploadBrandingAsset'])->name('components.branding.upload');
     });
