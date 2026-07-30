@@ -447,6 +447,13 @@ onMounted(() => {
 <template>
     <Head title="Small Animal Clinic | Veterinaria en Cancún">
         <meta name="description" content="Atención veterinaria cálida y profesional para perros y gatos en Cancún." />
+        <meta property="og:title" content="Small Animal Clinic | Veterinaria en Cancún" />
+        <meta property="og:description" content="Atención veterinaria cálida y profesional para perros y gatos en Cancún." />
+        <meta property="og:site_name" content="Small Animal Clinic" />
+        <meta property="og:image" content="/images/logo_without_name.png" />
+        <meta name="twitter:title" content="Small Animal Clinic | Veterinaria en Cancún" />
+        <meta name="twitter:description" content="Atención veterinaria cálida y profesional para perros y gatos en Cancún." />
+        <meta name="twitter:image" content="/images/logo_without_name.png" />
     </Head>
 
     <div class="landing min-h-screen overflow-x-hidden font-sans" :style="paletteStyle">
@@ -468,7 +475,7 @@ onMounted(() => {
                     <a href="#opiniones" class="relative py-1 transition hover:text-white after:absolute after:bottom-0 after:left-0 after:h-[2px] after:w-0 after:bg-blue-400 after:transition-all after:duration-300 hover:after:w-full">Opiniones</a>
                     <a href="#ubicacion" class="relative py-1 transition hover:text-white after:absolute after:bottom-0 after:left-0 after:h-[2px] after:w-0 after:bg-blue-400 after:transition-all after:duration-300 hover:after:w-full">Ubicación</a>
                     <a href="#redes" class="relative py-1 transition hover:text-white after:absolute after:bottom-0 after:left-0 after:h-[2px] after:w-0 after:bg-blue-400 after:transition-all after:duration-300 hover:after:w-full">Redes Sociales</a>
-                    <a href="#contacto" class="relative py-1 transition hover:text-white after:absolute after:bottom-0 after:left-0 after:h-[2px] after:w-0 after:bg-blue-400 after:transition-all after:duration-300 hover:after:w-full">Contacto</a>
+
                     <Link
                         v-if="canLogin && $page.props.auth.user"
                         :href="route('dashboard')"
@@ -476,10 +483,6 @@ onMounted(() => {
                     >
                         Panel
                     </Link>
-                    <Link v-else-if="canLogin" :href="route('login')" class="transition hover:text-white">Acceso</Link>
-                    <a href="#contacto" class="landing-cta relative overflow-hidden rounded-full px-6 py-3 font-bold shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:brightness-110 active:translate-y-0">
-                        <span class="relative z-10">Agendar cita</span>
-                    </a>
                 </nav>
                 <a href="#contacto" class="landing-cta rounded-full px-4 py-2.5 text-xs font-bold lg:hidden transition hover:scale-105 active:scale-95">Agendar cita</a>
             </div>
@@ -805,11 +808,11 @@ onMounted(() => {
                                     <img src="/images/logo_without_name.png" alt="Logo" class="size-4 object-contain" />
                                     <span>Cédula & Acreditaciones</span>
                                 </div>
-                                
+
                                 <h2 class="mt-4 font-serif text-3xl font-semibold leading-tight text-white sm:text-4xl lg:text-5xl">
                                     Certificaciones Médicas del <span class="landing-highlight animate-shimmer-text italic">Dr. Andrés Aguilar</span>
                                 </h2>
-                                
+
                                 <p class="mt-5 text-base sm:text-lg leading-relaxed text-white/90">
                                     Con <strong>5 años de experiencia profesional</strong>, el Dr. Andrés Aguilar cuenta con Cédula Profesional Veterinaria y certificación acreditada para expedición de Certificados Internacionales de Salud para perros y gatos (SENASICA / SAGARPA).
                                 </p>
@@ -864,11 +867,11 @@ onMounted(() => {
                         <div class="inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-blue-600">
                             <span>📍 Ubicación & Cobertura</span>
                         </div>
-                        
+
                         <h2 class="landing-ink mt-4 font-serif text-4xl font-semibold leading-tight sm:text-5xl">
                             Encuéntranos en <span class="landing-soft-title italic">Cancún</span>
                         </h2>
-                        
+
                         <p class="landing-muted mt-4 max-w-2xl text-base leading-relaxed">
                             Visítanos en nuestra clínica veterinaria o solicita atención médica a domicilio y en el Aeropuerto Internacional de Cancún.
                         </p>
@@ -991,11 +994,11 @@ onMounted(() => {
                             <span>Google Reviews</span>
                             <span class="text-amber-400 animate-pulse-glow-text">★★★★★</span>
                         </div>
-                        
+
                         <h2 class="landing-ink mt-4 font-serif text-4xl font-semibold leading-tight sm:text-5xl">
                             Lo que nuestras familias <span class="landing-soft-title italic">opinan de nosotros</span>
                         </h2>
-                        
+
                         <p class="landing-muted mt-4 max-w-2xl text-base leading-relaxed">
                             Reseñas reales y verificadas de nuestros clientes en Google Maps. Médicos veterinarios de confianza para trámites de vuelo, urgencias a domicilio y atención en clínica.
                         </p>
@@ -1121,11 +1124,11 @@ onMounted(() => {
                         <div class="inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-blue-600">
                             <span>📱 Comunidad & Redes Sociales</span>
                         </div>
-                        
+
                         <h2 class="landing-ink mt-4 font-serif text-4xl font-semibold leading-tight sm:text-5xl">
                             Síguenos y <span class="landing-soft-title italic">conecta con nosotros</span>
                         </h2>
-                        
+
                         <p class="landing-muted mt-4 max-w-2xl text-base leading-relaxed">
                             Descubre consejos médicos para mascotas, recomendaciones de salud, historias clínicas y contenido exclusivo del Dr. Andrés Aguilar.
                         </p>
