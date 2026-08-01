@@ -424,7 +424,112 @@ const filteredReviews = computed(() => {
     return list;
 });
 
+const schemaVeterinary = {
+    '@context': 'https://schema.org',
+    '@type': 'VeterinaryCare',
+    '@id': 'https://smallanimalclinic.mx/#veterinary',
+    'name': 'Small Animal Clinic Cancún',
+    'alternateName': 'Small Animal Clinic - Veterinaria 24 Horas Cancún',
+    'url': 'https://smallanimalclinic.mx/',
+    'logo': 'https://smallanimalclinic.mx/images/logo_with_name.png',
+    'image': 'https://smallanimalclinic.mx/images/logo_with_name.png',
+    'telephone': '+529981046082',
+    'email': 'smallanimalcliniccancun@gmail.com',
+    'priceRange': '$$',
+    'address': {
+        '@type': 'PostalAddress',
+        'addressLocality': 'Cancún',
+        'addressRegion': 'Quintana Roo',
+        'addressCountry': 'MX'
+    },
+    'geo': {
+        '@type': 'GeoCoordinates',
+        'latitude': '21.141',
+        'longitude': '-86.8515'
+    },
+    'openingHoursSpecification': {
+        '@type': 'OpeningHoursSpecification',
+        'dayOfWeek': [
+            'Monday',
+            'Tuesday',
+            'Wednesday',
+            'Thursday',
+            'Friday',
+            'Saturday',
+            'Sunday'
+        ],
+        'opens': '00:00',
+        'closes': '23:59'
+    },
+    'aggregateRating': {
+        '@type': 'AggregateRating',
+        'ratingValue': '4.7',
+        'reviewCount': '25',
+        'bestRating': '5',
+        'worstRating': '1'
+    },
+    'founder': {
+        '@type': 'Person',
+        'name': 'Dr. Andrés Aguilar',
+        'jobTitle': 'Médico Veterinario Zootecnista'
+    },
+    'medicalSpecialty': [
+        'Veterinary Dermatology',
+        'Veterinary Oncology',
+        'Veterinary Cardiology',
+        'Veterinary Dentistry',
+        'Emergency Veterinary Care'
+    ],
+    'sameAs': [
+        'https://www.facebook.com/profile.php?id=61562957610885',
+        'https://www.tiktok.com/@dr.andresaguilarvet',
+        'https://maps.app.goo.gl/VH5bcayUB5Vhity57'
+    ]
+};
+
+const schemaFAQ = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    'mainEntity': [
+        {
+            '@type': 'Question',
+            'name': '¿Ofrecen atención veterinaria de urgencias las 24 horas en Cancún?',
+            'acceptedAnswer': {
+                '@type': 'Answer',
+                'text': 'Sí, en Small Animal Clinic ofrecemos atención médica veterinaria de urgencias 24/7 los 7 días de la semana en Cancún y servicio a domicilio para emergencias de perros y gatos.'
+            }
+        },
+        {
+            '@type': 'Question',
+            'name': '¿Cómo tramitar un certificado zoosanitario de salud para viajar con mascotas en el Aeropuerto de Cancún?',
+            'acceptedAnswer': {
+                '@type': 'Answer',
+                'text': 'El Dr. Andrés Aguilar emite certificados de salud internacionales y oficiales SENASICA / SAGARPA para vuelos de importación y exportación de mascotas en el Aeropuerto Internacional de Cancún.'
+            }
+        },
+        {
+            '@type': 'Question',
+            'name': '¿Qué especialidades médicas veterinarias ofrece la clínica en Cancún?',
+            'acceptedAnswer': {
+                '@type': 'Answer',
+                'text': 'Ofrecemos consultas médicas especializadas en Dermatología, Oncología, Cardiología y Odontología veterinaria, además de consulta general, medicina preventiva y esquemas de vacunación.'
+            }
+        }
+    ]
+};
+
 onMounted(() => {
+    // Inyección dinámica de JSON-LD para SEO (Schema.org)
+    const scriptVet = document.createElement('script');
+    scriptVet.type = 'application/ld+json';
+    scriptVet.text = JSON.stringify(schemaVeterinary);
+    document.head.appendChild(scriptVet);
+
+    const scriptFAQ = document.createElement('script');
+    scriptFAQ.type = 'application/ld+json';
+    scriptFAQ.text = JSON.stringify(schemaFAQ);
+    document.head.appendChild(scriptFAQ);
+
     const observerOptions = {
         threshold: 0.1,
         rootMargin: '0px 0px -40px 0px'
@@ -445,18 +550,46 @@ onMounted(() => {
 </script>
 
 <template>
-    <Head title="Small Animal Clinic | Veterinaria en Cancún">
-        <meta name="description" content="Atención veterinaria cálida y profesional para perros y gatos en Cancún." />
+    <Head>
+        <title>Small Animal Clinic | Clínica Veterinaria en Cancún 24/7 | Dr. Andrés Aguilar</title>
+        <meta name="description" content="Clínica veterinaria en Cancún abierta 24/7. Urgencias veterinarias, consultas especializadas (dermatología, oncología, cardiología, odontología) y certificados zoosanitarios internacionales de viaje (SENASICA / Aeropuerto Cancún)." />
+        <meta name="keywords" content="veterinaria cancun, veterinario 24 horas cancun, urgencias veterinarias cancun, certificados zoosanitarios cancun, certificado salud mascotas aeropuerto cancun, dr andres aguilar veterinario, dermatologia veterinaria cancun, oncologia veterinaria cancun" />
+        <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+        <meta name="author" content="Dr. Andrés Aguilar - Small Animal Clinic" />
+        <link rel="canonical" href="https://smallanimalclinic.mx/" />
+
+        <!-- Geo Location Meta Tags (SEO Local Cancún) -->
+        <meta name="geo.region" content="MX-ROO" />
+        <meta name="geo.placename" content="Cancún, Quintana Roo" />
+        <meta name="geo.position" content="21.141;-86.8515" />
+        <meta name="ICBM" content="21.141, -86.8515" />
+
+        <!-- Open Graph Meta Tags -->
+        <meta property="og:locale" content="es_MX" />
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content="Small Animal Clinic | Clínica Veterinaria en Cancún 24/7" />
+        <meta property="og:description" content="Atención veterinaria médica especializada, urgencias 24h los 7 días y certificados internacionales zoosanitarios de viaje en el Aeropuerto de Cancún." />
+        <meta property="og:url" content="https://smallanimalclinic.mx/" />
+        <meta property="og:site_name" content="Small Animal Clinic Cancún" />
+        <meta property="og:image" content="https://smallanimalclinic.mx/images/logo_with_name.png" />
+        <meta property="og:image:alt" content="Small Animal Clinic Cancún - Dr. Andrés Aguilar" />
+
+        <!-- Twitter Card Meta Tags -->
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Small Animal Clinic | Clínica Veterinaria en Cancún 24/7" />
+        <meta name="twitter:description" content="Atención veterinaria de alta calidad 24/7 en Cancún. Urgencias, consultas médicas especializadas y certificados de salud para viaje." />
+        <meta name="twitter:image" content="https://smallanimalclinic.mx/images/logo_with_name.png" />
     </Head>
 
-    <div class="landing min-h-screen overflow-x-hidden font-sans" :style="paletteStyle">
+
+    <div class="landing min-h-screen font-sans" :style="paletteStyle">
         <!-- Header -->
         <header class="absolute inset-x-0 top-0 z-30 animate-hero-1">
             <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-6 lg:px-10">
                 <a href="#" class="group flex items-center gap-3 text-white">
-                    <img src="/images/logo_without_name.png" alt="Small Animal Clinic" class="h-12 sm:h-14 w-auto object-contain drop-shadow-md transition-transform duration-300 group-hover:scale-110" />
+                    <img src="/images/logo_without_name.png" alt="Logo Small Animal Clinic Cancún - Veterinaria 24h" class="h-12 sm:h-14 w-auto object-contain drop-shadow-md transition-transform duration-300 group-hover:scale-110" />
                     <span>
-                        <span class="block font-serif text-xl font-semibold leading-none group-hover:text-blue-200 transition-colors duration-300">Small Animal</span>
+                        <span class="block font-sans text-xl font-extrabold tracking-tight leading-none group-hover:text-blue-200 transition-colors duration-300">Small Animal</span>
                         <span class="mt-1 block text-[10px] font-bold uppercase tracking-[0.34em] text-white/70">Clinic · Cancún</span>
                     </span>
                 </a>
@@ -490,7 +623,7 @@ onMounted(() => {
             <section class="landing-hero relative flex min-h-[850px] items-center overflow-hidden">
                 <img
                     src="https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&w=1800&q=85"
-                    alt="Perro feliz atendido por Small Animal Clinic"
+                    alt="Perro feliz en consulta veterinaria en Cancún atendido por Small Animal Clinic"
                     class="absolute inset-0 size-full object-cover object-[68%_center] transition-transform duration-1000 ease-out hover:scale-105"
                 />
                 <div class="landing-hero-overlay absolute inset-0"></div>
@@ -500,20 +633,19 @@ onMounted(() => {
                     <div class="max-w-3xl">
                         <!-- Badges -->
                         <div class="mb-4 flex flex-wrap items-center gap-2 animate-hero-1">
-                            <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-white backdrop-blur-md transition-all duration-300 hover:border-white/40 hover:bg-white/20">
-                                <span class="landing-dot size-2 rounded-full animate-ping-slow"></span>
-                                Dr. Andrés Aguilar · Cancún
-                            </span>
+                           
                             <span class="inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/20 px-3.5 py-1.5 text-xs font-bold text-amber-200 backdrop-blur-md animate-pulse-subtle">
-                                <span>🕒</span> Atención 24/7 (7 Días)
+                                Atención 24/7 (7 Días)
                             </span>
                         </div>
 
                         <!-- Main Heading -->
-                        <h1 class="font-serif text-4xl font-semibold leading-[1.02] text-white sm:text-6xl lg:text-[72px] animate-hero-2">
+                        <h1 class="font-sans text-4xl font-extrabold tracking-tight leading-[1.02] text-white sm:text-6xl lg:text-[72px] animate-hero-2">
+                            <span class="block text-xs sm:text-sm font-bold tracking-[0.25em] uppercase text-blue-300 mb-2">Clínica Veterinaria en Cancún · 24/7</span>
                             Cuidamos a quienes
                             <span class="landing-highlight animate-shimmer-text italic">hacen familia.</span>
                         </h1>
+
 
                         <!-- Subtitle -->
                         <p class="mt-4 max-w-xl text-base sm:text-lg leading-7 sm:leading-8 text-white/85 animate-hero-3">
@@ -530,38 +662,77 @@ onMounted(() => {
                         </div>
 
                         <!-- Contact Info Card Bar directly in Hero -->
-                        <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 rounded-2xl bg-slate-900/60 p-4 border border-white/20 backdrop-blur-md text-white text-xs animate-hero-5">
-                            <a href="tel:+529981046082" class="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/15 transition-all duration-300 group hover:-translate-y-0.5">
-                                <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-500/30 text-blue-300 text-base group-hover:scale-110 group-hover:bg-blue-500/50 transition duration-300">📞</span>
-                                <div>
-                                    <p class="font-bold text-white text-xs">Urgencias 24/7</p>
-                                    <p class="text-white/90 font-mono text-[11px] font-semibold">+52 998 104 6082</p>
-                                </div>
-                            </a>
-                            <a href="https://wa.me/529981046082" target="_blank" rel="noopener noreferrer" class="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/15 transition-all duration-300 group hover:-translate-y-0.5">
-                                <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-500/30 text-emerald-400 group-hover:scale-110 group-hover:bg-emerald-500/50 transition duration-300">
-                                    <svg class="size-4 fill-current" viewBox="0 0 24 24">
-                                        <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984 0 1.758.459 3.474 1.33 4.982L2 22l5.166-1.347a9.923 9.923 0 0 0 4.845 1.258h.005c5.505 0 9.988-4.478 9.989-9.985 0-2.666-1.037-5.172-2.924-7.058A9.914 9.914 0 0 0 12.012 2zm5.41 13.336c-.226.634-1.312 1.213-1.803 1.252-.464.037-1.047.147-3.415-.83-2.91-1.2-4.757-4.175-4.903-4.37-.145-.195-1.187-1.579-1.187-3.013 0-1.433.748-2.14 1.014-2.433.266-.292.58-.366.774-.366.194 0 .387.002.556.009.18.007.423-.069.662.505.247.593.844 2.062.917 2.21.073.147.121.32.024.512-.097.195-.146.316-.292.487-.146.17-.307.381-.439.512-.146.146-.299.305-.128.598.17.292.756 1.248 1.625 2.022 1.118.996 2.06 1.305 2.353 1.452.292.146.463.122.634-.073.17-.195.73-0.852.925-1.144.195-.293.39-.244.657-.146.268.097 1.697.801 1.989.947.292.146.487.219.56.341.073.122.073.707-.153 1.341z"/>
-                                    </svg>
+                        <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 rounded-2xl bg-slate-900/75 p-4 border border-white/25 backdrop-blur-md text-white text-xs animate-hero-5 shadow-2xl">
+                            <!-- Header Indicating Interactive Buttons -->
+                            <div class="w-full col-span-full pb-2 flex items-center justify-between text-[11px] font-semibold text-white/90 border-b border-white/10 mb-1">
+                                <span class="flex items-center gap-2">
+                                    <span class="relative flex size-2">
+                                        <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span class="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
+                                    </span>
+                                    <span>Botones de contacto directo <span class="text-blue-300 font-normal">(Haz clic o toca para interactuar)</span></span>
                                 </span>
-                                <div>
-                                    <p class="font-bold text-white text-xs">WhatsApp Directo</p>
-                                    <p class="text-white/90 font-mono text-[11px] font-semibold">+52 998 104 6082</p>
+                                <span class="hidden sm:inline text-[10px] text-white/60 uppercase tracking-wider font-mono">Respuesta inmediata</span>
+                            </div>
+
+                            <!-- Button 1: Urgent Call -->
+                            <a href="tel:+529981046082" title="Haz clic para llamar a Urgencias" class="flex items-center justify-between gap-2.5 p-3 rounded-xl bg-white/10 border border-white/15 hover:bg-blue-600/30 hover:border-blue-400/50 hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-300 group hover:-translate-y-0.5 active:scale-95 cursor-pointer">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                    <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-500/30 text-blue-300 text-base group-hover:scale-110 group-hover:bg-blue-500 group-hover:text-white transition duration-300 shadow-sm">📞</span>
+                                    <div class="min-w-0">
+                                        <p class="font-bold text-white text-xs truncate">Urgencias 24/7</p>
+                                        <p class="text-blue-200/90 font-mono text-[11px] font-semibold truncate">+52 998 104 6082</p>
+                                    </div>
                                 </div>
+                                <span class="shrink-0 text-[10px] font-semibold bg-blue-500/20 text-blue-200 group-hover:bg-blue-500 group-hover:text-white px-2 py-1 rounded-md transition-all duration-300 flex items-center gap-1 shadow-xs">
+                                    Llamar <span class="group-hover:translate-x-0.5 transition-transform duration-300">↗</span>
+                                </span>
                             </a>
-                            <a href="mailto:smallanimalcliniccancun@gmail.com" class="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/15 transition-all duration-300 group hover:-translate-y-0.5">
-                                <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-red-500/30 text-red-300 text-base group-hover:scale-110 group-hover:bg-red-500/50 transition duration-300">✉️</span>
-                                <div>
-                                    <p class="font-bold text-white text-xs">Correo Electrónico</p>
-                                    <p class="text-white/80 text-[10px] truncate max-w-[130px]" title="smallanimalcliniccancun@gmail.com">smallanimalclinic...</p>
+
+                            <!-- Button 2: WhatsApp -->
+                            <a href="https://wa.me/529981046082" target="_blank" rel="noopener noreferrer" title="Haz clic para abrir chat de WhatsApp" class="flex items-center justify-between gap-2.5 p-3 rounded-xl bg-white/10 border border-white/15 hover:bg-emerald-600/30 hover:border-emerald-400/50 hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-300 group hover:-translate-y-0.5 active:scale-95 cursor-pointer">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                    <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-500/30 text-emerald-400 group-hover:scale-110 group-hover:bg-emerald-500 group-hover:text-white transition duration-300 shadow-sm">
+                                        <svg class="size-4 fill-current" viewBox="0 0 24 24">
+                                            <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984 0 1.758.459 3.474 1.33 4.982L2 22l5.166-1.347a9.923 9.923 0 0 0 4.845 1.258h.005c5.505 0 9.988-4.478 9.989-9.985 0-2.666-1.037-5.172-2.924-7.058A9.914 9.914 0 0 0 12.012 2zm5.41 13.336c-.226.634-1.312 1.213-1.803 1.252-.464.037-1.047.147-3.415-.83-2.91-1.2-4.757-4.175-4.903-4.37-.145-.195-1.187-1.579-1.187-3.013 0-1.433.748-2.14 1.014-2.433.266-.292.58-.366.774-.366.194 0 .387.002.556.009.18.007.423-.069.662.505.247.593.844 2.062.917 2.21.073.147.121.32.024.512-.097.195-.146.316-.292.487-.146.17-.307.381-.439.512-.146.146-.299.305-.128.598.17.292.756 1.248 1.625 2.022 1.118.996 2.06 1.305 2.353 1.452.292.146.463.122.634-.073.17-.195.73-0.852.925-1.144.195-.293.39-.244.657-.146.268.097 1.697.801 1.989.947.292.146.487.219.56.341.073.122.073.707-.153 1.341z"/>
+                                        </svg>
+                                    </span>
+                                    <div class="min-w-0">
+                                        <p class="font-bold text-white text-xs truncate">WhatsApp Directo</p>
+                                        <p class="text-emerald-200/90 font-mono text-[11px] font-semibold truncate">+52 998 104 6082</p>
+                                    </div>
                                 </div>
+                                <span class="shrink-0 text-[10px] font-semibold bg-emerald-500/20 text-emerald-200 group-hover:bg-emerald-500 group-hover:text-white px-2 py-1 rounded-md transition-all duration-300 flex items-center gap-1 shadow-xs">
+                                    Chat <span class="group-hover:translate-x-0.5 transition-transform duration-300">↗</span>
+                                </span>
                             </a>
-                            <a href="https://maps.app.goo.gl/VH5bcayUB5Vhity57" target="_blank" rel="noopener noreferrer" class="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 hover:bg-white/15 transition-all duration-300 group hover:-translate-y-0.5">
-                                <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-amber-500/30 text-amber-300 text-base group-hover:scale-110 group-hover:bg-amber-500/50 transition duration-300">📍</span>
-                                <div>
-                                    <p class="font-bold text-white text-xs flex items-center gap-1">Google Maps <span class="text-[10px] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-300">↗</span></p>
-                                    <p class="text-white/80 text-[10px]">Cancún, Q. Roo</p>
+
+                            <!-- Button 3: Email -->
+                            <a href="mailto:smallanimalcliniccancun@gmail.com" title="Haz clic para enviar correo electrónico" class="flex items-center justify-between gap-2.5 p-3 rounded-xl bg-white/10 border border-white/15 hover:bg-red-600/30 hover:border-red-400/50 hover:shadow-lg hover:shadow-red-500/10 transition-all duration-300 group hover:-translate-y-0.5 active:scale-95 cursor-pointer">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                    <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-red-500/30 text-red-300 text-base group-hover:scale-110 group-hover:bg-red-500 group-hover:text-white transition duration-300 shadow-sm">✉️</span>
+                                    <div class="min-w-0">
+                                        <p class="font-bold text-white text-xs truncate">Correo Electrónico</p>
+                                        <p class="text-white/80 text-[10px] truncate" title="smallanimalcliniccancun@gmail.com">smallanimalclinic...</p>
+                                    </div>
                                 </div>
+                                <span class="shrink-0 text-[10px] font-semibold bg-red-500/20 text-red-200 group-hover:bg-red-500 group-hover:text-white px-2 py-1 rounded-md transition-all duration-300 flex items-center gap-1 shadow-xs">
+                                    Enviar <span class="group-hover:translate-x-0.5 transition-transform duration-300">↗</span>
+                                </span>
+                            </a>
+
+                            <!-- Button 4: Google Maps -->
+                            <a href="https://maps.app.goo.gl/VH5bcayUB5Vhity57" target="_blank" rel="noopener noreferrer" title="Haz clic para abrir ubicación en Google Maps" class="flex items-center justify-between gap-2.5 p-3 rounded-xl bg-white/10 border border-white/15 hover:bg-amber-600/30 hover:border-amber-400/50 hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-300 group hover:-translate-y-0.5 active:scale-95 cursor-pointer">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                    <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-amber-500/30 text-amber-300 text-base group-hover:scale-110 group-hover:bg-amber-500 group-hover:text-white transition duration-300 shadow-sm">📍</span>
+                                    <div class="min-w-0">
+                                        <p class="font-bold text-white text-xs truncate">Google Maps</p>
+                                        <p class="text-white/80 text-[10px] truncate">Cancún, Q. Roo</p>
+                                    </div>
+                                </div>
+                                <span class="shrink-0 text-[10px] font-semibold bg-amber-500/20 text-amber-200 group-hover:bg-amber-500 group-hover:text-white px-2 py-1 rounded-md transition-all duration-300 flex items-center gap-1 shadow-xs">
+                                    Mapa <span class="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-300">↗</span>
+                                </span>
                             </a>
                         </div>
 
@@ -601,7 +772,7 @@ onMounted(() => {
                     <div class="flex items-center gap-4">
                         <div class="landing-stars text-xl tracking-wider animate-pulse-glow-text">★★★★★</div>
                         <div>
-                            <p class="landing-ink font-serif text-xl font-semibold">4.7 / 5</p>
+                            <p class="landing-ink font-sans text-2xl font-extrabold tracking-tight">4.7 / 5</p>
                             <p class="landing-muted text-xs">Familias que confían en nosotros</p>
                         </div>
                     </div>
@@ -614,7 +785,7 @@ onMounted(() => {
                     <div class="flex flex-col justify-between gap-6 lg:flex-row lg:items-end reveal-fade-up">
                         <div>
                             <span class="text-xs font-bold uppercase tracking-[0.25em] text-blue-600">Servicios Veterinarios</span>
-                            <h2 class="landing-ink mt-3 font-serif text-3xl sm:text-4xl lg:text-5xl font-semibold leading-tight">
+                            <h2 class="landing-ink mt-3 font-sans text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight">
                                 Todo lo que necesitan, <span class="landing-soft-title italic">en un mismo lugar</span>
                             </h2>
                         </div>
@@ -660,13 +831,13 @@ onMounted(() => {
                                     >
                                         {{ service.badge }}
                                     </span>
-                                    <span class="font-serif text-xl font-bold text-slate-300 group-hover:text-blue-500 transition-colors duration-300">
+                                    <span class="font-sans text-xl font-black text-slate-300 group-hover:text-blue-500 transition-colors duration-300">
                                         {{ service.number }}
                                     </span>
                                 </div>
 
                                 <!-- Título Claro -->
-                                <h3 class="font-serif text-lg font-bold text-slate-900 mt-4 leading-snug group-hover:text-blue-600 transition-colors duration-300">
+                                <h3 class="font-sans text-lg font-bold tracking-tight text-slate-900 mt-4 leading-snug group-hover:text-blue-600 transition-colors duration-300">
                                     {{ service.title }}
                                 </h3>
 
@@ -732,7 +903,7 @@ onMounted(() => {
                                     Sobre Nosotros · Médico Veterinario Titular
                                 </span>
 
-                                <h2 class="landing-ink mt-3 font-serif text-4xl font-semibold leading-tight sm:text-5xl">
+                                <h2 class="landing-ink mt-3 font-sans text-4xl font-extrabold tracking-tight leading-tight sm:text-5xl">
                                     Dr. Andrés Aguilar
                                 </h2>
 
@@ -806,7 +977,7 @@ onMounted(() => {
                                     <span>Cédula & Acreditaciones</span>
                                 </div>
                                 
-                                <h2 class="mt-4 font-serif text-3xl font-semibold leading-tight text-white sm:text-4xl lg:text-5xl">
+                                <h2 class="mt-4 font-sans text-3xl font-extrabold tracking-tight leading-tight text-white sm:text-4xl lg:text-5xl">
                                     Certificaciones Médicas del <span class="landing-highlight animate-shimmer-text italic">Dr. Andrés Aguilar</span>
                                 </h2>
                                 
@@ -865,7 +1036,7 @@ onMounted(() => {
                             <span>📍 Ubicación & Cobertura</span>
                         </div>
                         
-                        <h2 class="landing-ink mt-4 font-serif text-4xl font-semibold leading-tight sm:text-5xl">
+                        <h2 class="landing-ink mt-4 font-sans text-4xl font-extrabold tracking-tight leading-tight sm:text-5xl">
                             Encuéntranos en <span class="landing-soft-title italic">Cancún</span>
                         </h2>
                         
@@ -968,15 +1139,15 @@ onMounted(() => {
             <section class="landing-stats px-6 py-20 text-white lg:px-10 reveal-zoom-in">
                 <div class="mx-auto grid max-w-7xl gap-10 text-center sm:grid-cols-3">
                     <div class="reveal-fade-up delay-100 group">
-                        <p class="landing-highlight font-serif text-5xl font-semibold transition-transform duration-300 group-hover:scale-110 inline-block">+5,000</p>
+                        <p class="landing-highlight font-sans text-5xl font-extrabold tracking-tight transition-transform duration-300 group-hover:scale-110 inline-block">+5,000</p>
                         <p class="mt-3 text-xs font-bold uppercase tracking-[0.2em] text-white/65 group-hover:text-white transition-colors">Pacientes atendidos</p>
                     </div>
                     <div class="border-white/15 sm:border-x reveal-fade-up delay-200 group">
-                        <p class="landing-highlight font-serif text-5xl font-semibold transition-transform duration-300 group-hover:scale-110 inline-block">5 Años</p>
+                        <p class="landing-highlight font-sans text-5xl font-extrabold tracking-tight transition-transform duration-300 group-hover:scale-110 inline-block">5 Años</p>
                         <p class="mt-3 text-xs font-bold uppercase tracking-[0.2em] text-white/65 group-hover:text-white transition-colors">De Experiencia Médica</p>
                     </div>
                     <div class="reveal-fade-up delay-300 group">
-                        <p class="landing-highlight font-serif text-5xl font-semibold transition-transform duration-300 group-hover:scale-110 inline-block">6 días</p>
+                        <p class="landing-highlight font-sans text-5xl font-extrabold tracking-tight transition-transform duration-300 group-hover:scale-110 inline-block">7 días</p>
                         <p class="mt-3 text-xs font-bold uppercase tracking-[0.2em] text-white/65 group-hover:text-white transition-colors">Atención a la semana</p>
                     </div>
                 </div>
@@ -992,7 +1163,7 @@ onMounted(() => {
                             <span class="text-amber-400 animate-pulse-glow-text">★★★★★</span>
                         </div>
                         
-                        <h2 class="landing-ink mt-4 font-serif text-4xl font-semibold leading-tight sm:text-5xl">
+                        <h2 class="landing-ink mt-4 font-sans text-4xl font-extrabold tracking-tight leading-tight sm:text-5xl">
                             Lo que nuestras familias <span class="landing-soft-title italic">opinan de nosotros</span>
                         </h2>
                         
@@ -1122,7 +1293,7 @@ onMounted(() => {
                             <span>📱 Comunidad & Redes Sociales</span>
                         </div>
                         
-                        <h2 class="landing-ink mt-4 font-serif text-4xl font-semibold leading-tight sm:text-5xl">
+                        <h2 class="landing-ink mt-4 font-sans text-4xl font-extrabold tracking-tight leading-tight sm:text-5xl">
                             Síguenos y <span class="landing-soft-title italic">conecta con nosotros</span>
                         </h2>
                         
@@ -1148,7 +1319,7 @@ onMounted(() => {
                                     </span>
                                     <span class="rounded-full bg-blue-50 px-3 py-1 text-[11px] font-bold text-blue-700">Página Oficial</span>
                                 </div>
-                                <h3 class="font-serif text-xl font-bold text-slate-900 mt-6 group-hover:text-blue-600 transition-colors">Facebook</h3>
+                                <h3 class="font-sans text-xl font-bold tracking-tight text-slate-900 mt-6 group-hover:text-blue-600 transition-colors">Facebook</h3>
                                 <p class="text-xs text-slate-500 mt-2 leading-relaxed">
                                     Publicaciones, casos de éxito, recomendaciones veterinarias y novedades de la clínica.
                                 </p>
@@ -1175,7 +1346,7 @@ onMounted(() => {
                                     </span>
                                     <span class="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-800">@dr.andresaguilarvet</span>
                                 </div>
-                                <h3 class="font-serif text-xl font-bold text-slate-900 mt-6 group-hover:text-slate-800 transition-colors">TikTok</h3>
+                                <h3 class="font-sans text-xl font-bold tracking-tight text-slate-900 mt-6 group-hover:text-slate-800 transition-colors">TikTok</h3>
                                 <p class="text-xs text-slate-500 mt-2 leading-relaxed">
                                     Videos educativos de salud veterinaria, tips rápidos para tu perro o gato y el día a día en consulta.
                                 </p>
@@ -1198,7 +1369,7 @@ onMounted(() => {
                                     </span>
                                     <span class="rounded-full bg-red-50 px-3 py-1 text-[11px] font-bold text-red-700">Correo</span>
                                 </div>
-                                <h3 class="font-serif text-xl font-bold text-slate-900 mt-6 group-hover:text-red-600 transition-colors">Email</h3>
+                                <h3 class="font-sans text-xl font-bold tracking-tight text-slate-900 mt-6 group-hover:text-red-600 transition-colors">Email</h3>
                                 <p class="text-xs text-slate-500 mt-2 leading-relaxed truncate" title="smallanimalcliniccancun@gmail.com">
                                     smallanimalcliniccancun@gmail.com
                                 </p>
@@ -1226,7 +1397,7 @@ onMounted(() => {
                                     </span>
                                     <span class="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">24/7 Disponible</span>
                                 </div>
-                                <h3 class="font-serif text-xl font-bold text-slate-900 mt-6 group-hover:text-emerald-600 transition-colors">WhatsApp</h3>
+                                <h3 class="font-sans text-xl font-bold tracking-tight text-slate-900 mt-6 group-hover:text-emerald-600 transition-colors">WhatsApp</h3>
                                 <p class="text-xs text-slate-500 mt-2 leading-relaxed">
                                     Agendado directo de citas médicas, trámites de vuelo urgentes y atención rápida.
                                 </p>
@@ -1247,7 +1418,7 @@ onMounted(() => {
                     <div class="relative flex flex-col justify-between gap-10 lg:flex-row lg:items-center">
                         <div class="max-w-2xl reveal-fade-right">
                             <p class="landing-eyebrow text-xs font-bold uppercase tracking-[0.24em]">Atención 24/7 · 7 días a la semana</p>
-                            <h2 class="landing-ink mt-4 font-serif text-4xl font-semibold leading-tight sm:text-5xl">Hagamos equipo por su bienestar.</h2>
+                            <h2 class="landing-ink mt-4 font-sans text-4xl font-extrabold tracking-tight leading-tight sm:text-5xl">Hagamos equipo por su bienestar.</h2>
                             <p class="landing-muted mt-4 text-base">Agenda tu consulta médica veterinaria en Cancún.</p>
                             <div class="mt-4 inline-flex items-center gap-2 rounded-xl bg-slate-900/10 px-4 py-2 border border-slate-900/15 text-xs font-semibold text-slate-900 transition-all duration-300 hover:bg-slate-900/15">
                                 <span>📌</span>
@@ -1327,19 +1498,16 @@ onMounted(() => {
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 html {
     scroll-behavior: smooth;
 }
 
 .font-sans {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 }
 
-.font-serif {
-    font-family: 'Playfair Display', serif;
-}
 
 .landing {
     background: var(--landing-bg, #f3f7fc);

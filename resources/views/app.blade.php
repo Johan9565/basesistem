@@ -8,11 +8,16 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#0f172a">
 
-        <title inertia>{{ config('app.name', 'Laravel') }}</title>
+        <title inertia>{{ config('app.name', 'Small Animal Clinic') }}</title>
+
+        <!-- Favicons -->
+        <link rel="icon" type="image/png" href="/images/logo_without_name.png">
+        <link rel="apple-touch-icon" href="/images/logo_without_name.png">
 
         <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.bunny.net">
+        <link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
         <!-- Scripts -->
@@ -20,7 +25,7 @@
         @vite(['resources/js/app.js', "resources/js/Pages/{$page['component']}.vue"])
         @inertiaHead
     </head>
-    <body class="font-sans antialiased">
+    <body class="font-sans antialiased ">
         @php $theme = $componentTheme ?? []; @endphp
         @if(!empty($theme))
         <style id="component-theme">:root { @foreach($theme as $var => $val)@if($var && $val !== null && $val !== ''){{ $var }}: {{ $val }}; @endif @endforeach }</style>
