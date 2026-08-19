@@ -29,7 +29,19 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            'plan' => 'gratis',
+            'intentos_ia_restantes' => 0,
+            'limite_ia_resetea_el' => now()->addDay()->startOfDay(),
         ];
+    }
+
+    public function premium(): static
+    {
+        return $this->state(fn () => [
+            'plan' => 'premium',
+            'intentos_ia_restantes' => (int) config('ia.cuota_premium_diaria', 30),
+            'limite_ia_resetea_el' => now()->addDay()->startOfDay(),
+        ]);
     }
 
     /**

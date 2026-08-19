@@ -49,7 +49,9 @@ const authSideBackgroundStyle = computed(() => {
         >
 
             <div class="lg:w-1/2 xl:w-5/12 p-6 sm:p-12">
-                <div class="flex justify-center"><ApplicationLogo class="block h-20 w-auto fill-current text-base-content" /></div>
+                <div class="flex justify-center">
+                    <ApplicationLogo variant="wordmark" class="block h-24 w-auto" />
+                </div>
 
                 <div>
                     <img

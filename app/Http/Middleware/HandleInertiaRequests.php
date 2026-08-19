@@ -113,6 +113,10 @@ class HandleInertiaRequests extends Middleware
                 'menu'  => $userMenu,
                 'notification_unread_count' => $notificationUnreadCount,
                 'can'   => $userPermissions,
+                'plan' => $user?->planTipo() ?? 'gratis',
+                'es_premium' => (bool) $user?->esUsuarioPremium(),
+                'intentos_ia_restantes' => (int) ($user?->intentos_ia_restantes ?? 0),
+                'limite_ia_resetea_el' => optional($user?->limite_ia_resetea_el)?->toIso8601String(),
             ],
             'ziggy' => fn() => [
                 ...(new Ziggy)->toArray(),

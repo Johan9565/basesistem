@@ -74,6 +74,7 @@ class users extends Controller
                     'role_id' => $role ? (string) $role->getKey() : '',
                     'status' => $user->status ?? 1,
                     'area_id' => $areaId ? (string) $areaId : '',
+                    'plan' => $user->planTipo(),
                 ];
             });
 
@@ -116,9 +117,12 @@ class users extends Controller
             'role_id' => 'required|string',
             'area_id' => 'required|string',
             'status' => 'required|in:0,1',
+            'plan' => 'nullable|in:gratis,premium',
         ]);
 
         $role = RoleModel::findOrFail($request->role_id);
+
+        $plan = $request->input('plan', 'gratis') === 'premium' ? 'premium' : 'gratis';
 
         User::create([
             'name' => $request->name,
@@ -130,6 +134,9 @@ class users extends Controller
             'role_id' => new ObjectId($role->getKey()),
             'status' => (int) $request->status,
             'active' => false,
+            'plan' => $plan,
+            'intentos_ia_restantes' => $plan === 'premium' ? (int) config('ia.cuota_premium_diaria', 30) : 0,
+            'limite_ia_resetea_el' => now()->addDay()->startOfDay(),
         ]);
 
         return redirect()->route('users');
@@ -155,9 +162,15 @@ class users extends Controller
             'role_id' => 'required|string',
             'status' => 'required|in:0,1',
             'area_id' => 'required|string',
+            'plan' => 'nullable|in:gratis,premium',
         ]);
 
         $role = RoleModel::findOrFail($request->role_id);
+
+        $previousPlan = $user->planTipo();
+        $plan = $request->has('plan')
+            ? ($request->input('plan') === 'premium' ? 'premium' : 'gratis')
+            : $previousPlan;
 
         $data = [
             'name' => $request->name,
@@ -167,7 +180,17 @@ class users extends Controller
             'area_id' => new ObjectId($request->area_id),
             'role_id' => new ObjectId($role->getKey()),
             'status' => (int) $request->status,
+            'plan' => $plan,
         ];
+
+        if ($plan === 'premium' && $previousPlan !== 'premium') {
+            $data['intentos_ia_restantes'] = (int) config('ia.cuota_premium_diaria', 30);
+            $data['limite_ia_resetea_el'] = now()->addDay()->startOfDay();
+        }
+
+        if ($plan === 'gratis') {
+            $data['intentos_ia_restantes'] = 0;
+        }
 
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
@@ -181,6 +204,7 @@ class users extends Controller
             'role_id' => $user->role_id ? (string) $user->role_id : '',
             'area_id' => $user->area_id ? (string) $user->area_id : '',
             'status' => (int) ($user->status ?? 1),
+            'plan' => $user->planTipo(),
         ];
 
         $user->update($data);
@@ -194,10 +218,11 @@ class users extends Controller
             'role_id' => $user->role_id ? (string) $user->role_id : '',
             'area_id' => $user->area_id ? (string) $user->area_id : '',
             'status' => (int) ($user->status ?? 1),
+            'plan' => $user->planTipo(),
         ];
 
         $cambios = [];
-        foreach (['name', 'ape_pat', 'ape_mat', 'email', 'role_id', 'area_id', 'status'] as $key) {
+        foreach (['name', 'ape_pat', 'ape_mat', 'email', 'role_id', 'area_id', 'status', 'plan'] as $key) {
             if ($before[$key] !== $after[$key]) {
                 $cambios[$key] = [
                     'antes' => $before[$key],
@@ -217,6 +242,7 @@ class users extends Controller
             'role_id' => 'Rol',
             'area_id' => 'Área',
             'status' => 'Estado',
+            'plan' => 'Plan',
         ];
 
         $formatStatus = static function ($v): string {

@@ -21,5 +21,9 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
+
+        $this->call(OcrModuleSeeder::class);
+        $this->call(ExamSeeder::class);
+        $this->call(ExamImportModuleSeeder::class);
     }
 }

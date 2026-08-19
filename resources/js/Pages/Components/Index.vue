@@ -286,7 +286,7 @@ watch(() => props.theme, (t) => {
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <h2 class="text-xl font-semibold leading-tight text-base-content">
+                <h2 class="text-3xl font-semibold tracking-tight">
                     Componentes del Sistema
                 </h2>
             </div>

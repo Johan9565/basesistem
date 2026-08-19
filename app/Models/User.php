@@ -32,6 +32,10 @@ class User extends Authenticatable
         'active',
         'profile_photo_path',
         'profile_banner_path',
+        'exam_ids',
+        'plan',
+        'intentos_ia_restantes',
+        'limite_ia_resetea_el',
     ];
 
     /**
@@ -56,7 +60,34 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password'          => 'hashed',
+            'exam_ids'          => 'array',
+            'intentos_ia_restantes' => 'integer',
+            'limite_ia_resetea_el' => 'datetime',
         ];
+    }
+
+    public const PLAN_GRATIS = 'gratis';
+    public const PLAN_PREMIUM = 'premium';
+
+    public function planTipo(): string
+    {
+        $plan = strtolower(trim((string) ($this->plan ?? self::PLAN_GRATIS)));
+
+        return $plan === self::PLAN_PREMIUM ? self::PLAN_PREMIUM : self::PLAN_GRATIS;
+    }
+
+    public function esUsuarioPremium(): bool
+    {
+        return $this->planTipo() === self::PLAN_PREMIUM;
+    }
+
+    public function cupoIaBase(): int
+    {
+        if (! $this->esUsuarioPremium()) {
+            return (int) config('ia.cuota_gratis', 0);
+        }
+
+        return (int) config('ia.cuota_premium_diaria', 30);
     }
 
     public function role_data()

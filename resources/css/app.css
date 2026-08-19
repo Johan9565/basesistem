@@ -84,3 +84,375 @@
     --badge-color: var(--badge-primary, var(--color-primary));
     --badge-fg: var(--badge-primary-content, var(--color-primary-content));
 }
+
+/* pa-saber: misma línea estética que Welcome, aplicada al panel interno */
+.ps-shell {
+    --ink: #17141f;
+    --muted: #5c5668;
+    --line: #eadfd2;
+    --paper: #fff7ef;
+    --coral: #ff6b4a;
+    --sun: #ffc857;
+    --violet: #7c5cff;
+    --mint: #2ecf8f;
+    --color-base-100: #ffffff;
+    --color-base-200: #fff7ef;
+    --color-base-300: #eadfd2;
+    --color-base-content: #17141f;
+    --color-primary: #ff6b4a;
+    --color-primary-content: #ffffff;
+    --color-secondary: #7c5cff;
+    --color-secondary-content: #ffffff;
+    --color-accent: #ffc857;
+    --color-accent-content: #17141f;
+    --color-neutral: #17141f;
+    --color-neutral-content: #fff7ef;
+    --color-info: #7c5cff;
+    --color-info-content: #ffffff;
+    --color-success: #2ecf8f;
+    --color-success-content: #113326;
+    --color-warning: #ffc857;
+    --color-warning-content: #17141f;
+    --color-error: #ff6b4a;
+    --color-error-content: #ffffff;
+    --btn-primary-bg: #ff6b4a;
+    --btn-primary-hover: #e85a3c;
+    --btn-primary-text: #ffffff;
+    --btn-primary-ring: #17141f;
+    --btn-secondary-bg: #ffffff;
+    --btn-secondary-border: #17141f;
+    --btn-secondary-text: #17141f;
+    --input-border: #eadfd2;
+    --input-focus-ring: #7c5cff;
+    --badge-primary: #ff6b4a;
+    --badge-primary-content: #ffffff;
+    position: relative;
+    min-height: 100vh;
+    overflow-x: hidden;
+    color: var(--ink);
+    color-scheme: light;
+    background:
+        radial-gradient(circle at 12% 8%, #ffe3c4 0%, transparent 32%),
+        radial-gradient(circle at 92% 18%, #ddd6ff 0%, transparent 28%),
+        radial-gradient(circle at 80% 88%, #c8f5e2 0%, transparent 26%),
+        var(--paper);
+}
+
+.ps-shell .ps-blob {
+    position: fixed;
+    z-index: 0;
+    pointer-events: none;
+    filter: blur(8px);
+    opacity: 0.45;
+}
+
+.ps-blob-a {
+    top: 8rem;
+    left: -4rem;
+    width: 16rem;
+    height: 16rem;
+    border-radius: 40% 60% 70% 30%;
+    background: #ffc857;
+    animation: ps-drift 12s ease-in-out infinite;
+}
+
+.ps-blob-b {
+    top: 28rem;
+    right: -5rem;
+    width: 18rem;
+    height: 18rem;
+    border-radius: 60% 40% 30% 70%;
+    background: #c9b8ff;
+    animation: ps-drift 15s ease-in-out infinite reverse;
+}
+
+.ps-blob-c {
+    bottom: 6rem;
+    left: 20%;
+    width: 12rem;
+    height: 12rem;
+    border-radius: 50%;
+    background: #9cf0cc;
+    animation: ps-drift 18s ease-in-out infinite;
+}
+
+.ps-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+    background: color-mix(in srgb, var(--paper) 85%, transparent);
+    backdrop-filter: blur(12px);
+}
+
+.ps-pagehead {
+    position: relative;
+    z-index: 1;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.ps-main {
+    position: relative;
+    z-index: 1;
+}
+
+.ps-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--coral);
+    color: #fff;
+    padding: 0.55rem 1.05rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.25;
+    box-shadow: 3px 3px 0 var(--ink);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ps-btn:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 var(--ink);
+}
+
+.ps-btn:disabled {
+    opacity: 0.55;
+    transform: none;
+    box-shadow: 3px 3px 0 var(--ink);
+}
+
+.ps-btn-lg {
+    padding: 0.8rem 1.3rem;
+}
+
+.ps-btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 2px solid var(--ink);
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    background: #fff;
+    color: var(--ink);
+}
+
+.ps-btn-ghost:hover {
+    background: #fff4e4;
+}
+
+.ps-btn-ghost:disabled {
+    opacity: 0.45;
+}
+
+.ps-sticker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    padding: 0.35rem 0.8rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.ps-sticker-sun { background: #ffc857; }
+.ps-sticker-violet { background: #ddd6ff; }
+.ps-sticker-mint { background: #c8f5e2; }
+.ps-sticker-coral { background: #ffd0c4; }
+.ps-sticker-sky { background: #caf1ff; }
+
+.ps-chip {
+    border-radius: 999px;
+    background: #fff;
+    border: 1.5px solid var(--line);
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.ps-panel {
+    background: linear-gradient(180deg, #fff 0%, #fff4e4 100%);
+    border: 3px solid var(--ink);
+    border-radius: 28px;
+}
+
+.ps-card {
+    border: 2px solid var(--ink);
+    border-radius: 24px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ps-card:hover {
+    transform: translateY(-4px) rotate(-0.4deg);
+    box-shadow: 6px 6px 0 var(--ink);
+}
+
+.ps-card-static:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.ps-tone-violet { background: #ddd6ff; }
+.ps-tone-mint { background: #c8f5e2; }
+.ps-tone-coral { background: #ffd0c4; }
+.ps-tone-sky { background: #caf1ff; }
+.ps-tone-sun { background: #ffe7a3; }
+.ps-tone-pink { background: #ffd4ea; }
+.ps-tone-primary { background: #ddd6ff; }
+
+.ps-option {
+    display: flex;
+    width: 100%;
+    align-items: flex-start;
+    gap: 0.75rem;
+    border-radius: 1rem;
+    border: 2px solid var(--line);
+    background: #fff;
+    padding: 0.7rem 0.9rem;
+    text-align: left;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--ink);
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.ps-option:hover {
+    border-color: var(--ink);
+}
+
+.ps-option-on {
+    border-color: var(--violet);
+    background: #efeaff;
+}
+
+.ps-option-ok {
+    border-color: var(--mint);
+    background: #e7fff4;
+}
+
+.ps-option-bad {
+    border-color: var(--coral);
+    background: #fff0eb;
+}
+
+.ps-icon-tile {
+    display: grid;
+    place-items: center;
+    width: 3rem;
+    height: 3rem;
+    flex-shrink: 0;
+    border-radius: 1rem;
+    background: rgb(255 255 255 / 0.75);
+    font-size: 1.5rem;
+}
+
+.ps-muted {
+    color: var(--muted);
+}
+
+.ps-shell .btn {
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+.ps-shell .btn-primary {
+    background-color: var(--coral);
+    color: #fff;
+    border-color: var(--ink);
+    box-shadow: 3px 3px 0 var(--ink);
+}
+
+.ps-shell .btn-primary:hover,
+.ps-shell .btn-primary:focus {
+    background-color: #e85a3c;
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 var(--ink);
+}
+
+.ps-shell .card {
+    background: linear-gradient(180deg, #fff 0%, #fff4e4 100%);
+    border: 2px solid var(--ink);
+    border-radius: 24px;
+    box-shadow: none;
+}
+
+.ps-shell .input,
+.ps-shell .textarea,
+.ps-shell .select {
+    border: 2px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    border-radius: 1rem;
+}
+
+.ps-shell .input:focus,
+.ps-shell .textarea:focus,
+.ps-shell .select:focus {
+    outline: none;
+    border-color: var(--ink);
+}
+
+.ps-shell .badge {
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+.ps-nav-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.15rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--muted);
+    transition: color 0.15s ease;
+}
+
+.ps-nav-link:hover {
+    color: var(--ink);
+}
+
+.ps-nav-link-active {
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.ps-icon-btn {
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+}
+
+.ps-icon-btn:hover {
+    background: #fff4e4;
+}
+
+.ps-menu {
+    overflow: hidden;
+    border: 2px solid var(--ink);
+    border-radius: 1.25rem;
+    background: #fff;
+    box-shadow: 4px 4px 0 var(--ink);
+}
+
+@keyframes ps-drift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(18px, -14px) scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ps-shell .ps-blob,
+    .ps-card,
+    .ps-btn,
+    .ps-shell .btn-primary {
+        animation: none !important;
+        transition: none !important;
+    }
+}

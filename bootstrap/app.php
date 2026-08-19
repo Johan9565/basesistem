@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
+            'esUsuarioPremium' => \App\Http\Middleware\EnsurePremiumUser::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

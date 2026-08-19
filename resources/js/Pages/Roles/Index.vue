@@ -30,7 +30,7 @@ function updatePermissions(role, permission, event) {
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <h2 class="text-2xl font-bold tracking-tight text-base-content">
+                <h2 class="text-3xl font-semibold tracking-tight">
                     Configuración de Roles
                 </h2>
                 <div class="badge badge-primary badge-outline gap-2 p-4">

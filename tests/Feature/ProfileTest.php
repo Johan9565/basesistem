@@ -29,6 +29,8 @@ class ProfileTest extends TestCase
             ->actingAs($user)
             ->patch('/profile', [
                 'name' => 'Test User',
+                'ape_pat' => 'Paterno',
+                'ape_mat' => 'Materno',
                 'email' => 'test@example.com',
             ]);
 
@@ -39,8 +41,65 @@ class ProfileTest extends TestCase
         $user->refresh();
 
         $this->assertSame('Test User', $user->name);
+        $this->assertSame('Paterno', $user->ape_pat);
+        $this->assertSame('Materno', $user->ape_mat);
         $this->assertSame('test@example.com', $user->email);
         $this->assertNull($user->email_verified_at);
+    }
+
+    public function test_email_must_be_unique(): void
+    {
+        User::factory()->create(['email' => 'taken@example.com']);
+        $user = User::factory()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->from('/profile')
+            ->patch('/profile', [
+                'name' => 'Test User',
+                'ape_pat' => 'Paterno',
+                'ape_mat' => 'Materno',
+                'email' => 'taken@example.com',
+            ]);
+
+        $response
+            ->assertSessionHasErrors('email')
+            ->assertRedirect('/profile');
+
+        $this->assertNotSame('taken@example.com', $user->fresh()->email);
+    }
+
+    public function test_role_area_and_permissions_cannot_be_updated_from_profile(): void
+    {
+        $user = User::factory()->create([
+            'role_id' => 'role-original',
+            'area_id' => 'area-original',
+            'status' => 1,
+        ]);
+
+        $this
+            ->actingAs($user)
+            ->patch('/profile', [
+                'name' => 'Test User',
+                'ape_pat' => 'Paterno',
+                'ape_mat' => 'Materno',
+                'email' => 'nuevo@example.com',
+                'role_id' => 'role-hack',
+                'area_id' => 'area-hack',
+                'status' => 0,
+                'permissions' => ['users', 'roles'],
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect('/profile');
+
+        $user->refresh();
+
+        $this->assertSame('Test User', $user->name);
+        $this->assertSame('nuevo@example.com', $user->email);
+        $this->assertSame('role-original', (string) $user->role_id);
+        $this->assertSame('area-original', (string) $user->area_id);
+        $this->assertSame(1, (int) $user->status);
+        $this->assertFalse(isset($user->permissions));
     }
 
     public function test_email_verification_status_is_unchanged_when_the_email_address_is_unchanged(): void
@@ -51,6 +110,8 @@ class ProfileTest extends TestCase
             ->actingAs($user)
             ->patch('/profile', [
                 'name' => 'Test User',
+                'ape_pat' => $user->ape_pat ?? 'Paterno',
+                'ape_mat' => $user->ape_mat ?? 'Materno',
                 'email' => $user->email,
             ]);
 

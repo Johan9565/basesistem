@@ -213,7 +213,7 @@ function deleteDependency(id) {
     <Head title="Dependencias" />
     <AuthenticatedLayout>
         <template #header>
-            <h2 class="text-xl font-semibold leading-tight text-base-content">Dependencias</h2>
+            <h2 class="text-3xl font-semibold tracking-tight">Dependencias</h2>
         </template>
 
         <div class="py-12">

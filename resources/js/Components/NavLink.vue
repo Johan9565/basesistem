@@ -13,9 +13,7 @@ const props = defineProps({
 });
 
 const classes = computed(() =>
-    props.active
-        ? 'inline-flex items-center px-1 pt-1 border-b-2 border-primary text-sm font-medium leading-5 text-base-content focus:outline-hidden focus:border-primary transition duration-150 ease-in-out'
-        : 'inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium leading-5 text-base-content/70 hover:text-base-content hover:border-base-300 focus:outline-hidden focus:text-base-content focus:border-base-300 transition duration-150 ease-in-out',
+    props.active ? 'ps-nav-link ps-nav-link-active' : 'ps-nav-link',
 );
 </script>
 

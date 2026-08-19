@@ -59,6 +59,11 @@ const statusOptions = [
     { label: 'Inactivo', value: 0 },
 ];
 
+const planOptions = [
+    { label: 'Gratis', value: 'gratis' },
+    { label: 'Premium', value: 'premium' },
+];
+
 const filterStatusOptions = [
     { label: 'Todos', value: '' },
     { label: 'Activo', value: '1' },
@@ -144,6 +149,7 @@ const form = useForm({
     role_id: props.roles?.[0]?.id ?? '',
     area_id: props.areas?.[0]?.id ?? '',
     status: 1,
+    plan: 'gratis',
 });
 
 function openCreateDialog() {
@@ -155,6 +161,7 @@ function openCreateDialog() {
     }
 
     form.status = 1;
+    form.plan = 'gratis';
     createDialogVisible.value = true;
 }
 
@@ -187,6 +194,7 @@ function openEditDialog(user) {
     form.role_id = user.role_id ?? '';
     form.area_id = user.area_id ?? '';
     form.status = user.status ?? 1;
+    form.plan = user.plan ?? 'gratis';
     form.password = null;
     form.password_confirmation = null;
     form.clearErrors();
@@ -273,6 +281,7 @@ function toggleUserStatus(user) {
     form.role_id = user.role_id ?? '';
     form.area_id = user.area_id ?? '';
     form.status = nextStatus;
+    form.plan = user.plan ?? 'gratis';
     form.password = null;
     form.password_confirmation = null;
     form.clearErrors();
@@ -329,14 +338,14 @@ function dialItemsFor(user) {
 
     <AuthenticatedLayout>
         <template #header>
-            <h2 class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">
+            <h2 class="text-3xl font-semibold tracking-tight">
                 Usuarios del Sistema
             </h2>
         </template>
 
         <div class="py-8">
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div class="overflow-visible rounded-lg bg-white shadow dark:bg-gray-800">
+                <div class="overflow-visible rounded-3xl border-2 border-[#17141f] bg-white">
 
                     <!-- Header de la gestión -->
                     <div
@@ -464,6 +473,13 @@ function dialItemsFor(user) {
                                 <InputError :message="form.errors.status" class="mt-2" />
                             </div>
 
+                            <div>
+                                <InputLabel value="Plan" />
+                                <Select v-model="form.plan" :options="planOptions" optionLabel="label"
+                                    optionValue="value" class="mt-1 block w-full" />
+                                <InputError :message="form.errors.plan" class="mt-2" />
+                            </div>
+
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <InputLabel value="Contraseña" />
@@ -548,6 +564,13 @@ function dialItemsFor(user) {
                                 <Select v-model="form.status" :options="statusOptions" optionLabel="label"
                                     optionValue="value" class="mt-1 block w-full" />
                                 <InputError :message="form.errors.status" class="mt-2" />
+                            </div>
+
+                            <div>
+                                <InputLabel value="Plan" />
+                                <Select v-model="form.plan" :options="planOptions" optionLabel="label"
+                                    optionValue="value" class="mt-1 block w-full" />
+                                <InputError :message="form.errors.plan" class="mt-2" />
                             </div>
 
                             <div class="grid grid-cols-2 gap-4">
@@ -635,6 +658,12 @@ function dialItemsFor(user) {
                                             <div class="flex flex-wrap items-center gap-2 justify-end">
                                                 <span class="badge badge-primary badge-outline">
                                                     {{ user.role }}
+                                                </span>
+                                                <span
+                                                    class="badge"
+                                                    :class="user.plan === 'premium' ? 'badge-secondary' : 'badge-ghost'"
+                                                >
+                                                    {{ user.plan === 'premium' ? 'Premium' : 'Gratis' }}
                                                 </span>
                                                 <span
                                                     class="badge"

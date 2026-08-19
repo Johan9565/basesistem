@@ -240,14 +240,14 @@ function formatWhen(iso) {
         <button
             ref="bellBtnRef"
             type="button"
-            class="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-base-content/70 transition hover:bg-base-200 hover:text-base-content focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            class="ps-icon-btn relative"
             aria-label="Notificaciones"
             @click="togglePopover"
         >
             <i class="pi pi-bell text-lg"></i>
             <span
                 v-if="unreadCount > 0"
-                class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-error px-0.5 text-[10px] font-semibold leading-none text-error-content"
+                class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#ff6b4a] px-0.5 text-[10px] font-semibold leading-none text-white"
             >
                 {{ unreadCount > 99 ? '99+' : unreadCount }}
             </span>

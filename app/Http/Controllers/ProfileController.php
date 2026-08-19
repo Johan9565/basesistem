@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
-use App\Models\DependenciesModel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,19 +20,6 @@ class ProfileController extends Controller
     public function edit(Request $request): Response
     {
         $user = $request->user();
-        $role = $user->role_data()->first();
-
-        $areaLabel = '—';
-        if (! empty($user->area_id)) {
-            try {
-                $dep = DependenciesModel::find($user->area_id);
-                if ($dep) {
-                    $areaLabel = $dep->name;
-                }
-            } catch (\Throwable $e) {
-                // id inválido u otro error: mantener —
-            }
-        }
 
         $avatarUrl = null;
         $bannerUrl = null;
@@ -52,9 +38,6 @@ class ProfileController extends Controller
                 'ape_pat' => $user->ape_pat ?? '',
                 'ape_mat' => $user->ape_mat ?? '',
                 'email' => $user->email ?? '',
-                'role' => $role ? $role->role : '—',
-                'area' => $areaLabel,
-                'status' => ((int) ($user->status ?? 1)) === 1 ? 'Activo' : 'Inactivo',
                 'avatar_url' => $avatarUrl,
                 'banner_url' => $bannerUrl,
             ],
@@ -105,18 +88,20 @@ class ProfileController extends Controller
 
     /**
      * Update the user's profile information.
+     * Solo name, ape_pat, ape_mat y email: ignora rol, área, permisos u otros campos.
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
+        $user->fill($request->safeProfileData());
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
         }
 
-        $request->user()->save();
+        $user->save();
 
-        return Redirect::route('profile.edit');
+        return Redirect::route('profile.edit')->with('status', 'Perfil actualizado.');
     }
 
     /**

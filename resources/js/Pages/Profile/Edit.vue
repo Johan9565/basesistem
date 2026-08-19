@@ -2,8 +2,9 @@
 import ProfileImageCropModal from '@/Components/ProfileImageCropModal.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { PROFILE_HIGHLIGHT_FIELDS_EVENT } from '@/composables/useNotificacionToUser';
+import InputError from '@/Components/InputError.vue';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -38,15 +39,67 @@ const display = computed(() => {
         ape_pat: u?.ape_pat ?? '—',
         ape_mat: u?.ape_mat ?? '—',
         email: u?.email ?? '—',
-        role: page.props.auth?.role ?? '—',
-        area: '—',
-        status: '—',
         avatar_url: null,
         banner_url: null,
     };
 });
 
 const user = computed(() => page.props.auth?.user);
+
+function profileField(value) {
+    const text = String(value ?? '').trim();
+    return text === '—' ? '' : text;
+}
+
+const form = useForm({
+    name: profileField(display.value.name),
+    ape_pat: profileField(display.value.ape_pat),
+    ape_mat: profileField(display.value.ape_mat),
+    email: profileField(display.value.email),
+});
+
+const fullName = computed(() =>
+    [form.name, form.ape_pat, form.ape_mat]
+        .map((part) => String(part ?? '').trim())
+        .filter(Boolean)
+        .join(' ') || 'Tu perfil',
+);
+
+watch(display, (d) => {
+    if (form.processing || form.isDirty) {
+        return;
+    }
+    form.name = profileField(d.name);
+    form.ape_pat = profileField(d.ape_pat);
+    form.ape_mat = profileField(d.ape_mat);
+    form.email = profileField(d.email);
+    form.defaults({
+        name: form.name,
+        ape_pat: form.ape_pat,
+        ape_mat: form.ape_mat,
+        email: form.email,
+    });
+});
+
+function submitProfile() {
+    form.transform((data) => ({
+        name: data.name,
+        ape_pat: data.ape_pat,
+        ape_mat: data.ape_mat,
+        email: data.email,
+    })).patch(route('profile.update'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            form.defaults({
+                name: form.name,
+                ape_pat: form.ape_pat,
+                ape_mat: form.ape_mat,
+                email: form.email,
+            });
+            form.reset();
+        },
+    });
+}
 
 const highlightedDisplayKeys = ref(new Set());
 let highlightClearTimer;
@@ -57,7 +110,7 @@ function isFieldHighlighted(key) {
 
 function fieldHighlightClass(key) {
     return isFieldHighlighted(key)
-        ? 'rounded-lg ring-2 ring-amber-400 ring-offset-2 ring-offset-white p-1 -m-1 transition-shadow duration-300 dark:ring-amber-300 dark:ring-offset-gray-900'
+        ? 'rounded-2xl ring-2 ring-[#7c5cff] ring-offset-2 ring-offset-[#fff4e4] p-1 -m-1 transition-shadow duration-300'
         : '';
 }
 
@@ -84,7 +137,6 @@ const avatarInitial = computed(() => {
     return n ? n.charAt(0).toUpperCase() : '?';
 });
 
-/** Portada: imagen o color sólido si no hay banner en BD */
 const bannerStyle = computed(() => {
     const url = display.value.banner_url;
     if (url) {
@@ -96,17 +148,11 @@ const bannerStyle = computed(() => {
         };
     }
     return {
-        backgroundColor: '#475569',
+        background:
+            'linear-gradient(135deg, #ffd0c4 0%, #ddd6ff 52%, #ffe7a3 100%)',
     };
 });
 
-const inputReadonlyClass =
-    'mt-2 px-4 py-2 w-full border-2 rounded-lg dark:text-gray-200 dark:border-gray-600 dark:bg-gray-800/80 bg-gray-50 text-gray-800 border-gray-300 cursor-default focus:outline-none focus:ring-0';
-
-const cardClass =
-    'rounded-xl shadow-2xl p-4 sm:p-6 h-fit dark:bg-gray-800/40 border border-gray-200/50 dark:border-gray-700/50';
-
-/** Recorte antes de subir (misma proporción que banner 3:1 o avatar 1:1). */
 const cropVisible = ref(false);
 const cropSrc = ref('');
 const cropAspect = ref(3);
@@ -193,246 +239,251 @@ function onCropApplied(file) {
             @applied="onCropApplied"
         />
 
-        <section class="py-8 my-auto sm:py-10">
-            <div class="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-                <div class="grid grid-cols-1 items-start gap-8 lg:grid-cols-2 lg:gap-10">
-                    <!-- Columna: perfil -->
-                    <div :class="cardClass">
-                        <div class="py-2">
-                            <h1 class="lg:text-3xl md:text-2xl text-xl font-extrabold mb-2 dark:text-white">
-                                Perfil
-                            </h1>
-                            <h2 class="text-grey text-sm mb-4 dark:text-gray-400">
-                                Información de tu cuenta (solo lectura)
-                            </h2>
+        <template #header>
+            <p class="ps-sticker ps-sticker-violet">Tu cuenta</p>
+            <h2 class="mt-4 text-3xl font-semibold tracking-tight">
+                Perfil, <span class="bg-[linear-gradient(transparent_58%,#ddd6ff_58%)]">en bloques.</span>
+            </h2>
+            <p class="mt-2 max-w-xl text-base leading-7 ps-muted">
+                Puedes actualizar tu nombre, apellidos y correo. Foto y portada también se cambian aquí.
+            </p>
+        </template>
 
-                            <div
-                                class="w-full rounded-lg min-h-[140px] relative overflow-hidden"
-                                :style="bannerStyle"
+        <div class="py-10">
+            <div class="mx-auto grid max-w-6xl items-start gap-6 px-6 lg:grid-cols-[1.15fr_0.85fr]">
+                <div class="ps-panel overflow-hidden">
+                    <div class="relative h-44 w-full" :style="bannerStyle">
+                        <label
+                            class="ps-btn-ghost absolute top-4 right-4 z-10 cursor-pointer gap-2 bg-white/95 px-3 py-1.5 text-xs shadow-[3px_3px_0_#17141f]"
+                            title="Cambiar portada"
+                        >
+                            <input
+                                type="file"
+                                accept="image/*"
+                                class="sr-only"
+                                @change="onBannerChange"
+                            />
+                            <svg
+                                class="h-4 w-4"
+                                fill="none"
+                                stroke-width="1.8"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                aria-hidden="true"
                             >
-                                <div
-                                    class="group relative z-10 mx-auto -mb-[70px] flex h-[141px] w-[141px] justify-center overflow-hidden rounded-full bg-slate-600 shadow-lg ring-4 ring-white/90 dark:ring-gray-800/90"
-                                >
-                                    <img
-                                        v-if="display.avatar_url"
-                                        :src="display.avatar_url"
-                                        alt=""
-                                        class="h-full w-full object-cover"
-                                    />
-                                    <div
-                                        v-else
-                                        class="flex h-full w-full items-center justify-center bg-indigo-600 text-4xl font-bold text-white"
-                                    >
-                                        {{ avatarInitial }}
-                                    </div>
-                                    <label
-                                        class="absolute inset-0 z-20 flex cursor-pointer flex-col items-center justify-center gap-1 rounded-full bg-black/55 text-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 active:opacity-100"
-                                        title="Cambiar foto de perfil"
-                                    >
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            class="sr-only"
-                                            @change="onAvatarChange"
-                                        />
-                                        <svg
-                                            class="h-7 w-7 text-white"
-                                            fill="none"
-                                            stroke-width="1.5"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                            aria-hidden="true"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
-                                            />
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z"
-                                            />
-                                        </svg>
-                                        <span class="px-1 text-[11px] font-semibold leading-tight text-white">
-                                            Cambiar foto
-                                        </span>
-                                    </label>
-                                </div>
-                                <div class="flex justify-end pt-2 pb-1">
-                                    <label
-                                        class="flex cursor-pointer items-center gap-2 rounded-tl-md bg-white/95 px-3 py-1.5 text-sm font-semibold text-gray-800 shadow-sm ring-1 ring-gray-200 transition hover:bg-white dark:bg-gray-800/95 dark:text-gray-100 dark:ring-gray-600 dark:hover:bg-gray-800"
-                                        title="Cambiar portada"
-                                    >
-                                        <span>Portada</span>
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            class="sr-only"
-                                            @change="onBannerChange"
-                                        />
-                                        <svg
-                                            class="h-5 w-5 text-blue-700 dark:text-blue-400"
-                                            fill="none"
-                                            stroke-width="1.5"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                            aria-hidden="true"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
-                                            />
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z"
-                                            />
-                                        </svg>
-                                    </label>
-                                </div>
-                            </div>
-
-                            <p
-                                v-if="errors.avatar || errors.banner"
-                                class="mt-3 text-center text-xs text-red-600 dark:text-red-400"
-                            >
-                                <span v-if="errors.avatar">{{ errors.avatar }}</span>
-                                <span v-if="errors.avatar && errors.banner"> · </span>
-                                <span v-if="errors.banner">{{ errors.banner }}</span>
-                            </p>
-
-                            <h2 class="text-center mt-20 sm:mt-16 font-semibold dark:text-gray-300 text-sm px-2">
-                                Elige foto o portada: podrás encuadrar y ver una vista previa antes de guardar.
-                            </h2>
-
-                            <div class="flex flex-col lg:flex-row gap-2 justify-center w-full">
-                                <div
-                                    class="w-full mb-4 mt-6"
-                                    :class="fieldHighlightClass('name')"
-                                >
-                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Nombre</label>
-                                    <input
-                                        type="text"
-                                        readonly
-                                        tabindex="-1"
-                                        :value="display.name || '—'"
-                                        :class="inputReadonlyClass"
-                                    />
-                                </div>
-                                <div
-                                    class="w-full mb-4 lg:mt-6"
-                                    :class="fieldHighlightClass('ape_pat')"
-                                >
-                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">
-                                        Apellido paterno
-                                    </label>
-                                    <input
-                                        type="text"
-                                        readonly
-                                        tabindex="-1"
-                                        :value="display.ape_pat || '—'"
-                                        :class="inputReadonlyClass"
-                                    />
-                                </div>
-                            </div>
-
-                            <div class="flex flex-col lg:flex-row gap-2 justify-center w-full">
-                                <div
-                                    class="w-full mb-4"
-                                    :class="fieldHighlightClass('ape_mat')"
-                                >
-                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">
-                                        Apellido materno
-                                    </label>
-                                    <input
-                                        type="text"
-                                        readonly
-                                        tabindex="-1"
-                                        :value="display.ape_mat || '—'"
-                                        :class="inputReadonlyClass"
-                                    />
-                                </div>
-                                <div
-                                    class="w-full mb-4"
-                                    :class="fieldHighlightClass('email')"
-                                >
-                                    <label class="mb-2 dark:text-gray-300 text-sm font-medium block">Correo</label>
-                                    <input
-                                        type="text"
-                                        readonly
-                                        tabindex="-1"
-                                        :value="display.email || '—'"
-                                        :class="inputReadonlyClass"
-                                    />
-                                </div>
-                            </div>
-
-                            <div class="flex flex-col lg:flex-row gap-2 justify-center w-full">
-                                <div
-                                    class="w-full mb-4"
-                                    :class="fieldHighlightClass('role')"
-                                >
-                                    <h3 class="dark:text-gray-300 mb-2 text-sm font-medium">Rol</h3>
-                                    <div :class="[inputReadonlyClass, 'mt-0!']">
-                                        {{ display.role || '—' }}
-                                    </div>
-                                </div>
-                                <div
-                                    class="w-full mb-4"
-                                    :class="fieldHighlightClass('area')"
-                                >
-                                    <h3 class="dark:text-gray-300 mb-2 text-sm font-medium">Área</h3>
-                                    <div :class="[inputReadonlyClass, 'mt-0!']">
-                                        {{ display.area || '—' }}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div
-                                class="w-full mb-2"
-                                :class="fieldHighlightClass('status')"
-                            >
-                                <h3 class="dark:text-gray-300 mb-2 text-sm font-medium">Estado</h3>
-                                <div :class="[inputReadonlyClass, 'mt-0!']">
-                                    {{ display.status || '—' }}
-                                </div>
-                            </div>
-
-                            <div
-                                v-if="mustVerifyEmail && user && user.email_verified_at === null"
-                                class="rounded-lg border border-amber-200/80 bg-amber-50/90 px-4 py-3 mt-6 dark:border-amber-900/50 dark:bg-amber-950/30"
-                            >
-                                <p class="text-sm text-gray-800 dark:text-gray-200">
-                                    Tu correo aún no está verificado.
-                                    <Link
-                                        :href="route('verification.send')"
-                                        method="post"
-                                        as="button"
-                                        class="rounded-md text-sm font-medium text-amber-800 underline hover:text-amber-950 dark:text-amber-200 dark:hover:text-amber-100"
-                                    >
-                                        Reenviar correo de verificación
-                                    </Link>
-                                </p>
-                            </div>
-
-                            <div
-                                v-if="status"
-                                class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 mt-4 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200"
-                            >
-                                {{ status }}
-                            </div>
-                        </div>
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
+                                />
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z"
+                                />
+                            </svg>
+                            Portada
+                        </label>
                     </div>
 
-                    <div class="lg:sticky lg:top-24">
-                        <div :class="cardClass">
-                            <UpdatePasswordForm embedded />
+                    <div class="px-6 pb-8 md:px-8">
+                        <div class="-mt-14 flex flex-col items-center text-center">
+                            <div
+                                class="group relative h-28 w-28 overflow-hidden rounded-[1.75rem] border-[3px] border-[#17141f] bg-[#ffd0c4] shadow-[4px_4px_0_#17141f]"
+                            >
+                                <img
+                                    v-if="display.avatar_url"
+                                    :src="display.avatar_url"
+                                    alt=""
+                                    class="h-full w-full object-cover"
+                                />
+                                <div
+                                    v-else
+                                    class="flex h-full w-full items-center justify-center text-3xl font-semibold text-[#17141f]"
+                                >
+                                    {{ avatarInitial }}
+                                </div>
+                                <label
+                                    class="absolute inset-0 z-20 flex cursor-pointer flex-col items-center justify-center gap-1 bg-[#17141f]/55 text-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
+                                    title="Cambiar foto de perfil"
+                                >
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        class="sr-only"
+                                        @change="onAvatarChange"
+                                    />
+                                    <svg
+                                        class="h-6 w-6 text-white"
+                                        fill="none"
+                                        stroke-width="1.6"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                        aria-hidden="true"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
+                                        />
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z"
+                                        />
+                                    </svg>
+                                    <span class="px-1 text-[11px] font-semibold leading-tight text-white">
+                                        Cambiar foto
+                                    </span>
+                                </label>
+                            </div>
+
+                            <h3 class="mt-5 text-2xl font-semibold tracking-tight">
+                                {{ fullName }}
+                            </h3>
+                            <p class="mt-1 text-sm ps-muted">{{ form.email || display.email || '—' }}</p>
+                            <p class="mt-3 max-w-md text-xs leading-5 ps-muted">
+                                Elige foto o portada: podrás encuadrar y ver una vista previa antes de guardar.
+                            </p>
+                        </div>
+
+                        <p
+                            v-if="errors.avatar || errors.banner"
+                            class="mt-4 text-center text-xs font-medium text-[#ff6b4a]"
+                        >
+                            <span v-if="errors.avatar">{{ errors.avatar }}</span>
+                            <span v-if="errors.avatar && errors.banner"> · </span>
+                            <span v-if="errors.banner">{{ errors.banner }}</span>
+                        </p>
+
+                        <form class="mt-8 space-y-4" @submit.prevent="submitProfile">
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div :class="fieldHighlightClass('name')">
+                                    <div class="ps-card ps-card-static ps-tone-violet p-4">
+                                        <label for="profile_name" class="text-xs font-semibold ps-muted">Nombre</label>
+                                        <input
+                                            id="profile_name"
+                                            v-model="form.name"
+                                            type="text"
+                                            required
+                                            maxlength="255"
+                                            autocomplete="given-name"
+                                            class="input input-bordered mt-2 w-full bg-white"
+                                        />
+                                        <InputError class="mt-2" :message="form.errors.name" />
+                                    </div>
+                                </div>
+                                <div :class="fieldHighlightClass('ape_pat')">
+                                    <div class="ps-card ps-card-static ps-tone-sun p-4">
+                                        <label for="profile_ape_pat" class="text-xs font-semibold ps-muted">
+                                            Apellido paterno
+                                        </label>
+                                        <input
+                                            id="profile_ape_pat"
+                                            v-model="form.ape_pat"
+                                            type="text"
+                                            required
+                                            maxlength="255"
+                                            autocomplete="family-name"
+                                            class="input input-bordered mt-2 w-full bg-white"
+                                        />
+                                        <InputError class="mt-2" :message="form.errors.ape_pat" />
+                                    </div>
+                                </div>
+                                <div :class="fieldHighlightClass('ape_mat')">
+                                    <div class="ps-card ps-card-static ps-tone-mint p-4">
+                                        <label for="profile_ape_mat" class="text-xs font-semibold ps-muted">
+                                            Apellido materno
+                                        </label>
+                                        <input
+                                            id="profile_ape_mat"
+                                            v-model="form.ape_mat"
+                                            type="text"
+                                            required
+                                            maxlength="255"
+                                            autocomplete="additional-name"
+                                            class="input input-bordered mt-2 w-full bg-white"
+                                        />
+                                        <InputError class="mt-2" :message="form.errors.ape_mat" />
+                                    </div>
+                                </div>
+                                <div :class="fieldHighlightClass('email')">
+                                    <div class="ps-card ps-card-static ps-tone-sky p-4">
+                                        <label for="profile_email" class="text-xs font-semibold ps-muted">Correo</label>
+                                        <input
+                                            id="profile_email"
+                                            v-model="form.email"
+                                            type="email"
+                                            required
+                                            maxlength="255"
+                                            autocomplete="email"
+                                            class="input input-bordered mt-2 w-full bg-white"
+                                        />
+                                        <InputError class="mt-2" :message="form.errors.email" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <button
+                                    type="submit"
+                                    class="ps-btn w-full sm:w-auto"
+                                    :disabled="form.processing"
+                                >
+                                    <span v-if="form.processing">Guardando…</span>
+                                    <span v-else>Guardar datos</span>
+                                </button>
+                                <Transition
+                                    enter-active-class="transition ease-out duration-200"
+                                    enter-from-class="opacity-0 translate-y-1"
+                                    enter-to-class="opacity-100 translate-y-0"
+                                    leave-active-class="transition ease-in duration-150"
+                                    leave-from-class="opacity-100 translate-y-0"
+                                    leave-to-class="opacity-0"
+                                >
+                                    <p
+                                        v-if="form.recentlySuccessful"
+                                        class="flex items-center gap-2 text-sm font-semibold"
+                                    >
+                                        <span class="ps-sticker ps-sticker-mint px-2 py-0.5 text-xs">Listo</span>
+                                        Datos actualizados.
+                                    </p>
+                                </Transition>
+                            </div>
+                        </form>
+
+                        <div
+                            v-if="mustVerifyEmail && user && user.email_verified_at === null"
+                            class="ps-card ps-card-static ps-tone-sun mt-6 p-4"
+                        >
+                            <p class="text-sm leading-6">
+                                Tu correo aún no está verificado.
+                                <Link
+                                    :href="route('verification.send')"
+                                    method="post"
+                                    as="button"
+                                    class="font-semibold underline decoration-[#17141f]/40 underline-offset-2 hover:decoration-[#17141f]"
+                                >
+                                    Reenviar correo de verificación
+                                </Link>
+                            </p>
+                        </div>
+
+                        <div
+                            v-if="status"
+                            class="ps-card ps-card-static ps-tone-mint mt-4 p-4 text-sm font-medium"
+                        >
+                            {{ status }}
                         </div>
                     </div>
                 </div>
+
+                <div class="lg:sticky lg:top-28">
+                    <div class="ps-card ps-card-static ps-tone-coral p-6 md:p-8">
+                        <UpdatePasswordForm embedded />
+                    </div>
+                </div>
             </div>
-        </section>
+        </div>
     </AuthenticatedLayout>
 </template>

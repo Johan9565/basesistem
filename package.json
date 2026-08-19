@@ -21,11 +21,16 @@
         "vue": "^3.4.0"
     },
     "dependencies": {
+        "@google/genai": "^2.17.1",
         "@primeuix/themes": "^2.0.3",
         "@primevue/themes": "^4.5.4",
         "cropperjs": "^1.6.2",
+        "csv-parser": "^3.2.1",
+        "csv-writer": "^1.6.0",
         "daisyui": "^5.0.0",
+        "dotenv": "^17.4.2",
         "laravel-echo": "^2.3.1",
+        "openai": "^6.49.0",
         "primeicons": "^7.0.0",
         "primevue": "^4.5.4",
         "pusher-js": "^8.4.3"
