@@ -56,18 +56,15 @@ const subjectSections = computed(() => {
     const groups = new Map();
 
     for (const exam of props.exams) {
-        const subjects = (exam.subjects ?? [])
-            .map((subject) => String(subject ?? '').trim())
-            .filter(Boolean);
+        // Una sola materia por examen (la definida al crearlo), no las de las preguntas.
+        const subject = (exam.subjects ?? [])
+            .map((value) => String(value ?? '').trim())
+            .find(Boolean) || 'Sin materia';
 
-        const keys = subjects.length ? subjects : ['Sin materia'];
-
-        for (const name of keys) {
-            if (!groups.has(name)) {
-                groups.set(name, []);
-            }
-            groups.get(name).push(exam);
+        if (!groups.has(subject)) {
+            groups.set(subject, []);
         }
+        groups.get(subject).push(exam);
     }
 
     return [...groups.entries()]
@@ -205,19 +202,6 @@ const subjectSections = computed(() => {
                                 <p class="mt-1.5 line-clamp-2 text-sm leading-6 text-[#3d3848]/80">
                                     {{ exam.description }}
                                 </p>
-
-                                <div
-                                    v-if="exam.subjects?.filter((subject) => subject !== section.name).length"
-                                    class="mt-4 flex flex-wrap gap-1.5"
-                                >
-                                    <span
-                                        v-for="subject in exam.subjects.filter((item) => item !== section.name).slice(0, 3)"
-                                        :key="subject"
-                                        class="ps-chip"
-                                    >
-                                        {{ subject }}
-                                    </span>
-                                </div>
 
                                 <div class="mt-5 flex items-center justify-between gap-3">
                                     <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-[#3d3848]/70">

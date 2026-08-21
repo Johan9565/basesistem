@@ -24,7 +24,7 @@ class ExamModelFactory extends Factory
             'descripcion' => fake()->sentence(),
             'emoji' => '📘',
             'tone' => 'primary',
-            'materias' => ['Tema 1', 'Tema 2'],
+            'materias' => ['General'],
             'total_preguntas' => 2,
             'duracion_minutos' => 10,
             'es_publico' => true,

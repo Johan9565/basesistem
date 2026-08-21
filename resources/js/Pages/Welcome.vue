@@ -14,13 +14,13 @@ const currentYear = new Date().getFullYear();
 const modules = [
     {
         title: 'Temario guiado',
-        text: 'Bloques por materia con lo esencial de norma, doctrina y jurisprudencia.',
+        text: 'Bloques por materia con lo esencial: conceptos, ejemplos y lo que suele preguntarse.',
         tone: 'violet',
         icon: 'book',
     },
     {
-        title: 'Casos y doctrina',
-        text: 'Lecturas cortas y casos tipo examen para entender el criterio, no solo memorizar.',
+        title: 'Práctica dirigida',
+        text: 'Ejercicios cortos y preguntas tipo examen para entender el criterio, no solo memorizar.',
         tone: 'mint',
         icon: 'case',
     },
@@ -33,12 +33,12 @@ const modules = [
 ];
 
 const subjects = [
-    { title: 'Constitucional', text: 'Principios, derechos y control.', tone: 'violet', emoji: '⚖️' },
-    { title: 'Civil', text: 'Personas, contratos y bienes.', tone: 'sky', emoji: '🏠' },
-    { title: 'Penal', text: 'Delito, tipos y proceso.', tone: 'coral', emoji: '🔍' },
-    { title: 'Administrativo', text: 'Acto, procedimiento y Estado.', tone: 'mint', emoji: '🏛️' },
-    { title: 'Laboral', text: 'Trabajo, derechos y conflictos.', tone: 'sun', emoji: '🤝' },
-    { title: 'Amparo', text: 'Procedencia y sentencias.', tone: 'pink', emoji: '🛡️' },
+    { title: 'Matemáticas', text: 'Números, lógica y problemas.', tone: 'violet', emoji: '📐' },
+    { title: 'Lectura', text: 'Comprensión, ideas y argumentos.', tone: 'sky', emoji: '📖' },
+    { title: 'Ciencias', text: 'Conceptos, fenómenos y método.', tone: 'coral', emoji: '🔬' },
+    { title: 'Historia', text: 'Hechos, procesos y contexto.', tone: 'mint', emoji: '🗺️' },
+    { title: 'Idiomas', text: 'Vocabulario, uso y comprensión.', tone: 'sun', emoji: '💬' },
+    { title: 'Razonamiento', text: 'Patrones, análisis y criterio.', tone: 'pink', emoji: '🧠' },
 ];
 
 const steps = [
@@ -51,7 +51,7 @@ const steps = [
     {
         number: '02',
         title: 'Bloques cortos',
-        text: 'Norma, doctrina y un caso. Sin maratones inútiles.',
+        text: 'Teoría, un ejemplo y práctica. Sin maratones inútiles.',
         tone: 'mint',
     },
     {
@@ -67,9 +67,10 @@ const steps = [
     <Head title="pa-saber · Guía de estudio">
         <meta
             name="description"
-            content="pa-saber: guía de estudio para el examen de derecho. Temario por materias, doctrina, jurisprudencia y simulacros."
+            content="pa-saber: guía de estudio para cualquier examen. Temario por materias, práctica dirigida y simulacros."
         />
     </Head>
+
 
     <div class="welcome min-h-screen overflow-x-hidden font-sans antialiased">
         <div class="blob blob-a" aria-hidden="true"></div>
@@ -142,16 +143,17 @@ const steps = [
 
                         <p class="sticker sticker-sun inline-flex items-center gap-2 text-sm font-semibold">
                             <span class="size-2 rounded-full bg-[#17141f]"></span>
-                            Para estudiar el examen sin drama
+                            Para estudiar cualquier examen sin drama
                         </p>
                         <h1 class="mt-5 max-w-xl text-4xl font-semibold tracking-tight text-pretty sm:text-5xl">
-                            Derecho claro,
+                            Estudio claro,
                             <span class="mark-violet">en bloques</span>
                             que sí se pueden terminar.
                         </h1>
                         <p class="mt-5 max-w-lg text-lg leading-8 text-[#5c5668]">
-                            Temario, casos y simulacros. Menos PDF eterno, más práctica que se siente como progreso.
+                            Temario, práctica y simulacros. Menos PDF eterno, más avance que se siente real.
                         </p>
+
                         <div class="mt-8 flex flex-wrap items-center gap-3">
                             <Link
                                 v-if="canLogin && $page.props.auth.user"
@@ -176,14 +178,14 @@ const steps = [
                         </div>
                         <div class="mt-8 flex flex-wrap gap-2">
                             <span class="chip">⚡ Simulacros</span>
-                            <span class="chip">📚 6 materias</span>
-                            <span class="chip">✅ Casos cortos</span>
+                            <span class="chip">📚 Varias materias</span>
+                            <span class="chip">✅ Práctica corta</span>
                         </div>
                     </div>
 
                     <div class="relative mx-auto w-full max-w-md">
                         <div class="float-card card-sun -left-4 -top-5 absolute z-10 hidden rotate-[-8deg] px-3 py-2 text-sm font-semibold sm:block">
-                            Civil · 12/20
+                            Lectura · 12/20
                         </div>
                         <div class="float-card card-mint -right-2 top-16 absolute z-10 hidden rotate-[7deg] px-3 py-2 text-sm font-semibold sm:block">
                             Racha 4 días
@@ -198,13 +200,14 @@ const steps = [
                                 <div class="h-full w-[30%] rounded-full bg-[#7c5cff]"></div>
                             </div>
                             <p class="mt-6 text-lg font-semibold leading-7">
-                                En amparo, el principio de definitividad implica que…
+                                Si un texto presenta una idea y luego un contraejemplo, ¿qué está haciendo el autor?
                             </p>
                             <div class="mt-5 space-y-2">
-                                <div class="option">A. Se agoten recursos ordinarios</div>
-                                <div class="option option-ok">B. Basta un agravio directo</div>
-                                <div class="option">C. Solo aplica en penal</div>
+                                <div class="option">A. Repetir la misma tesis</div>
+                                <div class="option option-ok">B. Matizar o cuestionar la idea</div>
+                                <div class="option">C. Cambiar de tema sin aviso</div>
                             </div>
+
                             <div class="mt-6 flex items-center justify-between text-sm">
                                 <span class="font-semibold">⏱ 00:42</span>
                                 <span class="rounded-full bg-[#2ecf8f] px-3 py-1 font-bold text-[#113326]">Siguiente →</span>
@@ -219,15 +222,7 @@ const steps = [
                     </div>
                 </div>
 
-                <div class="marquee border-y border-[#eadfd2] bg-white/50 py-3" aria-hidden="true">
-                    <div class="marquee-track">
-                        <span v-for="n in 2" :key="n" class="flex gap-8 px-8 text-sm font-semibold text-[#5c5668]">
-                            <span v-for="subject in subjects" :key="`${n}-${subject.title}`">
-                                {{ subject.emoji }} {{ subject.title }}
-                            </span>
-                        </span>
-                    </div>
-                </div>
+
             </section>
 
             <section id="contenido" class="px-6 py-16 md:py-20">
@@ -271,10 +266,11 @@ const steps = [
             <section id="materias" class="px-6 pb-16 md:pb-20">
                 <div class="mx-auto max-w-6xl">
                     <p class="sticker sticker-mint inline-flex text-sm font-semibold">Materias</p>
-                    <h2 class="mt-4 text-3xl font-semibold tracking-tight">El examen, en colores.</h2>
+                    <h2 class="mt-4 text-3xl font-semibold tracking-tight">Tu examen, en colores.</h2>
                     <p class="mt-3 max-w-xl text-base leading-7 text-[#5c5668]">
-                        Entra por la que más te cuesta. Cada una tiene su propio bloque.
+                        Entra por la que más te cuesta. Cada área tiene su propio bloque.
                     </p>
+
 
                     <div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         <article
@@ -323,8 +319,9 @@ const steps = [
                             Hoy un bloque. Mañana otro.
                         </h2>
                         <p class="mt-2 max-w-md text-sm leading-6 text-[#3d3848]/80">
-                            Empieza por una materia y deja el PDF infinito para otro día.
+                            Empieza por un tema y deja el PDF infinito para otro día.
                         </p>
+
                     </div>
                     <div class="relative z-10 flex flex-wrap gap-3">
                         <Link

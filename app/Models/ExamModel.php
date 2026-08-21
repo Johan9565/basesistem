@@ -295,12 +295,9 @@ class ExamModel extends Model
      */
     public function replaceQuestions(array $questions): void
     {
-        $examId = (string) $this->getKey();
         $oid = $this->objectId();
 
-        ExamQuestionModel::where('examen_id', $oid)->delete();
-        ExamQuestionModel::where('examen_id', $examId)->delete();
-        ExamQuestionModel::where('exam_id', $examId)->delete();
+        $this->deleteQuestionDocuments();
 
         foreach (array_values($questions) as $index => $question) {
             if (! is_array($question)) {
@@ -314,16 +311,58 @@ class ExamModel extends Model
         }
 
         $this->total_preguntas = count($questions);
-        $this->materias = collect($questions)
-            ->map(fn ($question) => is_array($question)
-                ? ($question['materia'] ?? $question['subject'] ?? '')
-                : '')
-            ->filter()
-            ->unique()
-            ->values()
-            ->all() ?: ($this->materias ?? $this->subjects ?? []);
         $this->unset(['questions', 'name', 'description', 'subjects', 'question_count', 'duration_minutes', 'is_public']);
         $this->save();
+    }
+
+    /**
+     * Agrega una pregunta al final del examen sin reemplazar las existentes.
+     *
+     * @param  array<string, mixed>  $question
+     */
+    public function appendQuestion(array $question): ExamQuestionModel
+    {
+        $oid = $this->objectId();
+        $nextOrden = (int) ($this->questionRecords()->max('orden') ?? 0) + 1;
+
+        $storage = ExamQuestionNormalizer::toStorage($question, $nextOrden);
+        $storage['examen_id'] = $oid;
+
+        $created = ExamQuestionModel::create($storage);
+
+        $this->total_preguntas = $this->questionRecords()->count();
+        $this->unset(['questions', 'name', 'description', 'subjects', 'question_count', 'duration_minutes', 'is_public']);
+        $this->save();
+
+        return $created;
+    }
+
+    /**
+     * Borra el examen y sus preguntas (y los intentos asociados).
+     */
+    public function deleteCascade(): void
+    {
+        $examId = (string) $this->getKey();
+        $oid = $this->objectId();
+
+        $this->deleteQuestionDocuments();
+
+        ExamAttemptModel::where('exam_id', $examId)->delete();
+        if ($oid instanceof ObjectId) {
+            ExamAttemptModel::where('exam_id', $oid)->delete();
+        }
+
+        $this->delete();
+    }
+
+    private function deleteQuestionDocuments(): void
+    {
+        $examId = (string) $this->getKey();
+        $oid = $this->objectId();
+
+        ExamQuestionModel::where('examen_id', $oid)->delete();
+        ExamQuestionModel::where('examen_id', $examId)->delete();
+        ExamQuestionModel::where('exam_id', $examId)->delete();
     }
 
     public function clearEmbeddedQuestions(): void

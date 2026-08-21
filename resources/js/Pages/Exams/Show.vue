@@ -21,6 +21,14 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    can_delete_exam: {
+        type: Boolean,
+        default: false,
+    },
+    can_add_questions: {
+        type: Boolean,
+        default: false,
+    },
     errors: {
         type: Object,
         default: () => ({}),
@@ -31,8 +39,11 @@ const page = usePage();
 const form = useForm({
     anuncio_visto: false,
 });
+const deleteForm = useForm({});
 const adOpen = ref(false);
+const deleteOpen = ref(false);
 const isPremium = computed(() => Boolean(page.props?.auth?.es_premium));
+const showManage = computed(() => props.can_delete_exam || props.can_add_questions);
 const isTrial = computed(() => props.exam.acceso === 'prueba');
 const trialRemaining = computed(() =>
     props.exam.intentos_prueba_restantes == null ? null : Number(props.exam.intentos_prueba_restantes),
@@ -103,6 +114,14 @@ function accesoLabel(acceso) {
     if (acceso === 'prueba') return 'Prueba';
     return 'Gratis';
 }
+
+function confirmDelete() {
+    deleteForm.delete(route('exams.destroy', props.exam.id), {
+        onFinish: () => {
+            deleteOpen.value = false;
+        },
+    });
+}
 </script>
 
 <template>
@@ -135,7 +154,7 @@ function accesoLabel(acceso) {
                     </p>
 
                     <div v-if="exam.subjects?.length" class="mt-6">
-                        <p class="ps-sticker ps-sticker-violet text-xs">Temario</p>
+                        <p class="ps-sticker ps-sticker-violet text-xs">Materia</p>
                         <div class="mt-3 flex flex-wrap gap-2">
                             <span
                                 v-for="subject in exam.subjects"
@@ -179,7 +198,7 @@ function accesoLabel(acceso) {
 
                     <InputError class="mt-4" :message="form.errors.exam || errors.exam || form.errors.anuncio || errors.anuncio" />
 
-                    <div class="mt-8 flex justify-end">
+                    <div class="mt-8 flex flex-wrap items-center justify-end gap-3">
                         <button
                             v-if="current_attempt_id"
                             type="button"
@@ -200,35 +219,89 @@ function accesoLabel(acceso) {
                     </div>
                 </div>
 
-                <div class="ps-card ps-card-static ps-tone-violet p-6">
-                    <h3 class="text-lg font-semibold tracking-tight">Intentos anteriores</h3>
-                    <p
-                        v-if="!attempts.length"
-                        class="mt-2 text-sm text-[#3d3848]/80"
-                    >
-                        Todavía no presentas este examen.
-                    </p>
-                    <ul v-else class="mt-3 space-y-2">
-                        <li
-                            v-for="attempt in attempts"
-                            :key="attempt.id"
-                        >
+                <div class="space-y-6">
+                    <div v-if="showManage" class="ps-card ps-card-static ps-tone-coral p-6">
+                        <h3 class="text-lg font-semibold tracking-tight">Gestión</h3>
+                        <p class="mt-1 text-sm leading-6 ps-muted">
+                            Acciones de administración para este examen.
+                        </p>
+                        <div class="mt-4 flex flex-col gap-2">
                             <Link
-                                :href="route('exams.attempts.result', { exam: exam.id, attempt: attempt.id })"
-                                class="flex items-center justify-between gap-3 rounded-2xl border-2 border-[#17141f] bg-white/75 px-3 py-2"
+                                v-if="can_add_questions"
+                                :href="route('exams.questions.create', exam.id)"
+                                class="ps-btn w-full justify-center"
                             >
-                                <div>
-                                    <p class="text-sm font-semibold">
-                                        {{ attempt.score }}% · {{ attempt.correct_count }}/{{ attempt.total }}
-                                    </p>
-                                    <p class="text-xs ps-muted">
-                                        {{ attemptStatus(attempt.status) }} · {{ formatDate(attempt.submitted_at) }}
-                                    </p>
-                                </div>
-                                <span class="text-xs font-bold">Ver →</span>
+                                Agregar pregunta
                             </Link>
-                        </li>
-                    </ul>
+                            <button
+                                v-if="can_delete_exam"
+                                type="button"
+                                class="btn btn-error btn-outline w-full"
+                                @click="deleteOpen = true"
+                            >
+                                Borrar examen
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="ps-card ps-card-static ps-tone-violet p-6">
+                        <h3 class="text-lg font-semibold tracking-tight">Intentos anteriores</h3>
+                        <p
+                            v-if="!attempts.length"
+                            class="mt-2 text-sm text-[#3d3848]/80"
+                        >
+                            Todavía no presentas este examen.
+                        </p>
+                        <ul v-else class="mt-3 space-y-2">
+                            <li
+                                v-for="attempt in attempts"
+                                :key="attempt.id"
+                            >
+                                <Link
+                                    :href="route('exams.attempts.result', { exam: exam.id, attempt: attempt.id })"
+                                    class="flex items-center justify-between gap-3 rounded-2xl border-2 border-[#17141f] bg-white/75 px-3 py-2"
+                                >
+                                    <div>
+                                        <p class="text-sm font-semibold">
+                                            {{ attempt.score }}% · {{ attempt.correct_count }}/{{ attempt.total }}
+                                        </p>
+                                        <p class="text-xs ps-muted">
+                                            {{ attemptStatus(attempt.status) }} · {{ formatDate(attempt.submitted_at) }}
+                                        </p>
+                                    </div>
+                                    <span class="text-xs font-bold">Ver →</span>
+                                </Link>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div
+            v-if="deleteOpen"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-[#17141f]/50 px-4"
+        >
+            <div class="ps-card ps-card-static max-w-lg p-6">
+                <p class="ps-sticker ps-sticker-coral text-xs">Borrar examen</p>
+                <h3 class="mt-4 text-xl font-semibold tracking-tight">
+                    ¿Borrar «{{ exam.name }}»?
+                </h3>
+                <p class="mt-3 text-sm leading-6 ps-muted">
+                    Se eliminarán también todas las preguntas y los intentos asociados. Esta acción no se puede deshacer.
+                </p>
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
+                    <button type="button" class="ps-btn-ghost" :disabled="deleteForm.processing" @click="deleteOpen = false">
+                        Cancelar
+                    </button>
+                    <button
+                        type="button"
+                        class="btn btn-error"
+                        :disabled="deleteForm.processing"
+                        @click="confirmDelete"
+                    >
+                        {{ deleteForm.processing ? 'Borrando…' : 'Sí, borrar' }}
+                    </button>
                 </div>
             </div>
         </div>

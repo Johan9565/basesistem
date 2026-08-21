@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ExamAttemptModel;
 use App\Models\ExamModel;
 use App\Support\MongoModelFinder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -14,7 +15,11 @@ class ExamController extends Controller
     public function show(Request $request, string $exam): Response
     {
         $model = MongoModelFinder::findOrFail(ExamModel::class, $exam);
-        abort_unless($model->isAccessibleBy($request->user()), 403);
+        $canDelete = $request->user()->hasPermission('exams.delete');
+        $canAddQuestions = $request->user()->hasPermission('exams.import');
+        $canManage = $canDelete || $canAddQuestions;
+
+        abort_unless($canManage || $model->isAccessibleBy($request->user()), 403);
 
         $userId = (string) $request->user()->getKey();
         $examId = (string) $model->getKey();
@@ -50,6 +55,22 @@ class ExamController extends Controller
             'current_attempt_id' => $currentAttempt ? (string) $currentAttempt->getKey() : null,
             'attempts' => $attempts,
             'requiere_anuncio' => (bool) $request->session()->pull('requiere_anuncio', false),
+            'can_delete_exam' => $canDelete,
+            'can_add_questions' => $canAddQuestions,
         ]);
+    }
+
+    public function destroy(string $exam): RedirectResponse
+    {
+        $model = MongoModelFinder::findOrFail(ExamModel::class, $exam);
+        $name = $model->name;
+        $model->deleteCascade();
+
+        return redirect()
+            ->route('dashboard')
+            ->with('flash', [
+                'type' => 'success',
+                'message' => 'Se borró el examen «'.$name.'» y sus preguntas.',
+            ]);
     }
 }

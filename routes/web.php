@@ -13,6 +13,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExamController;
 use App\Http\Controllers\ExamAttemptController;
 use App\Http\Controllers\ExamImportController;
+use App\Http\Controllers\ExamQuestionController;
 use App\Http\Controllers\EvaluarRespuestaController;
 
 Route::get('/', function () {
@@ -29,6 +30,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/exams/import', [ExamImportController::class, 'create'])->name('exams.import');
         Route::post('/exams/import', [ExamImportController::class, 'store'])->name('exams.import.store');
         Route::get('/exams/template', [ExamImportController::class, 'template'])->name('exams.template');
+        Route::get('/exams/{exam}/questions/create', [ExamQuestionController::class, 'create'])->name('exams.questions.create');
+        Route::post('/exams/{exam}/questions', [ExamQuestionController::class, 'store'])->name('exams.questions.store');
+    });
+
+    Route::middleware('permission:exams.delete')->group(function () {
+        Route::delete('/exams/{exam}', [ExamController::class, 'destroy'])->name('exams.destroy');
     });
 
     Route::get('/exams/{exam}', [ExamController::class, 'show'])->name('exams.show');

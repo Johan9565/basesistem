@@ -25,5 +25,6 @@ class DatabaseSeeder extends Seeder
         $this->call(OcrModuleSeeder::class);
         $this->call(ExamSeeder::class);
         $this->call(ExamImportModuleSeeder::class);
+        $this->call(ExamDeleteModuleSeeder::class);
     }
 }

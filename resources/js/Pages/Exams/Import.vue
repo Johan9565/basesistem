@@ -7,6 +7,7 @@ import { ref } from 'vue';
 
 const form = useForm({
     name: '',
+    materia: '',
     description: '',
     duration_minutes: 180,
     emoji: '📘',
@@ -47,7 +48,8 @@ function submit() {
                 <form class="card border border-base-300 bg-base-100 shadow-sm" @submit.prevent="submit">
                     <div class="card-body gap-4">
                         <p class="text-sm leading-6 text-base-content/70">
-                            Descarga el CSV, llénalo en Excel (hasta ~500 preguntas) y súbelo. Admite opción única, varias respuestas y preguntas abiertas.
+                            Define la materia del examen aquí (así se agrupa en el dashboard). El CSV solo trae las preguntas.
+                            Si el examen ya existe, puedes agregar preguntas una por una desde la ficha del examen.
                         </p>
 
                         <div>
@@ -60,6 +62,22 @@ function submit() {
                                 required
                             />
                             <InputError class="mt-1" :message="form.errors.name" />
+                        </div>
+
+                        <div>
+                            <InputLabel for="materia" value="Materia" />
+                            <input
+                                id="materia"
+                                v-model="form.materia"
+                                type="text"
+                                class="input input-bordered mt-1 w-full"
+                                placeholder="Ej. Constitucional"
+                                required
+                            />
+                            <p class="mt-1 text-xs text-base-content/60">
+                                El examen pertenece a esta materia; no se infiere de las preguntas del CSV.
+                            </p>
+                            <InputError class="mt-1" :message="form.errors.materia" />
                         </div>
 
                         <div>
@@ -170,7 +188,7 @@ function submit() {
                         <p class="font-semibold text-base-content">Columnas</p>
                         <ul class="list-disc space-y-1 pl-5">
                             <li><code>pregunta</code> — enunciado (obligatorio).</li>
-                            <li><code>materia</code> — materia de la pregunta.</li>
+                            <li><code>materia</code> — opcional por pregunta (tema interno); la materia del examen se elige en el formulario.</li>
                             <li><code>opcion_a</code> … <code>opcion_f</code> — vacías en abiertas.</li>
                             <li><code>correctas</code> — índices desde 0. Varias: <code>0|1</code>. Opcional si pones el texto en <code>respuesta_correcta</code>.</li>
                             <li><code>respuesta_correcta</code> — texto de la opción buena, o varias separadas con <code>|</code>. En abiertas, la respuesta esperada.</li>

@@ -35,6 +35,7 @@ class ExamImportController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'materia' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
             'duration_minutes' => ['required', 'integer', 'min:1', 'max:600'],
             'emoji' => ['nullable', 'string', 'max:16'],
@@ -75,18 +76,15 @@ class ExamImportController extends Controller
             $i++;
         }
 
+        $materia = trim($validated['materia']);
+
         $exam = ExamModel::create([
             'titulo' => $name,
             'slug' => $slug,
             'descripcion' => trim((string) ($validated['description'] ?? '')),
             'emoji' => $validated['emoji'] ?: '📘',
             'tone' => 'primary',
-            'materias' => collect($parsed['questions'])
-                ->pluck('materia')
-                ->filter()
-                ->unique()
-                ->values()
-                ->all(),
+            'materias' => $materia !== '' ? [$materia] : [],
             'total_preguntas' => count($parsed['questions']),
             'duracion_minutos' => (int) $validated['duration_minutes'],
             'es_publico' => $request->boolean('is_public', true),
