@@ -1,4 +1,4 @@
-# Base Sistema
+# Pa Saber
 
 Stack: **Laravel 12**, **Vue 3 (Inertia SSR)**, **MongoDB**, **Redis**, **Laravel Sail**, **Reverb** (WebSockets), PHP 8.5.
 

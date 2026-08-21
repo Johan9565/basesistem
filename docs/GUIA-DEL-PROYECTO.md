@@ -1,4 +1,4 @@
-# Base Sistema — Laravel 12 + Vue + MongoDB + Sail
+# Pa Saber — Laravel 12 + Vue + MongoDB + Sail
 
 Stack: **Laravel 12**, **Vue 3 (Inertia SSR)**, **MongoDB**, **Redis**, **Meilisearch**, **Mailpit**, **Reverb**, PHP 8.5.
 
@@ -23,7 +23,7 @@ cd basesistem
 Asegurarse de que `APP_NAME` lleve comillas si contiene espacios:
 
 ```
-APP_NAME="Base Sistema"
+APP_NAME="Pa Saber"
 ```
 
 Variables obligatorias para Docker Sail (agregar si no existen):
@@ -120,8 +120,8 @@ use MongoDB\Laravel\Auth\User as Authenticatable;
 
 ## Errores frecuentes
 
-### `Failed to parse dotenv file. Encountered unexpected whitespace at [Base Sistema]`
-El valor de `APP_NAME` contiene espacios. Usar comillas: `APP_NAME="Base Sistema"`.
+### `Failed to parse dotenv file. Encountered unexpected whitespace at [Pa Saber]`
+El valor de `APP_NAME` contiene espacios. Usar comillas: `APP_NAME="Pa Saber"`.
 
 ### `Vite manifest not found at: public/build/manifest.json`
 Los assets no están compilados. Ejecutar: `./vendor/bin/sail npm run build`

@@ -27,7 +27,7 @@ function resolveBrandingSrc(value) {
 
 const logoUrl = computed(() => {
     const branded = resolveBrandingSrc(page.props?.branding?.logo_url || null);
-    if (branded && !/andres/i.test(branded)) {
+    if (branded) {
         return branded;
     }
 

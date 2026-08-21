@@ -1,4 +1,4 @@
-# Documentación — Base Sistema
+# Documentación — Pa Saber
 
 Toda la documentación del proyecto vive en esta carpeta **`docs/`**.
 
