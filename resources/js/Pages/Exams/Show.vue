@@ -39,9 +39,6 @@ const page = usePage();
 const form = useForm({
     anuncio_visto: false,
 });
-const settingsForm = useForm({
-    preguntas_por_materia: Number(props.exam.preguntas_por_materia ?? 0),
-});
 const deleteForm = useForm({});
 const adOpen = ref(false);
 const deleteOpen = ref(false);
@@ -59,13 +56,6 @@ const canStart = computed(() => {
     }
     return true;
 });
-
-watch(
-    () => props.exam.preguntas_por_materia,
-    (value) => {
-        settingsForm.preguntas_por_materia = Number(value ?? 0);
-    },
-);
 
 watch(
     () => props.requiere_anuncio,
@@ -132,10 +122,6 @@ function confirmDelete() {
             deleteOpen.value = false;
         },
     });
-}
-
-function saveSamplingSettings() {
-    settingsForm.patch(route('exams.update', props.exam.id));
 }
 </script>
 
@@ -261,34 +247,6 @@ function saveSamplingSettings() {
                         <p class="mt-1 text-sm leading-6 ps-muted">
                             Acciones de administración para este examen.
                         </p>
-                        <form
-                            v-if="can_add_questions"
-                            class="mt-4 space-y-3 rounded-2xl border border-[#eadfd2] bg-white/60 p-3"
-                            @submit.prevent="saveSamplingSettings"
-                        >
-                            <label class="block text-sm font-semibold" for="preguntas_por_materia">
-                                Preguntas por materia
-                            </label>
-                            <input
-                                id="preguntas_por_materia"
-                                v-model.number="settingsForm.preguntas_por_materia"
-                                type="number"
-                                min="0"
-                                max="200"
-                                class="input input-bordered w-full"
-                            />
-                            <p class="text-xs leading-5 ps-muted">
-                                10 o 15 = aleatorias por materia. 0 = todas las del banco.
-                            </p>
-                            <InputError :message="settingsForm.errors.preguntas_por_materia" />
-                            <button
-                                type="submit"
-                                class="ps-btn w-full justify-center"
-                                :disabled="settingsForm.processing"
-                            >
-                                {{ settingsForm.processing ? 'Guardando…' : 'Guardar muestreo' }}
-                            </button>
-                        </form>
                         <div class="mt-4 flex flex-col gap-2">
                             <Link
                                 v-if="can_add_questions"

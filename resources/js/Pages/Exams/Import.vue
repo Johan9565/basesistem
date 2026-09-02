@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import { Head, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const form = useForm({
     name: '',
@@ -20,6 +20,28 @@ const form = useForm({
 
 const fileName = ref('');
 const dragging = ref(false);
+const modoPreguntas = ref('muestreo');
+const cantidadPorMateria = ref(10);
+
+watch(modoPreguntas, (modo) => {
+    if (modo === 'todas') {
+        form.preguntas_por_materia = 0;
+        return;
+    }
+    form.preguntas_por_materia = Math.max(1, Number(cantidadPorMateria.value) || 10);
+});
+
+watch(cantidadPorMateria, (valor) => {
+    if (modoPreguntas.value !== 'muestreo') return;
+    form.preguntas_por_materia = Math.max(1, Number(valor) || 10);
+});
+
+const ayudaPreguntas = computed(() => {
+    if (modoPreguntas.value === 'todas') {
+        return 'Cada intento muestra todas las preguntas del CSV, en el orden del banco.';
+    }
+    return 'Cada intento toma al azar esa cantidad por cada materia del CSV (columna materia). Ej.: 10 con 13 materias ≈ 130 preguntas. Solo se define al crear el examen.';
+});
 
 function onFile(file) {
     if (!file) return;
@@ -144,18 +166,29 @@ function submit() {
                         </div>
 
                         <div>
-                            <InputLabel for="preguntas_por_materia" value="Preguntas por materia (aleatorias)" />
-                            <input
-                                id="preguntas_por_materia"
-                                v-model.number="form.preguntas_por_materia"
-                                type="number"
-                                min="0"
-                                max="200"
-                                class="input input-bordered mt-1 w-full"
-                            />
+                            <InputLabel for="modo_preguntas" value="Preguntas por intento" />
+                            <select
+                                id="modo_preguntas"
+                                v-model="modoPreguntas"
+                                class="select select-bordered mt-1 w-full"
+                            >
+                                <option value="muestreo">Aleatorias por materia</option>
+                                <option value="todas">Mostrar todas las preguntas</option>
+                            </select>
+                            <div v-if="modoPreguntas === 'muestreo'" class="mt-3">
+                                <InputLabel for="preguntas_por_materia" value="Cantidad por materia" />
+                                <input
+                                    id="preguntas_por_materia"
+                                    v-model.number="cantidadPorMateria"
+                                    type="number"
+                                    min="1"
+                                    max="200"
+                                    class="input input-bordered mt-1 w-full"
+                                    required
+                                />
+                            </div>
                             <p class="mt-1 text-xs leading-5 text-base-content/60">
-                                Si el CSV trae muchas materias (columna <code>materia</code>), cada intento toma N preguntas al azar de cada una.
-                                Ej.: 10 con 13 materias ≈ 130 preguntas por intento. Usa <strong>0</strong> para cargar todas.
+                                {{ ayudaPreguntas }}
                             </p>
                             <InputError class="mt-1" :message="form.errors.preguntas_por_materia" />
                         </div>

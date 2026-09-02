@@ -73,28 +73,4 @@ class ExamController extends Controller
                 'message' => 'Se borró el examen «'.$name.'» y sus preguntas.',
             ]);
     }
-
-    public function update(Request $request, string $exam): RedirectResponse
-    {
-        $model = MongoModelFinder::findOrFail(ExamModel::class, $exam);
-
-        $validated = $request->validate([
-            'preguntas_por_materia' => ['required', 'integer', 'min:0', 'max:200'],
-        ]);
-
-        $model->preguntas_por_materia = (int) $validated['preguntas_por_materia'];
-        $model->save();
-
-        $n = (int) $validated['preguntas_por_materia'];
-        $message = $n > 0
-            ? "Cada intento tomará {$n} pregunta(s) al azar por materia."
-            : 'Cada intento usará todas las preguntas del banco.';
-
-        return redirect()
-            ->route('exams.show', $model->getKey())
-            ->with('flash', [
-                'type' => 'success',
-                'message' => $message,
-            ]);
-    }
 }
