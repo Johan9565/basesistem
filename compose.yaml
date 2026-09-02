@@ -1,5 +1,4 @@
-# Desarrollo local. Uso: ./vendor/bin/sail up -d
-name: basesistem
+name: pa_saber
 services:
   laravel.test:
     build:
@@ -10,29 +9,28 @@ services:
     image: 'sail-8.5/app'
     extra_hosts:
         - 'host.docker.internal:host-gateway'
-    ports:
-        - '${FORWARD_APP_PORT:-8000}:80'
-        - '${VITE_PORT:-5173}:${VITE_PORT:-5173}'
-        - '${REVERB_PORT:-8080}:${REVERB_PORT:-8080}'
     environment:
         WWWUSER: '${WWWUSER}'
         LARAVEL_SAIL: 1
-        XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
-        XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
-        IGNITION_LOCAL_SITES_PATH: '${PWD}'
+        XDEBUG_MODE: 'off'
+        IGNITION_LOCAL_SITES_PATH: '/home/papafrita45/servicios/stacks/pa_saber'
     volumes:
-        - '.:/var/www/html'
+        - '/home/papafrita45/servicios/stacks/pa_saber:/var/www/html'
     networks:
         - sail
+        - nginx-red
     depends_on:
         - redis
         - meilisearch
         - mongo
+    restart: always
   mongo:
     image: mongo:7.0
+    restart: always
     command: ["mongod", "--wiredTigerCacheSizeGB", "1"]
+    # Solo localhost del servidor (para Compass vía túnel SSH/Tailscale)
     ports:
-      - '127.0.0.1:${FORWARD_MONGODB_PORT:-27018}:27017'
+      - "127.0.0.1:27018:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${DB_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${DB_PASSWORD}
@@ -43,8 +41,7 @@ services:
       - sail
   redis:
     image: redis:alpine
-    ports:
-      - '${FORWARD_REDIS_PORT:-6379}:6379'
+    restart: always
     volumes:
       - sail-redis:/data
     networks:
@@ -58,10 +55,9 @@ services:
       timeout: 5s
   meilisearch:
     image: getmeili/meilisearch:latest
-    ports:
-      - '${FORWARD_MEILISEARCH_PORT:-7700}:7700'
+    restart: always
     environment:
-      MEILI_NO_ANALYTICS: '${MEILISEARCH_NO_ANALYTICS:-false}'
+      MEILI_NO_ANALYTICS: "true"
     volumes:
       - sail-meilisearch:/meili_data
     networks:
@@ -75,16 +71,11 @@ services:
         - http://127.0.0.1:7700/health
       retries: 3
       timeout: 5s
-  mailpit:
-    image: 'axllent/mailpit:latest'
-    ports:
-      - '${FORWARD_MAILPIT_PORT:-1025}:1025'
-      - '${FORWARD_MAILPIT_DASHBOARD_PORT:-8025}:8025'
-    networks:
-      - sail
 networks:
   sail:
     driver: bridge
+  nginx-red:
+    external: true
 volumes:
   sail-redis:
     driver: local
