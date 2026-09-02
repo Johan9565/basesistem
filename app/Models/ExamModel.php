@@ -48,6 +48,7 @@ class ExamModel extends Model
         'order_index',
         'acceso',
         'tipo',
+        'preguntas_por_materia',
     ];
 
     protected function casts(): array
@@ -57,11 +58,22 @@ class ExamModel extends Model
             'question_count' => 'integer',
             'duracion_minutos' => 'integer',
             'duration_minutes' => 'integer',
+            'preguntas_por_materia' => 'integer',
             'es_publico' => 'boolean',
             'is_public' => 'boolean',
             'status' => 'integer',
             'order_index' => 'integer',
         ];
+    }
+
+    public function preguntasPorMateria(): int
+    {
+        return max(0, (int) ($this->attributes['preguntas_por_materia'] ?? 0));
+    }
+
+    public function usaMuestreoPorMateria(): bool
+    {
+        return $this->preguntasPorMateria() > 0;
     }
 
     public function getNameAttribute(): string
@@ -208,13 +220,91 @@ class ExamModel extends Model
 
     public function questionIdsForAttempt(User $user): array
     {
-        $ids = $this->questionIds();
+        $ids = $this->usaMuestreoPorMateria()
+            ? $this->sampleQuestionIdsPerMateria($this->preguntasPorMateria())
+            : $this->questionIds();
 
-        if ($this->accesoTipo() !== self::ACCESO_PRUEBA) {
-            return $ids;
+        if ($this->accesoTipo() === self::ACCESO_PRUEBA) {
+            return array_slice($ids, 0, $this->trialQuestionLimit());
         }
 
-        return array_slice($ids, 0, $this->trialQuestionLimit());
+        return $ids;
+    }
+
+    /**
+     * Toma hasta $perMateria preguntas al azar de cada materia del banco del examen.
+     *
+     * @return list<string>
+     */
+    public function sampleQuestionIdsPerMateria(int $perMateria): array
+    {
+        $perMateria = max(1, $perMateria);
+        $grouped = [];
+
+        foreach ($this->questionRecords()->orderBy('orden')->get() as $question) {
+            $materia = trim((string) ($question->materia ?? ''));
+            if ($materia === '') {
+                $materia = 'Sin materia';
+            }
+            $grouped[$materia][] = (string) $question->getKey();
+        }
+
+        $selected = [];
+        foreach ($grouped as $ids) {
+            shuffle($ids);
+            array_push($selected, ...array_slice($ids, 0, min($perMateria, count($ids))));
+        }
+
+        shuffle($selected);
+
+        return array_values($selected);
+    }
+
+    /**
+     * Cantidad de preguntas que tendría un intento con el muestreo actual (sin límite de prueba).
+     */
+    public function attemptQuestionCountEstimate(): int
+    {
+        $bankCount = $this->questionCount();
+        if (! $this->usaMuestreoPorMateria()) {
+            return $bankCount;
+        }
+
+        $perMateria = $this->preguntasPorMateria();
+        $counts = [];
+
+        foreach ($this->questionRecords()->get(['materia']) as $question) {
+            $materia = trim((string) ($question->materia ?? ''));
+            if ($materia === '') {
+                $materia = 'Sin materia';
+            }
+            $counts[$materia] = ($counts[$materia] ?? 0) + 1;
+        }
+
+        $total = 0;
+        foreach ($counts as $count) {
+            $total += min($perMateria, $count);
+        }
+
+        return $total;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function materiasEnBanco(): array
+    {
+        return $this->questionRecords()
+            ->get(['materia'])
+            ->map(function ($question) {
+                $materia = trim((string) ($question->materia ?? ''));
+
+                return $materia !== '' ? $materia : 'Sin materia';
+            })
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
     }
 
     public static function accessibleTo(User $user)
@@ -414,7 +504,9 @@ class ExamModel extends Model
     public function toCardArray(?User $user = null): array
     {
         $acceso = $this->accesoTipo();
-        $questionCount = $this->questionCount();
+        $bancoPreguntas = $this->questionCount();
+        $preguntasPorMateria = $this->preguntasPorMateria();
+        $questionCount = $this->attemptQuestionCountEstimate();
 
         if ($acceso === self::ACCESO_PRUEBA) {
             $questionCount = min($questionCount, $this->trialQuestionLimit());
@@ -429,6 +521,9 @@ class ExamModel extends Model
             'tone' => (string) ($this->tone ?? 'primary'),
             'subjects' => collect($this->subjects)->map(fn ($s) => (string) $s)->values()->all(),
             'question_count' => $questionCount,
+            'banco_preguntas' => $bancoPreguntas,
+            'preguntas_por_materia' => $preguntasPorMateria,
+            'materias_banco' => $this->materiasEnBanco(),
             'duration_minutes' => $this->duration_minutes,
             'acceso' => $acceso,
             'tipo' => $this->tipoExamen(),

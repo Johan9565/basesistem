@@ -39,12 +39,16 @@ const page = usePage();
 const form = useForm({
     anuncio_visto: false,
 });
+const settingsForm = useForm({
+    preguntas_por_materia: Number(props.exam.preguntas_por_materia ?? 0),
+});
 const deleteForm = useForm({});
 const adOpen = ref(false);
 const deleteOpen = ref(false);
 const isPremium = computed(() => Boolean(page.props?.auth?.es_premium));
 const showManage = computed(() => props.can_delete_exam || props.can_add_questions);
 const isTrial = computed(() => props.exam.acceso === 'prueba');
+const usesSampling = computed(() => Number(props.exam.preguntas_por_materia ?? 0) > 0);
 const trialRemaining = computed(() =>
     props.exam.intentos_prueba_restantes == null ? null : Number(props.exam.intentos_prueba_restantes),
 );
@@ -55,6 +59,13 @@ const canStart = computed(() => {
     }
     return true;
 });
+
+watch(
+    () => props.exam.preguntas_por_materia,
+    (value) => {
+        settingsForm.preguntas_por_materia = Number(value ?? 0);
+    },
+);
 
 watch(
     () => props.requiere_anuncio,
@@ -122,6 +133,10 @@ function confirmDelete() {
         },
     });
 }
+
+function saveSamplingSettings() {
+    settingsForm.patch(route('exams.update', props.exam.id));
+}
 </script>
 
 <template>
@@ -168,8 +183,13 @@ function confirmDelete() {
 
                     <div class="mt-6 grid gap-3 sm:grid-cols-2">
                         <div class="ps-card ps-card-static ps-tone-sun p-4">
-                            <p class="text-xs font-semibold ps-muted">Preguntas</p>
+                            <p class="text-xs font-semibold ps-muted">
+                                {{ usesSampling ? 'Por intento' : 'Preguntas' }}
+                            </p>
                             <p class="mt-1 text-lg font-semibold">{{ exam.question_count }}</p>
+                            <p v-if="usesSampling" class="mt-1 text-xs ps-muted">
+                                Banco: {{ exam.banco_preguntas }} · {{ exam.preguntas_por_materia }} por materia
+                            </p>
                         </div>
                         <div class="ps-card ps-card-static ps-tone-mint p-4">
                             <p class="text-xs font-semibold ps-muted">Tiempo</p>
@@ -177,8 +197,24 @@ function confirmDelete() {
                         </div>
                     </div>
 
+                    <div v-if="exam.materias_banco?.length > 1" class="mt-6">
+                        <p class="ps-sticker ps-sticker-sky text-xs">Materias en el banco</p>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <span
+                                v-for="subject in exam.materias_banco"
+                                :key="subject"
+                                class="ps-chip"
+                            >
+                                {{ subject }}
+                            </span>
+                        </div>
+                    </div>
+
                     <ul class="mt-6 list-disc space-y-1 pl-5 text-sm leading-6 ps-muted">
                         <li>Hay preguntas de opción única, varias respuestas y abiertas.</li>
+                        <li v-if="usesSampling">
+                            Cada intento elige al azar {{ exam.preguntas_por_materia }} pregunta(s) de cada materia del banco.
+                        </li>
                         <li>El avance se guarda solo. Si sales, puedes continuar.</li>
                         <li>Al acabarse el tiempo, el examen se envía con lo que hayas contestado.</li>
                         <template v-if="exam.tipo === 'repaso'">
@@ -225,6 +261,34 @@ function confirmDelete() {
                         <p class="mt-1 text-sm leading-6 ps-muted">
                             Acciones de administración para este examen.
                         </p>
+                        <form
+                            v-if="can_add_questions"
+                            class="mt-4 space-y-3 rounded-2xl border border-[#eadfd2] bg-white/60 p-3"
+                            @submit.prevent="saveSamplingSettings"
+                        >
+                            <label class="block text-sm font-semibold" for="preguntas_por_materia">
+                                Preguntas por materia
+                            </label>
+                            <input
+                                id="preguntas_por_materia"
+                                v-model.number="settingsForm.preguntas_por_materia"
+                                type="number"
+                                min="0"
+                                max="200"
+                                class="input input-bordered w-full"
+                            />
+                            <p class="text-xs leading-5 ps-muted">
+                                10 o 15 = aleatorias por materia. 0 = todas las del banco.
+                            </p>
+                            <InputError :message="settingsForm.errors.preguntas_por_materia" />
+                            <button
+                                type="submit"
+                                class="ps-btn w-full justify-center"
+                                :disabled="settingsForm.processing"
+                            >
+                                {{ settingsForm.processing ? 'Guardando…' : 'Guardar muestreo' }}
+                            </button>
+                        </form>
                         <div class="mt-4 flex flex-col gap-2">
                             <Link
                                 v-if="can_add_questions"

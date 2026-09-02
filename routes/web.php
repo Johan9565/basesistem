@@ -32,6 +32,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/exams/template', [ExamImportController::class, 'template'])->name('exams.template');
         Route::get('/exams/{exam}/questions/create', [ExamQuestionController::class, 'create'])->name('exams.questions.create');
         Route::post('/exams/{exam}/questions', [ExamQuestionController::class, 'store'])->name('exams.questions.store');
+        Route::patch('/exams/{exam}', [ExamController::class, 'update'])->name('exams.update');
     });
 
     Route::middleware('permission:exams.delete')->group(function () {

@@ -273,6 +273,71 @@ class ExamAttemptTest extends TestCase
         $this->assertTrue((bool) ($feedback[$questionId]['is_correct'] ?? false));
     }
 
+    public function test_attempt_samples_n_questions_per_materia(): void
+    {
+        $exam = ExamModel::factory()->create([
+            'preguntas_por_materia' => 1,
+        ]);
+
+        $exam->replaceQuestions([
+            [
+                'tipo' => 'opcion_unica',
+                'pregunta' => 'Civil 1',
+                'materia' => 'Civil',
+                'opciones' => ['A', 'B'],
+                'correctas' => [0],
+                'respuesta_correcta' => 'A',
+            ],
+            [
+                'tipo' => 'opcion_unica',
+                'pregunta' => 'Civil 2',
+                'materia' => 'Civil',
+                'opciones' => ['A', 'B'],
+                'correctas' => [0],
+                'respuesta_correcta' => 'A',
+            ],
+            [
+                'tipo' => 'opcion_unica',
+                'pregunta' => 'Penal 1',
+                'materia' => 'Penal',
+                'opciones' => ['A', 'B'],
+                'correctas' => [0],
+                'respuesta_correcta' => 'A',
+            ],
+            [
+                'tipo' => 'opcion_unica',
+                'pregunta' => 'Penal 2',
+                'materia' => 'Penal',
+                'opciones' => ['A', 'B'],
+                'correctas' => [0],
+                'respuesta_correcta' => 'A',
+            ],
+        ]);
+
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->post(route('exams.attempts.store', $exam->getKey()));
+
+        $attempt = ExamAttemptModel::query()
+            ->where('user_id', (string) $user->getKey())
+            ->where('exam_id', (string) $exam->getKey())
+            ->first();
+
+        $this->assertNotNull($attempt);
+        $questionIds = json_decode(json_encode($attempt->question_ids), true) ?: [];
+        $this->assertCount(2, $questionIds);
+
+        $questions = $exam->questionRecords()->get()->keyBy(fn ($q) => (string) $q->getKey());
+        $materias = collect($questionIds)
+            ->map(fn ($id) => (string) ($questions[(string) $id]->materia ?? ''))
+            ->sort()
+            ->values()
+            ->all();
+
+        $this->assertSame(['Civil', 'Penal'], $materias);
+        $this->assertSame(2, $exam->attemptQuestionCountEstimate());
+    }
+
     public function test_normal_exam_cannot_use_the_review_check_endpoint(): void
     {
         $exam = ExamModel::factory()->create();

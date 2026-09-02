@@ -42,6 +42,7 @@ class ExamImportController extends Controller
             'is_public' => ['nullable', 'boolean'],
             'acceso' => ['nullable', 'in:gratis,prueba,premium'],
             'tipo' => ['nullable', 'in:normal,repaso'],
+            'preguntas_por_materia' => ['nullable', 'integer', 'min:0', 'max:200'],
             'file' => ['required', 'file', 'max:5120'],
         ]);
 
@@ -87,6 +88,7 @@ class ExamImportController extends Controller
             'materias' => $materia !== '' ? [$materia] : [],
             'total_preguntas' => count($parsed['questions']),
             'duracion_minutos' => (int) $validated['duration_minutes'],
+            'preguntas_por_materia' => (int) ($validated['preguntas_por_materia'] ?? 0),
             'es_publico' => $request->boolean('is_public', true),
             'acceso' => $validated['acceso'] ?? 'gratis',
             'tipo' => $validated['tipo'] ?? ExamModel::TIPO_NORMAL,

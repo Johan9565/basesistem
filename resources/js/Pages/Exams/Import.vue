@@ -14,6 +14,7 @@ const form = useForm({
     is_public: true,
     acceso: 'gratis',
     tipo: 'normal',
+    preguntas_por_materia: 10,
     file: null,
 });
 
@@ -143,6 +144,23 @@ function submit() {
                         </div>
 
                         <div>
+                            <InputLabel for="preguntas_por_materia" value="Preguntas por materia (aleatorias)" />
+                            <input
+                                id="preguntas_por_materia"
+                                v-model.number="form.preguntas_por_materia"
+                                type="number"
+                                min="0"
+                                max="200"
+                                class="input input-bordered mt-1 w-full"
+                            />
+                            <p class="mt-1 text-xs leading-5 text-base-content/60">
+                                Si el CSV trae muchas materias (columna <code>materia</code>), cada intento toma N preguntas al azar de cada una.
+                                Ej.: 10 con 13 materias ≈ 130 preguntas por intento. Usa <strong>0</strong> para cargar todas.
+                            </p>
+                            <InputError class="mt-1" :message="form.errors.preguntas_por_materia" />
+                        </div>
+
+                        <div>
                             <InputLabel value="Archivo CSV" />
                             <div
                                 class="mt-1 rounded-2xl border-2 border-dashed px-4 py-8 text-center"
@@ -188,7 +206,7 @@ function submit() {
                         <p class="font-semibold text-base-content">Columnas</p>
                         <ul class="list-disc space-y-1 pl-5">
                             <li><code>pregunta</code> — enunciado (obligatorio).</li>
-                            <li><code>materia</code> — opcional por pregunta (tema interno); la materia del examen se elige en el formulario.</li>
+                            <li><code>materia</code> — tema de la pregunta; si hay varias, el examen puede muestrear N al azar por materia.</li>
                             <li><code>opcion_a</code> … <code>opcion_f</code> — vacías en abiertas.</li>
                             <li><code>correctas</code> — índices desde 0. Varias: <code>0|1</code>. Opcional si pones el texto en <code>respuesta_correcta</code>.</li>
                             <li><code>respuesta_correcta</code> — texto de la opción buena, o varias separadas con <code>|</code>. En abiertas, la respuesta esperada.</li>
