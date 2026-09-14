@@ -26,6 +26,9 @@ class users extends Controller
             'area_id' => 'nullable|string',
         ]);
 
+        $defaultArea = $this->ensureDefaultArea();
+        $this->assignDefaultAreaToUsersWithoutOne($defaultArea);
+
         $query = User::query();
 
         $search = isset($filters['search']) ? trim($filters['search']) : '';
@@ -84,6 +87,7 @@ class users extends Controller
                 'id' => (string) $r->id,
                 'name' => $r->role,
             ]);
+
         $areas = DependenciesModel::where('status', 1)
             ->get(['id', 'name'])
             ->map(fn ($a) => [
@@ -115,7 +119,7 @@ class users extends Controller
             'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'role_id' => 'required|string',
-            'area_id' => 'required|string',
+            'area_id' => 'nullable|string',
             'status' => 'required|in:0,1',
             'plan' => 'nullable|in:gratis,premium',
         ]);
@@ -129,7 +133,7 @@ class users extends Controller
             'ape_pat' => $request->ape_pat,
             'ape_mat' => $request->ape_mat,
             'email' => $request->email,
-            'area_id' => new ObjectId($request->area_id),
+            'area_id' => $this->resolveAreaId($request->input('area_id')),
             'password' => Hash::make($request->password),
             'role_id' => new ObjectId($role->getKey()),
             'status' => (int) $request->status,
@@ -161,7 +165,7 @@ class users extends Controller
             'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
             'role_id' => 'required|string',
             'status' => 'required|in:0,1',
-            'area_id' => 'required|string',
+            'area_id' => 'nullable|string',
             'plan' => 'nullable|in:gratis,premium',
         ]);
 
@@ -177,7 +181,7 @@ class users extends Controller
             'ape_pat' => $request->ape_pat,
             'ape_mat' => $request->ape_mat,
             'email' => $request->email,
-            'area_id' => new ObjectId($request->area_id),
+            'area_id' => $this->resolveAreaId($request->input('area_id')),
             'role_id' => new ObjectId($role->getKey()),
             'status' => (int) $request->status,
             'plan' => $plan,
@@ -390,5 +394,43 @@ class users extends Controller
         $user->delete();
 
         return redirect()->route('users');
+    }
+
+    /**
+     * Por ahora todos los usuarios comparten la misma área.
+     * Si no existe ninguna activa, se crea "General".
+     */
+    private function ensureDefaultArea(): DependenciesModel
+    {
+        $area = DependenciesModel::where('status', 1)->orderBy('name')->first();
+
+        if ($area) {
+            return $area;
+        }
+
+        return DependenciesModel::create([
+            'name' => 'General',
+            'status' => 1,
+            'parent_id' => null,
+        ]);
+    }
+
+    private function resolveAreaId(?string $_requested = null): ObjectId
+    {
+        // Mientras no haya áreas reales, forzamos la misma para todos.
+        $default = $this->ensureDefaultArea();
+
+        return new ObjectId((string) $default->getKey());
+    }
+
+    private function assignDefaultAreaToUsersWithoutOne(DependenciesModel $area): void
+    {
+        $areaObjectId = new ObjectId((string) $area->getKey());
+
+        User::query()
+            ->where(function ($query) {
+                $query->whereNull('area_id')->orWhere('area_id', '');
+            })
+            ->update(['area_id' => $areaObjectId]);
     }
 }
