@@ -6,8 +6,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const INPUT_CSV = "derecho_multiple.csv";
-const OUTPUT_CSV = "derecho_multiple_opcion_unica.csv";
+const INPUT_CSV = "banco_preguntas_anatomia_limpio.csv";
+const OUTPUT_CSV = "banco_preguntas_anatomia_limpio_opcion_unica.csv";
 const BATCH_SIZE = 10;
 const CHECKPOINT_EVERY = 5;
 const MAX_OPCION_CHARS = 220;

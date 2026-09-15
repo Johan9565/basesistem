@@ -452,19 +452,7 @@ function dialItemsFor(user) {
                                 <InputError :message="form.errors.role_id" class="mt-2" />
                             </div>
 
-                            <div>
-                                <InputLabel value="Área" />
-                                <WrappingSelect
-                                    v-model="form.area_id"
-                                    panel-preset="!max-w-[min(12rem,calc(100vw-2rem))] min-w-0 overflow-hidden"
-                                    :options="props.areas"
-                                    optionLabel="name"
-                                    optionValue="id"
-                                    class="mt-1 block w-full"
-                                    placeholder="Selecciona un área"
-                                />
-                                <InputError :message="form.errors.area_id" class="mt-2" />
-                            </div>
+                            <!-- Área: por ahora se asigna automáticamente la misma a todos -->
 
                             <div>
                                 <InputLabel value="Estado" />
@@ -544,20 +532,7 @@ function dialItemsFor(user) {
                                 <InputError :message="form.errors.role_id" class="mt-2" />
                             </div>
 
-                            <div>
-                                <InputLabel value="Área" />
-                                <WrappingSelect
-                                    v-model="form.area_id"
-                                    panel-preset="!max-w-[min(12rem,calc(100vw-2rem))] min-w-0 overflow-hidden"
-                                    :options="props.areas"
-                                    optionLabel="name"
-                                    optionValue="id"
-                                    class="mt-1 block w-full"
-                                    filter
-                                    filterPlaceholder="Buscar área..."
-                                />
-                                <InputError :message="form.errors.area_id" class="mt-2" />
-                            </div>
+                            <!-- Área: por ahora se asigna automáticamente la misma a todos -->
 
                             <div>
                                 <InputLabel value="Estado" />
