@@ -26,7 +26,7 @@ services:
     restart: always
   mongo:
     image: mongo:7.0
-    restart: always
+    restart: always wh
     command: ["mongod", "--wiredTigerCacheSizeGB", "1"]
     # Solo localhost del servidor (para Compass vía túnel SSH/Tailscale)
     ports:
