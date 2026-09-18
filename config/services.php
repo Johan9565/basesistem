@@ -35,4 +35,27 @@ return [
         ],
     ],
 
+    'evolution' => [
+        'base_url' => env('EVOLUTION_BASE_URL', 'http://evolution-api:8080'),
+        'api_key' => env('EVOLUTION_API_KEY'),
+        'webhook_secret' => env('EVOLUTION_WEBHOOK_SECRET'),
+        'server_url' => env('EVOLUTION_SERVER_URL', 'http://localhost:8081'),
+    ],
+
+    'deepseek' => [
+        'key' => env('DEEPSEEK_API_KEY'),
+        'base_url' => env('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
+        'model' => env('DEEPSEEK_MODEL', 'deepseek-chat'),
+    ],
+
+    'google_calendar' => [
+        'calendar_id' => env('GOOGLE_CALENDAR_ID'),
+        'credentials_path' => env('GOOGLE_SERVICE_ACCOUNT_PATH', 'storage/app/google/service-account.json'),
+        'timezone' => env('GOOGLE_CALENDAR_TIMEZONE', 'America/Merida'),
+    ],
+
+    'whatsapp' => [
+        'history_limit' => (int) env('WHATSAPP_HISTORY_LIMIT', 15),
+    ],
+
 ];

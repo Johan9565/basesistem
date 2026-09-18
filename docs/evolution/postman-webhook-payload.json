@@ -1,0 +1,17 @@
+{
+  "event": "MESSAGES_UPSERT",
+  "instance": "instancia_local",
+  "data": {
+    "key": {
+      "remoteJid": "5219981234567@s.whatsapp.net",
+      "fromMe": false,
+      "id": "POSTMAN_TEST_001"
+    },
+    "pushName": "Usuario Prueba",
+    "message": {
+      "conversation": "Hola, quiero agendar una cita el viernes a las 10:00 para revisión."
+    },
+    "messageType": "conversation",
+    "messageTimestamp": 1726670000
+  }
+}

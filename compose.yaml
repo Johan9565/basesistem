@@ -1,4 +1,6 @@
-name: andres_page
+# Stack local WSL — mismo proyecto Docker que ya usabas (basesistem).
+# NO usar name distinto: la DB Mongo y volúmenes viven en este proyecto.
+name: basesistem
 services:
   laravel.test:
     build:
@@ -13,21 +15,24 @@ services:
         WWWUSER: '${WWWUSER}'
         LARAVEL_SAIL: 1
         XDEBUG_MODE: 'off'
-        IGNITION_LOCAL_SITES_PATH: '/home/papafrita45/servicios/stacks/andres_page'
+        IGNITION_LOCAL_SITES_PATH: '/var/www/html/basesistem'
     volumes:
-        - '/home/papafrita45/servicios/stacks/andres_page:/var/www/html' # 👈 AQUÍ LA RUTA ABSOLUTA
+        - '/var/www/html/basesistem:/var/www/html'
+    ports:
+        - '${FORWARD_APP_PORT:-8000}:80'
+        - '${VITE_PORT:-5173}:${VITE_PORT:-5173}'
+        - '${FORWARD_REVERB_PORT:-8080}:8080'
     networks:
         - sail
-        - nginx-red
     depends_on:
         - redis
         - meilisearch
         - mongo
     restart: always
   mongo:
-    image: mongo:7.0
+    image: mongo:8
     restart: always
-    # Solo localhost del servidor (para Compass vía túnel SSH/Tailscale)
+    # Solo localhost (Compass vía túnel SSH/Tailscale)
     ports:
       - "127.0.0.1:27017:27017"
     environment:
@@ -70,15 +75,64 @@ services:
         - http://127.0.0.1:7700/health
       retries: 3
       timeout: 5s
+  evolution-postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${EVOLUTION_DB_USER:-evolution}
+      POSTGRES_PASSWORD: ${EVOLUTION_DB_PASSWORD:-evolution_secret}
+      POSTGRES_DB: ${EVOLUTION_DB_NAME:-evolution}
+    volumes:
+      - evolution_pg:/var/lib/postgresql/data
+    networks:
+      - sail
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.7
+    restart: always
+    ports:
+      - '${EVOLUTION_PORT:-8081}:8080'
+    environment:
+      SERVER_URL: ${EVOLUTION_SERVER_URL:-http://localhost:8081}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-change-me-evolution-key}
+      DATABASE_ENABLED: 'true'
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${EVOLUTION_DB_USER:-evolution}:${EVOLUTION_DB_PASSWORD:-evolution_secret}@evolution-postgres:5432/${EVOLUTION_DB_NAME:-evolution}?schema=evolution_api
+      DATABASE_CONNECTION_CLIENT_NAME: evolution
+      DATABASE_SAVE_DATA_INSTANCE: 'true'
+      DATABASE_SAVE_DATA_NEW_MESSAGE: 'true'
+      DATABASE_SAVE_MESSAGE_UPDATE: 'true'
+      CACHE_REDIS_ENABLED: 'true'
+      CACHE_REDIS_URI: redis://redis:6379/2
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_LOCAL_ENABLED: 'false'
+      DEL_INSTANCE: 'false'
+      RABBITMQ_ENABLED: 'false'
+      S3_ENABLED: 'false'
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - sail
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
 networks:
   sail:
     driver: bridge
-  nginx-red:
-    external: true
 volumes:
   sail-redis:
     driver: local
   sail-meilisearch:
     driver: local
   sail-mongo:
+    driver: local
+  evolution_pg:
+    driver: local
+  evolution_instances:
     driver: local

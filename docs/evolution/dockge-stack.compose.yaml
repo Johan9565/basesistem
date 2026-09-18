@@ -1,0 +1,59 @@
+name: evolution-api
+
+services:
+  evolution-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: CHANGE_ME_STRONG_PASSWORD
+      POSTGRES_DB: evolution
+    volumes:
+      - evolution_pg:/var/lib/postgresql/data
+    networks:
+      - evolution_internal
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U evolution -d evolution']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.7
+    restart: unless-stopped
+    environment:
+      SERVER_URL: https://evolution.tudominio.com
+      AUTHENTICATION_API_KEY: CHANGE_ME_STRONG_API_KEY
+      DATABASE_ENABLED: 'true'
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:CHANGE_ME_STRONG_PASSWORD@evolution-postgres:5432/evolution?schema=evolution_api
+      DATABASE_CONNECTION_CLIENT_NAME: evolution
+      DATABASE_SAVE_DATA_INSTANCE: 'true'
+      DATABASE_SAVE_DATA_NEW_MESSAGE: 'true'
+      DATABASE_SAVE_MESSAGE_UPDATE: 'true'
+      CACHE_REDIS_ENABLED: 'false'
+      CACHE_LOCAL_ENABLED: 'true'
+      DEL_INSTANCE: 'false'
+      RABBITMQ_ENABLED: 'false'
+      S3_ENABLED: 'false'
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - evolution_internal
+      - nginx-red
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+
+# PRODUCCIÓN: nginx-red es la red del reverse proxy del servidor.
+# En local (WSL) NO uses este archivo; usa compose.yaml + LOCAL_SETUP.md.
+
+networks:
+  evolution_internal:
+    driver: bridge
+  nginx-red:
+    external: true
+
+volumes:
+  evolution_pg:
+  evolution_instances:
