@@ -26,7 +26,6 @@ services:
         - sail
     depends_on:
         - redis
-        - meilisearch
         - mongo
     restart: always
   mongo:
@@ -43,6 +42,7 @@ services:
       - sail-mongo:/data/db
     networks:
       - sail
+  # Redis: solo para Evolution API (Laravel usa file/sync)
   redis:
     image: redis:alpine
     restart: always
@@ -55,24 +55,6 @@ services:
         - CMD
         - redis-cli
         - ping
-      retries: 3
-      timeout: 5s
-  meilisearch:
-    image: getmeili/meilisearch:latest
-    restart: always
-    environment:
-      MEILI_NO_ANALYTICS: "true"
-    volumes:
-      - sail-meilisearch:/meili_data
-    networks:
-      - sail
-    healthcheck:
-      test:
-        - CMD
-        - wget
-        - --no-verbose
-        - --spider
-        - http://127.0.0.1:7700/health
       retries: 3
       timeout: 5s
   evolution-postgres:
@@ -127,8 +109,6 @@ networks:
     driver: bridge
 volumes:
   sail-redis:
-    driver: local
-  sail-meilisearch:
     driver: local
   sail-mongo:
     driver: local

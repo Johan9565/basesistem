@@ -11,10 +11,11 @@ class ConversationRepository
     {
         $limit = $limit ?? (int) config('services.whatsapp.history_limit', 15);
 
+        // _id de Mongo es monotónico: evita desorden cuando created_at coincide al segundo.
         return WhatsappMessage::query()
             ->where('instance_name', $instanceName)
             ->where('user_phone', $userPhone)
-            ->orderBy('created_at', 'desc')
+            ->orderBy('_id', 'desc')
             ->limit($limit)
             ->get()
             ->reverse()
@@ -42,10 +43,19 @@ class ConversationRepository
     }
 
     /**
+     * Historial corto para DeepSeek: solo turnos user/assistant (sin tools).
+     * El estado de reserva va en el system prompt, no en 15 mensajes viejos.
+     *
      * @return list<array<string, mixed>>
      */
     public function toDeepSeekMessages(string $instanceName, string $userPhone, string $systemPrompt): array
     {
+        $maxTurns = max(1, (int) config('services.whatsapp.history_turns', 3));
+        $fetchLimit = max(
+            $maxTurns * 4,
+            (int) config('services.whatsapp.history_limit', 12),
+        );
+
         $messages = [
             [
                 'role' => 'system',
@@ -53,23 +63,58 @@ class ConversationRepository
             ],
         ];
 
-        foreach ($this->recent($instanceName, $userPhone) as $row) {
-            $message = [
-                'role' => $row->role,
-                'content' => $row->content ?? '',
+        $turns = [];
+        foreach ($this->recent($instanceName, $userPhone, $fetchLimit) as $row) {
+            $role = (string) $row->role;
+            if (! in_array($role, ['user', 'assistant'], true)) {
+                continue;
+            }
+
+            $content = trim((string) ($row->content ?? ''));
+            // Omitir assistants vacíos que solo tenían tool_calls.
+            if ($role === 'assistant' && $content === '' && ! empty($row->metadata['tool_calls'])) {
+                continue;
+            }
+            if ($content === '') {
+                continue;
+            }
+
+            $turns[] = [
+                'role' => $role,
+                'content' => $content,
             ];
-
-            if ($row->role === 'tool' && $row->tool_call_id) {
-                $message['tool_call_id'] = $row->tool_call_id;
-            }
-
-            if ($row->role === 'assistant' && ! empty($row->metadata['tool_calls'])) {
-                $message['tool_calls'] = $row->metadata['tool_calls'];
-            }
-
-            $messages[] = $message;
         }
 
-        return $messages;
+        // Conservar solo los últimos N mensajes de usuario (+ assistants entre medias).
+        $userIndexes = [];
+        foreach ($turns as $i => $t) {
+            if ($t['role'] === 'user') {
+                $userIndexes[] = $i;
+            }
+        }
+
+        if (count($userIndexes) > $maxTurns) {
+            $startIdx = $userIndexes[count($userIndexes) - $maxTurns];
+            $turns = array_slice($turns, $startIdx);
+        }
+
+        return array_merge($messages, $turns);
+    }
+
+    public function clearThread(string $instanceName, string $userPhone): int
+    {
+        $phone = preg_replace('/\D+/', '', $userPhone) ?? $userPhone;
+
+        return (int) WhatsappMessage::query()
+            ->where('instance_name', $instanceName)
+            ->where('user_phone', $phone)
+            ->delete();
+    }
+
+    public function clearInstance(string $instanceName): int
+    {
+        return (int) WhatsappMessage::query()
+            ->where('instance_name', $instanceName)
+            ->delete();
     }
 }

@@ -9,6 +9,10 @@ use App\Http\Controllers\RolesController;
 use App\Http\Controllers\ComponentsController;
 use App\Http\Controllers\DependenciesController;
 use App\Http\Controllers\NotificationsController;
+use App\Http\Controllers\Whatsapp\InstancesController as WhatsappInstancesController;
+use App\Http\Controllers\Whatsapp\ConversationsController as WhatsappConversationsController;
+use App\Http\Controllers\Whatsapp\MessagesController as WhatsappMessagesController;
+use App\Http\Controllers\Whatsapp\CalendarController as WhatsappCalendarController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -56,6 +60,35 @@ Route::middleware(['auth', 'permission:administration'])->group(function () {
         // Route::delete('/dependencies/{dependency}', [DependenciesController::class, 'destroy'])->name('dependencies.destroy');
     });
 });
+
+Route::middleware(['auth', 'permission:whatsapp'])->group(function () {
+    Route::middleware(['permission:whatsapp.instances'])->group(function () {
+        Route::get('/whatsapp/instances', [WhatsappInstancesController::class, 'index'])->name('whatsapp.instances');
+        Route::post('/whatsapp/instances', [WhatsappInstancesController::class, 'store'])->name('whatsapp.instances.store');
+        Route::match(['patch', 'post'], '/whatsapp/instances/{instance}', [WhatsappInstancesController::class, 'update'])->name('whatsapp.instances.update');
+        Route::delete('/whatsapp/instances/{instance}', [WhatsappInstancesController::class, 'destroy'])->name('whatsapp.instances.destroy');
+        Route::post('/whatsapp/instances/{instance}/connect', [WhatsappInstancesController::class, 'connect'])->name('whatsapp.instances.connect');
+    });
+
+    Route::middleware(['permission:whatsapp.conversations'])->group(function () {
+        Route::get('/whatsapp/conversations', [WhatsappConversationsController::class, 'index'])->name('whatsapp.conversations');
+        Route::get('/whatsapp/conversations/{instance}', [WhatsappConversationsController::class, 'show'])->name('whatsapp.conversations.show');
+        Route::delete('/whatsapp/conversations/{instance}/messages', [WhatsappConversationsController::class, 'destroyInstanceMessages'])->name('whatsapp.conversations.clear');
+        Route::delete('/whatsapp/conversations/{instance}/{phone}', [WhatsappConversationsController::class, 'destroyThread'])->name('whatsapp.conversations.thread.destroy');
+    });
+
+    Route::middleware(['permission:whatsapp.calendar'])->group(function () {
+        Route::get('/whatsapp/calendar', [WhatsappCalendarController::class, 'index'])->name('whatsapp.calendar');
+        Route::get('/whatsapp/calendar/{instance}', [WhatsappCalendarController::class, 'show'])->name('whatsapp.calendar.show');
+        Route::post('/whatsapp/calendar/{instance}/sync', [WhatsappCalendarController::class, 'sync'])->name('whatsapp.calendar.sync');
+    });
+
+    Route::middleware(['permission:whatsapp.send'])->group(function () {
+        Route::get('/whatsapp/send', [WhatsappMessagesController::class, 'index'])->name('whatsapp.send');
+        Route::post('/whatsapp/send', [WhatsappMessagesController::class, 'store'])->name('whatsapp.send.store');
+    });
+});
+
 Route::middleware(['auth'])->group(function () {
     Route::post('/theme', [ComponentsController::class, 'updateActiveTheme'])->name('theme.update');
 

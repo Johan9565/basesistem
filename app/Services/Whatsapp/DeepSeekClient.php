@@ -25,10 +25,23 @@ class DeepSeekClient
         $payload = [
             'model' => $model,
             'messages' => $messages,
+            'max_tokens' => (int) config('services.deepseek.max_tokens', 150),
+            'temperature' => (float) config('services.deepseek.temperature', 0.25),
         ];
 
+        $stop = config('services.deepseek.stop', []);
+        if (is_array($stop) && $stop !== []) {
+            // Env con "\n\n" literal → convertir escapes.
+            $payload['stop'] = array_map(static function ($s) {
+                return str_replace(['\\n', '\n'], "\n", (string) $s);
+            }, $stop);
+        }
+
         if ($withTools) {
-            $payload['tools'] = [$this->calendarToolDefinition()];
+            $payload['tools'] = [
+                $this->calendarToolDefinition(),
+                $this->bookingStateToolDefinition(),
+            ];
             $payload['tool_choice'] = 'auto';
         }
 
@@ -56,7 +69,7 @@ class DeepSeekClient
             'type' => 'function',
             'function' => [
                 'name' => 'create_calendar_event',
-                'description' => 'Crea una cita en Google Calendar con asunto y horario de inicio/fin.',
+                'description' => 'Crea una cita si el horario está libre. Si está ocupado, la herramienta devolverá error y debes ofrecer otro horario.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
@@ -78,6 +91,40 @@ class DeepSeekClient
                         ],
                     ],
                     'required' => ['summary', 'start_iso', 'end_iso'],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function bookingStateToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'update_booking_state',
+                'description' => 'Guarda el progreso de la reserva en el backend (no en el chat). Llámalo cuando conozcas nombre, servicio, fecha u hora.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'step' => [
+                            'type' => 'string',
+                            'description' => 'NEW|GREETING|AWAITING_NAME|AWAITING_SERVICE|AWAITING_DATE|AWAITING_TIME|READY|COMPLETED',
+                        ],
+                        'name' => ['type' => 'string'],
+                        'service' => ['type' => 'string'],
+                        'date' => [
+                            'type' => 'string',
+                            'description' => 'Fecha YYYY-MM-DD',
+                        ],
+                        'time' => [
+                            'type' => 'string',
+                            'description' => 'Hora HH:MM (24h)',
+                        ],
+                        'notes' => ['type' => 'string'],
+                    ],
                 ],
             ],
         ];

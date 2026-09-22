@@ -3,8 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Models\WhatsappInstance;
+use App\Services\Whatsapp\EvolutionApiClient;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Http;
 use Throwable;
 
 class ProvisionWhatsappClientCommand extends Command
@@ -19,7 +19,7 @@ class ProvisionWhatsappClientCommand extends Command
 
     protected $description = 'Alta de cliente: instancia Evolution + documento Mongo + webhook';
 
-    public function handle(): int
+    public function handle(EvolutionApiClient $evolution): int
     {
         $name = (string) $this->argument('name');
         $calendarId = (string) ($this->option('calendar') ?: config('services.google_calendar.calendar_id'));
@@ -36,7 +36,8 @@ class ProvisionWhatsappClientCommand extends Command
 
         if (! $skipEvolution) {
             try {
-                $this->createEvolutionInstance($name, $webhook !== '' ? $webhook : null);
+                $evolution->createInstance($name, $webhook !== '' ? $webhook : null);
+                $this->info("Instancia Evolution creada: {$name}");
             } catch (Throwable $e) {
                 $this->error('Evolution create falló: '.$e->getMessage());
 
@@ -62,39 +63,5 @@ class ProvisionWhatsappClientCommand extends Command
         }
 
         return self::SUCCESS;
-    }
-
-    protected function createEvolutionInstance(string $name, ?string $webhookUrl): void
-    {
-        $baseUrl = rtrim((string) config('services.evolution.base_url'), '/');
-        $apiKey = (string) config('services.evolution.api_key');
-        $secret = (string) config('services.evolution.webhook_secret');
-
-        $payload = [
-            'instanceName' => $name,
-            'qrcode' => true,
-            'integration' => 'WHATSAPP-BAILEYS',
-        ];
-
-        if ($webhookUrl) {
-            $payload['webhook'] = [
-                'url' => $webhookUrl,
-                'byEvents' => false,
-                'base64' => false,
-                'events' => ['MESSAGES_UPSERT'],
-                'headers' => [
-                    'X-Evolution-Secret' => $secret,
-                ],
-            ];
-        }
-
-        Http::baseUrl($baseUrl)
-            ->withHeaders(['apikey' => $apiKey])
-            ->acceptJson()
-            ->timeout(60)
-            ->post('/instance/create', $payload)
-            ->throw();
-
-        $this->info("Instancia Evolution creada: {$name}");
     }
 }

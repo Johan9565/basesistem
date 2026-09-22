@@ -15,6 +15,8 @@ class WhatsappInstance extends Model
     protected $fillable = [
         'instance_name',
         'google_calendar_id',
+        'google_credentials_path',
+        'google_service_email',
         'system_prompt',
         'status',
         'timezone',
