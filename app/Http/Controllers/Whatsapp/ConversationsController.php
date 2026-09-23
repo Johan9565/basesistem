@@ -166,31 +166,46 @@ class ConversationsController extends Controller
         }
 
         $sessionKey = $row->evolutionName();
-        $deleted = $conversations->clearThread($sessionKey, $phone);
-        $bookingStates->resetBookingFields($sessionKey, preg_replace('/\D+/', '', $phone) ?? $phone);
+        $normalized = preg_replace('/\D+/', '', $phone) ?? $phone;
+
+        // Historial puede estar bajo la sesión Evolution o (legado) bajo el nombre del perfil.
+        $deleted = $conversations->clearThread($sessionKey, $normalized);
+        if ($sessionKey !== (string) $row->instance_name) {
+            $deleted += $conversations->clearThread((string) $row->instance_name, $normalized);
+        }
+
+        $bookingStates->resetBookingFields($sessionKey, $normalized);
+        if ($sessionKey !== (string) $row->instance_name) {
+            $bookingStates->resetBookingFields((string) $row->instance_name, $normalized);
+        }
 
         return redirect()
             ->route('whatsapp.conversations.show', ['instance' => $instance])
             ->with('flash', [
                 'type' => 'success',
-                'message' => "Conversación borrada ({$deleted} mensajes). El bot empezará limpio con ese número.",
+                'message' => "Conversación borrada ({$deleted} mensajes) y estado de cita reiniciado. El bot empieza limpio con {$normalized}.",
             ]);
     }
 
-    public function destroyInstanceMessages(string $instance, ConversationRepository $conversations)
+    public function destroyInstanceMessages(string $instance, ConversationRepository $conversations, BookingStateRepository $bookingStates)
     {
         $row = WhatsappInstance::query()->where('instance_name', $instance)->first();
         if (! $row) {
             abort(404);
         }
 
-        $deleted = $conversations->clearInstance($row->evolutionName());
+        $sessionKey = $row->evolutionName();
+        $deleted = $conversations->clearInstance($sessionKey, [(string) $row->instance_name]);
+        $reset = $bookingStates->resetAllForInstance($sessionKey);
+        if ($sessionKey !== (string) $row->instance_name) {
+            $reset += $bookingStates->resetAllForInstance((string) $row->instance_name);
+        }
 
         return redirect()
             ->route('whatsapp.conversations.show', ['instance' => $instance])
             ->with('flash', [
                 'type' => 'success',
-                'message' => "Se borraron {$deleted} mensajes de la instancia.",
+                'message' => "Se borraron {$deleted} mensajes y se reiniciaron {$reset} estados de cita. El bot empieza limpio.",
             ]);
     }
 }

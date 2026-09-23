@@ -52,7 +52,7 @@ class MimoClient implements LlmChatClient
             $response = Http::baseUrl($baseUrl)
                 ->withToken($apiKey)
                 ->acceptJson()
-                ->timeout(60)
+                ->timeout(120)
                 ->post('/chat/completions', $payload)
                 ->throw()
                 ->json();

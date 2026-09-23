@@ -128,16 +128,31 @@ class ConversationRepository
     {
         $phone = preg_replace('/\D+/', '', $userPhone) ?? $userPhone;
 
+        // Borra por teléfono normalizado y por posibles variantes guardadas.
         return (int) WhatsappMessage::query()
             ->where('instance_name', $instanceName)
-            ->where('user_phone', $phone)
+            ->where(function ($q) use ($phone, $userPhone) {
+                $q->where('user_phone', $phone)
+                    ->orWhere('user_phone', $userPhone)
+                    ->orWhere('user_phone', '+'.$phone);
+            })
             ->delete();
     }
 
-    public function clearInstance(string $instanceName): int
+    /**
+     * Borra mensajes de una sesión y, si se pasan alias, también de esos instance_name.
+     *
+     * @param  list<string>  $alsoInstanceNames
+     */
+    public function clearInstance(string $instanceName, array $alsoInstanceNames = []): int
     {
+        $names = array_values(array_unique(array_filter(array_merge(
+            [$instanceName],
+            $alsoInstanceNames,
+        ))));
+
         return (int) WhatsappMessage::query()
-            ->where('instance_name', $instanceName)
+            ->whereIn('instance_name', $names)
             ->delete();
     }
 }

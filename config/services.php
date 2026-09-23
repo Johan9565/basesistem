@@ -78,7 +78,7 @@ return [
         // Mensajes a leer de Mongo antes de recortar (margen).
         'history_limit' => (int) env('WHATSAPP_HISTORY_LIMIT', 12),
         // Pares user/assistant a enviar a DeepSeek (2–3 recomendado).
-        'history_turns' => (int) env('WHATSAPP_HISTORY_TURNS', 3),
+        'history_turns' => (int) env('WHATSAPP_HISTORY_TURNS', 8),
         'inactive_hours' => (int) env('WHATSAPP_INACTIVE_HOURS', 24),
         // Opt-in: no enviar nada automático hasta que lo actives.
         'auto_welcome' => filter_var(env('WHATSAPP_AUTO_WELCOME', false), FILTER_VALIDATE_BOOLEAN),

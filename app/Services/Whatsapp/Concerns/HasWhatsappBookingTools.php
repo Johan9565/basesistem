@@ -15,6 +15,63 @@ trait HasWhatsappBookingTools
             $this->resetBookingToolDefinition(),
             $this->escalateToHumanToolDefinition(),
             $this->calendarToolDefinition(),
+            $this->listMyAppointmentsToolDefinition(),
+            $this->cancelAppointmentToolDefinition(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function listMyAppointmentsToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'list_my_appointments',
+                'description' => 'Lista citas FUTURAS de ESTE número de WhatsApp en la agenda. Úsala ANTES de cancelar o si el cliente pregunta qué citas tiene. No inventes citas.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'include_past_hours' => [
+                            'type' => 'integer',
+                            'description' => 'Horas hacia atrás a incluir (default 0 = solo futuras). Máx 48.',
+                        ],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function cancelAppointmentToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'cancel_appointment',
+                'description' => 'CANCELA una cita real (sistema + Google). PELIGROSO: úsala SOLO tras list_my_appointments, haber mostrado el resumen al cliente, y recibir un SÍ explícito en ESTE turno. Requiere client_confirmed=true y appointment_id que pertenezca a ESTE teléfono. NUNCA canceles por ambigüedad, ni la cita de otro número, ni varias a la vez.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'appointment_id' => [
+                            'type' => 'string',
+                            'description' => 'ID exacto devuelto por list_my_appointments.',
+                        ],
+                        'client_confirmed' => [
+                            'type' => 'boolean',
+                            'description' => 'true SOLO si el cliente confirmó explícitamente cancelar ESA cita (sí, confirma, cancelala).',
+                        ],
+                        'confirm_summary' => [
+                            'type' => 'string',
+                            'description' => 'Resumen breve de lo que se cancela (servicio + fecha/hora) para auditoría.',
+                        ],
+                    ],
+                    'required' => ['appointment_id', 'client_confirmed'],
+                ],
+            ],
         ];
     }
 
@@ -95,7 +152,7 @@ trait HasWhatsappBookingTools
             'type' => 'function',
             'function' => [
                 'name' => 'update_booking_state',
-                'description' => 'Guarda progreso. Si el cliente menciona un paquete/sesión (ej. Flying Dron), guarda service de inmediato y NO lo vuelvas a pedir. Si da un nombre nuevo, sobrescribe name. Si indica ciudad/localidad (Cancún, Puerto Morelos, Playa del Carmen) con el lugar, guarda location completo (tipo + ciudad). Usa step=COLLECTING al detectar intención; clear_fields para borrar un dato.',
+                'description' => 'Guarda progreso. Llama en el mismo turno en que el cliente da un dato. Si ya dijo nombre o servicio, guárdalos YA. Al actualizar solo date/time (tras check_availability), NO envíes name/service vacíos ni clear_fields. Si el tipo de sesión/paquete ya está o lo mencionó, guarda service y NO lo vuelvas a pedir. Usa step=COLLECTING al detectar intención.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
@@ -148,7 +205,7 @@ trait HasWhatsappBookingTools
             'type' => 'function',
             'function' => [
                 'name' => 'reset_booking',
-                'description' => 'Limpia todos los datos recolectados y vuelve a etapa RECEPTION. Úsalo si el cliente cancela, dice "ya no quiero" o "empecemos de nuevo".',
+                'description' => 'Limpia solo el embudo de conversación (nombre/servicio/fecha en estado) y vuelve a RECEPTION. NO elimina citas del calendario. Para cancelar una cita ya agendada usa list_my_appointments + cancel_appointment.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [

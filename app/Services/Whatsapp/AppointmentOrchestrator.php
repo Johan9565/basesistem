@@ -54,6 +54,8 @@ class AppointmentOrchestrator
         }
 
         $timezone = $instance->timezone ?? config('services.google_calendar.timezone');
+        $this->bookingStates->backfillMissingFromTranscript($sessionKey, $phone);
+        $booking = $this->bookingStates->find($sessionKey, $phone) ?? $booking;
         $staticPrompt = $this->buildStaticSystemPrompt($instance, (string) $timezone);
         $dynamicPrompt = $this->buildDynamicSystemPrompt(
             $instance,
@@ -279,6 +281,8 @@ class AppointmentOrchestrator
             'reset_booking' => $this->toolResetBooking($instance, $phone, $args),
             'escalate_to_human' => $this->toolEscalateToHuman($instance, $phone, $args),
             'create_calendar_event' => $this->toolCreateCalendarEvent($instance, $phone, $args),
+            'list_my_appointments' => $this->toolListMyAppointments($instance, $phone, $args),
+            'cancel_appointment' => $this->toolCancelAppointment($instance, $phone, $args),
             default => ['ok' => false, 'error' => "Herramienta desconocida: {$name}"],
         };
     }
@@ -668,6 +672,156 @@ class AppointmentOrchestrator
         }
     }
 
+    /**
+     * @param  array<string, mixed>  $args
+     * @return array<string, mixed>
+     */
+    protected function toolListMyAppointments(WhatsappInstance $instance, string $phone, array $args): array
+    {
+        $tz = (string) ($instance->timezone ?: config('services.google_calendar.timezone', 'America/Merida'));
+        $pastHours = max(0, min(48, (int) ($args['include_past_hours'] ?? 0)));
+        $from = Carbon::now($tz)->subHours($pastHours);
+
+        $rows = WhatsappAppointment::query()
+            ->where('instance_name', $instance->evolutionName())
+            ->where('user_phone', $phone)
+            ->where('starts_at', '>=', $from)
+            ->orderBy('starts_at')
+            ->limit(20)
+            ->get();
+
+        $items = $rows->map(function (WhatsappAppointment $a) use ($tz) {
+            return [
+                'id' => (string) $a->getKey(),
+                'summary' => (string) ($a->summary ?? ''),
+                'starts_at' => $a->starts_at?->copy()->timezone($tz)->format('Y-m-d H:i'),
+                'ends_at' => $a->ends_at?->copy()->timezone($tz)->format('Y-m-d H:i'),
+                'day_label' => $a->starts_at
+                    ? $a->starts_at->copy()->timezone($tz)->locale('es')->isoFormat('dddd D [de] MMMM HH:mm')
+                    : null,
+            ];
+        })->values()->all();
+
+        return [
+            'ok' => true,
+            'count' => count($items),
+            'appointments' => $items,
+            'message' => $items === []
+                ? 'No hay citas futuras de este número. No inventes ninguna.'
+                : 'Muestra estas citas al cliente (servicio + día/hora). Si quiere cancelar, pide cuál y luego confirmación explícita antes de cancel_appointment.',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $args
+     * @return array<string, mixed>
+     */
+    protected function toolCancelAppointment(WhatsappInstance $instance, string $phone, array $args): array
+    {
+        $confirmed = filter_var($args['client_confirmed'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        if (! $confirmed) {
+            return [
+                'ok' => false,
+                'error' => 'Sin confirmación del cliente.',
+                'message' => 'NO cancelaste nada. Primero resume la cita y pide un SÍ explícito; luego llama con client_confirmed=true.',
+            ];
+        }
+
+        $id = trim((string) ($args['appointment_id'] ?? ''));
+        if ($id === '') {
+            return [
+                'ok' => false,
+                'error' => 'Falta appointment_id.',
+                'message' => 'Usa list_my_appointments y el id exacto. No cancelaste nada.',
+            ];
+        }
+
+        $sessionKey = $instance->evolutionName();
+        $apt = WhatsappAppointment::query()
+            ->where('instance_name', $sessionKey)
+            ->find($id);
+
+        if (! $apt) {
+            return [
+                'ok' => false,
+                'error' => 'Cita no encontrada.',
+                'message' => 'Ese id no existe en esta agenda. Vuelve a list_my_appointments. No cancelaste nada.',
+            ];
+        }
+
+        // Solo el dueño del hilo WhatsApp puede cancelar su propia cita.
+        $owner = preg_replace('/\D+/', '', (string) ($apt->user_phone ?? '')) ?? '';
+        $caller = preg_replace('/\D+/', '', $phone) ?? $phone;
+        if ($owner === '' || $owner !== $caller) {
+            Log::warning('WhatsApp cancel blocked: phone mismatch', [
+                'instance' => $sessionKey,
+                'appointment_id' => $id,
+                'owner' => $owner,
+                'caller' => $caller,
+            ]);
+
+            return [
+                'ok' => false,
+                'error' => 'La cita no pertenece a este número.',
+                'message' => 'PROHIBIDO cancelar. No digas que se canceló. Ofrece listar sus citas o escalate_to_human.',
+            ];
+        }
+
+        $tz = (string) ($apt->timezone ?: $instance->timezone ?: config('services.google_calendar.timezone'));
+        $summary = (string) ($apt->summary ?? 'Cita');
+        $when = $apt->starts_at
+            ? $apt->starts_at->copy()->timezone($tz)->locale('es')->isoFormat('dddd D [de] MMMM HH:mm')
+            : '(sin fecha)';
+
+        $googleNote = null;
+        $eventId = (string) ($apt->google_event_id ?? '');
+        $calendarId = (string) ($apt->google_calendar_id ?: $instance->google_calendar_id ?: '');
+
+        if ($eventId !== '' && $calendarId !== '') {
+            try {
+                $this->calendar->deleteEvent(
+                    $calendarId,
+                    $eventId,
+                    $instance->google_credentials_path ?: null,
+                );
+            } catch (Throwable $e) {
+                Log::warning('WhatsApp cancel: Google delete failed', [
+                    'appointment_id' => $id,
+                    'error' => $e->getMessage(),
+                ]);
+                $googleNote = $e->getMessage();
+            }
+        }
+
+        $apt->delete();
+
+        // Limpia embudo si coincidía con la cita cancelada.
+        $this->bookingStates->resetToReception($sessionKey, $phone, resumeBot: true);
+
+        Log::info('WhatsApp appointment cancelled by bot', [
+            'instance' => $sessionKey,
+            'phone' => $phone,
+            'appointment_id' => $id,
+            'summary' => $summary,
+            'when' => $when,
+            'confirm_summary' => $args['confirm_summary'] ?? null,
+            'google_error' => $googleNote,
+        ]);
+
+        return [
+            'ok' => true,
+            'cancelled' => [
+                'id' => $id,
+                'summary' => $summary,
+                'when' => $when,
+            ],
+            'google_error' => $googleNote,
+            'message' => $googleNote
+                ? "Cita cancelada en el sistema ({$summary} — {$when}). Google pudo fallar: avisa que quedó cancelada aquí y el equipo revisa el calendario."
+                : "Cita cancelada correctamente ({$summary} — {$when}). Ahora sí puedes confirmarlo al cliente.",
+        ];
+    }
+
     protected function notifyStaffEscalation(
         WhatsappInstance $instance,
         string $phone,
@@ -816,6 +970,7 @@ class AppointmentOrchestrator
         $stage = $this->bookingStates->normalizeStage((string) ($booking->step ?? ''));
         $stateJson = $this->bookingStates->toPromptJson($booking);
         $stagePrompt = $this->stagePrompt($stage, $businessName, $todayLabel, $timezone, $booking);
+        $retention = $this->bookingRetentionReminder($booking);
 
         return <<<PROMPT
 Contexto temporal:
@@ -825,7 +980,53 @@ Verifica que el día de la semana coincida con la fecha.
 
 Estado persistido: {$stateJson}
 
+{$retention}
+
 {$stagePrompt}
+PROMPT;
+    }
+
+    /**
+     * Evita que el modelo “reinicie” el embudo tras check_availability u otros tools.
+     */
+    protected function bookingRetentionReminder($booking): string
+    {
+        if (! $booking) {
+            return '';
+        }
+
+        $filled = [];
+        $missing = [];
+        $map = [
+            'nombre' => trim((string) ($booking->name ?? '')),
+            'servicio' => trim((string) ($booking->service ?? '')),
+            'fecha' => trim((string) ($booking->date ?? '')),
+            'hora' => trim((string) ($booking->time ?? '')),
+            'ubicacion' => trim((string) ($booking->location ?? '')),
+            'notas' => trim((string) ($booking->notes ?? '')),
+        ];
+
+        foreach ($map as $label => $value) {
+            if ($value !== '') {
+                $filled[] = "- {$label}: {$value}";
+            } else {
+                $missing[] = $label;
+            }
+        }
+
+        $filledBlock = $filled !== []
+            ? "YA GUARDADO (PROHIBIDO volver a pedirlo):\n".implode("\n", $filled)
+            : 'YA GUARDADO: (nada aún).';
+        $missingBlock = $missing !== []
+            ? 'AÚN FALTA (pide SOLO esto, de a uno): '.implode(', ', $missing)
+            : 'AÚN FALTA: nada — pasa a resumen CONFIRMING / create_calendar_event según etapa.';
+
+        return <<<PROMPT
+Retención de datos (anti-amnesia — CRÍTICO):
+Tras check_availability u otras tools, NO reinicies la conversación.
+{$filledBlock}
+{$missingBlock}
+Si el historial menciona nombre/servicio y el estado dice Pendiente, llama update_booking_state INMEDIATO con esos valores antes de preguntar otra vez.
 PROMPT;
     }
 
@@ -839,9 +1040,14 @@ Nunca dejes un mensaje a medias (por ejemplo "te confirmo:" sin listar los datos
 
 Identidad del cliente:
 Si el usuario proporciona un nuevo nombre o corrige su identidad durante la conversación, sobrescribe inmediatamente cualquier nombre anterior con update_booking_state (campo name) y usa solo el nombre nuevo en adelante.
+En el MISMO turno en que el cliente da su nombre, DEBES llamar update_booking_state con name (no esperes al final).
 
 Paquete / tipo de sesión (no repetir preguntas):
 Si el tipo de sesión o paquete ya fue seleccionado o mencionado por el usuario en el historial inmediato (o servicio_producto en el estado NO es "Pendiente"), NO vuelvas a preguntar qué sesión/paquete quiere. Guárdalo de inmediato en service con update_booking_state y pide solo lo que falte.
+Si TÚ ya propusiste un servicio (ej. "Voy a agendar Consulta General") y el cliente no lo corrigió, guarda service=ese valor de inmediato.
+
+Anti-amnesia tras horarios:
+Cuando check_availability falle o el cliente cambie la hora, ACTUALIZA solo date/time con update_booking_state. NUNCA borres name/service/notes ni uses clear_fields. NUNCA vuelvas a pedir nombre o servicio si ya estaban en el estado o en el historial reciente.
 
 Ubicación:
 Cuando el cliente indique lugar, conserva la localidad/ciudad especificada (Cancún, Puerto Morelos, Playa del Carmen u otra) junto con el tipo de sitio. Guárdalo en location, por ejemplo "Playa pública, Puerto Morelos". Nunca resumas solo como "Playa pública" si ya dijo la ciudad.
@@ -852,11 +1058,22 @@ Disponibilidad y agendado (anti-alucinación — CRÍTICO):
 3) Si create_calendar_event o check_availability responden ok=false / available=false (p. ej. horario ocupado), NO digas que quedó confirmada: informa el conflicto y ofrece otra hora.
 4) Pedir confirmación del resumen al cliente NO es lo mismo que haber registrado la cita. Primero tool ok=true, después mensaje de éxito.
 
+Cancelación de citas (MUY PRECAVIDO — CRÍTICO):
+1) reset_booking NO cancela citas del calendario; solo limpia el embudo del chat.
+2) Si el cliente quiere cancelar una cita ya agendada: primero list_my_appointments. Muestra al cliente SOLO sus citas (servicio, fecha, hora, id corto).
+3) Si hay varias, pregunta CUÁL. Si no hay ninguna futura, dilo y no inventes.
+4) Antes de cancel_appointment: resume la cita elegida y pide confirmación explícita ("¿Confirmas que cancelo [servicio] el [fecha] a las [hora]? Responde SÍ").
+5) Llama cancel_appointment SOLO con client_confirmed=true tras ese SÍ, con el appointment_id exacto. Nunca canceles por "tal vez", "creo que", ambigüedad, ni más de una cita en el mismo turno.
+6) Nunca digas que quedó cancelada hasta recibir ok=true de cancel_appointment. Si ok=false, explica y no inventes el borrado.
+7) Si duda o el caso es conflictivo (queja, amenaza, no identifica la cita): escalate_to_human en lugar de cancelar.
+
 Herramientas:
 - update_booking_state: guarda etapa y datos (name, service, date, time, location). name/service nuevos sobrescriben; location debe incluir ciudad si la dijo.
 - check_availability: consulta ocupación real (sistema + Google) antes de ofrecer un horario.
-- reset_booking: cancela / "ya no quiero" / "empecemos de nuevo" → limpia y vuelve a RECEPTION.
+- reset_booking: limpia embudo del chat → RECEPTION. NO borra citas del calendario.
 - create_calendar_event: SOLO en CONFIRMING con client_confirmed=true. El éxito al cliente depende de ok=true.
+- list_my_appointments: lista citas futuras de ESTE teléfono.
+- cancel_appointment: elimina una cita (sistema+Google) SOLO con id correcto + client_confirmed=true tras confirmación explícita.
 - escalate_to_human: dudas fuera de catálogo, quejas complejas, pide persona, o bucle 3 veces. NUNCA digas que transfieres a un humano ni que eres un bot limitado.
 
 Reglas transversales:
@@ -877,11 +1094,12 @@ PROMPT;
             WhatsappBookingState::STAGE_COLLECTING => <<<PROMPT
 ETAPA ACTUAL: 2 RECOLECTANDO (COLLECTING)
 Hoy es {$todayLabel} en {$timezone}. Gestionas una solicitud para {$businessName}.
-Revisa el Estado persistido: pide SOLO lo marcado como "Pendiente".
-Si servicio_producto ya tiene valor (o el cliente ya mencionó el paquete/sesión en el chat), NO preguntes de nuevo qué tipo de sesión quiere.
+Revisa el Estado persistido y el bloque YA GUARDADO: pide SOLO lo marcado como Pendiente / AÚN FALTA.
+PROHIBIDO volver a preguntar nombre, servicio, mascota u otros datos ya anotados, aunque acabes de usar check_availability.
+Si servicio_producto ya tiene valor (o el cliente/tú ya mencionaron el servicio en el chat), NO preguntes de nuevo; guárdalo con update_booking_state si aún está Pendiente.
 Si el cliente cambia un dato previo (incluido el nombre o la ciudad), acéptalo, sobrescribe con update_booking_state y continúa.
 Ubicación: si da tipo de lugar + ciudad (ej. playa en Puerto Morelos), guarda location como "Playa pública, Puerto Morelos" (incluye siempre la localidad).
-Si propone un horario concreto, llama check_availability antes de decir que está libre.
+Si propone un horario concreto, llama check_availability antes de decir que está libre; luego actualiza date/time SIN tocar name/service/notes.
 Cuando nombre, servicio, fecha y hora estén válidos, el sistema pasará a CONFIRMING: muestra el resumen completo (incluye ubicación si existe) y pide confirmación (aún no agendes).
 PROMPT,
             WhatsappBookingState::STAGE_CONFIRMING => $this->confirmingStagePrompt($businessName, $booking),

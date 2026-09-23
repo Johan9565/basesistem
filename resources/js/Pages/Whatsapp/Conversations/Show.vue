@@ -104,7 +104,7 @@ function clearThread(phone) {
 function clearAll() {
     if (
         !confirm(
-            `¿Borrar TODOS los mensajes de ${props.instance.instance_name}?`,
+            `¿Borrar TODOS los mensajes de ${props.instance.instance_name}? También se reinicia el estado de citas (nombre, mascota, etapa).`,
         )
     ) {
         return;

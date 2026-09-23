@@ -58,6 +58,137 @@ class BookingStateRepository
     }
 
     /**
+     * Recupera name/service del transcript si el modelo olvidó llamarlos a update_booking_state.
+     */
+    public function backfillMissingFromTranscript(string $instanceName, string $userPhone): void
+    {
+        $state = $this->find($instanceName, $userPhone);
+        if (! $state) {
+            return;
+        }
+
+        $needsName = ! filled($state->name);
+        $needsService = ! filled($state->service);
+        if (! $needsName && ! $needsService) {
+            return;
+        }
+
+        $rows = \App\Models\WhatsappMessage::query()
+            ->where('instance_name', $instanceName)
+            ->where('user_phone', $userPhone)
+            ->whereIn('role', ['user', 'assistant'])
+            ->orderBy('_id', 'desc')
+            ->limit(40)
+            ->get()
+            ->reverse()
+            ->values();
+
+        $pendingName = false;
+        $inferredName = null;
+        $inferredService = null;
+
+        $knownServices = [
+            'consulta general' => 'Consulta General',
+            'cardiología' => 'Cardiología',
+            'cardiologia' => 'Cardiología',
+            'odontología' => 'Odontología',
+            'odontologia' => 'Odontología',
+            'oncología' => 'Oncología',
+            'oncologia' => 'Oncología',
+            'dermatología' => 'Dermatología',
+            'dermatologia' => 'Dermatología',
+            'oftalmología' => 'Oftalmología',
+            'oftalmologia' => 'Oftalmología',
+            'laboratorio' => 'Laboratorio',
+            'ultrasonido' => 'Ultrasonido',
+            'radiografías' => 'Radiografías',
+            'radiografias' => 'Radiografías',
+            'rayos x' => 'Radiografías',
+            'imagenología' => 'Imagenología',
+            'imagenologia' => 'Imagenología',
+            'urgencias' => 'Urgencias',
+        ];
+
+        foreach ($rows as $row) {
+            $role = (string) $row->role;
+            $content = trim((string) ($row->content ?? ''));
+            if ($content === '') {
+                continue;
+            }
+            $lower = mb_strtolower($content);
+
+            if ($needsService) {
+                // Confirmaciones explícitas (no el menú que lista varios servicios).
+                $hitCount = 0;
+                foreach (array_keys($knownServices) as $hint) {
+                    if (str_contains($lower, $hint)) {
+                        $hitCount++;
+                    }
+                }
+                $isCatalogDump = $hitCount >= 3;
+
+                if (! $isCatalogDump) {
+                    foreach ($knownServices as $hint => $label) {
+                        if (
+                            str_contains($lower, 'agendar una '.$hint)
+                            || str_contains($lower, 'agendar '.$hint)
+                            || str_contains($lower, $hint.' para')
+                            || ($role === 'user' && str_contains($lower, $hint) && $hitCount === 1)
+                        ) {
+                            $inferredService = $label;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if ($needsName) {
+                if ($role === 'assistant' && (
+                    str_contains($lower, 'cómo te llamas')
+                    || str_contains($lower, 'como te llamas')
+                    || str_contains($lower, 'tu nombre')
+                    || str_contains($lower, 'nombre completo')
+                )) {
+                    $pendingName = true;
+
+                    continue;
+                }
+
+                if ($pendingName && $role === 'user') {
+                    $words = preg_split('/\s+/', $content) ?: [];
+                    if (count($words) <= 6 && mb_strlen($content) <= 60 && ! str_contains($content, '?')) {
+                        $inferredName = $content;
+                    }
+                    $pendingName = false;
+                }
+            }
+        }
+
+        $changed = false;
+        if ($needsName && $inferredName) {
+            $state->name = $inferredName;
+            $changed = true;
+        }
+        if ($needsService && $inferredService) {
+            $state->service = $inferredService;
+            $changed = true;
+        }
+
+        if ($changed) {
+            if (
+                $this->hasRequiredBookingData($state)
+                && $this->normalizeStage((string) $state->step) === WhatsappBookingState::STAGE_COLLECTING
+            ) {
+                $state->step = WhatsappBookingState::STAGE_CONFIRMING;
+            } elseif ($this->normalizeStage((string) ($state->step ?? '')) === WhatsappBookingState::STAGE_RECEPTION) {
+                $state->step = WhatsappBookingState::STAGE_COLLECTING;
+            }
+            $state->last_interaction_at = now();
+            $state->save();
+        }
+    }
+
+    /**
      * Map legacy soft-steps into the 3-stage machine.
      */
     public function normalizeStage(string $step): string
@@ -159,6 +290,37 @@ class BookingStateRepository
     public function resetBookingFields(string $instanceName, string $userPhone): WhatsappBookingState
     {
         return $this->resetToReception($instanceName, $userPhone, resumeBot: true);
+    }
+
+    /**
+     * Limpia datos de agenda de todos los teléfonos de una sesión Evolution.
+     */
+    public function resetAllForInstance(string $instanceName): int
+    {
+        $count = 0;
+        WhatsappBookingState::query()
+            ->where('instance_name', $instanceName)
+            ->orderBy('_id')
+            ->get()
+            ->each(function (WhatsappBookingState $state) use (&$count) {
+                $state->step = WhatsappBookingState::STAGE_RECEPTION;
+                $state->name = null;
+                $state->service = null;
+                $state->date = null;
+                $state->time = null;
+                $state->location = null;
+                $state->notes = null;
+                $state->intent = null;
+                $state->friction_count = 0;
+                $state->bot_paused_at = null;
+                $state->escalation_reason = null;
+                $state->escalation_detail = null;
+                $state->last_interaction_at = now();
+                $state->save();
+                $count++;
+            });
+
+        return $count;
     }
 
     public function resetToReception(

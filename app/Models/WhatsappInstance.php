@@ -69,23 +69,11 @@ class WhatsappInstance extends Model
             return null;
         }
 
-        $byShared = static::query()
-            ->where('status', 'active')
-            ->where('evolution_instance_name', $evolutionName)
-            ->first();
-
-        if ($byShared) {
-            return $byShared;
-        }
-
+        // Filtrado en PHP: evita fallos de whereNull/orWhere raros en Mongo
+        // cuando hay perfiles duplicados que comparten la misma sesión Evolution.
         return static::query()
             ->where('status', 'active')
-            ->where('instance_name', $evolutionName)
-            ->where(function ($q) {
-                $q->whereNull('evolution_instance_name')
-                    ->orWhere('evolution_instance_name', '')
-                    ->orWhere('evolution_instance_name', null);
-            })
-            ->first();
+            ->get()
+            ->first(fn (self $row) => $row->evolutionName() === $evolutionName);
     }
 }
