@@ -7,6 +7,7 @@ use App\Models\WhatsappInstance;
 use App\Models\WhatsappMessage;
 use App\Services\Whatsapp\BookingStateRepository;
 use App\Services\Whatsapp\ConversationRepository;
+use App\Services\Whatsapp\EvolutionApiClient;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -19,8 +20,9 @@ class ConversationsController extends Controller
             ->get()
             ->map(function (WhatsappInstance $row) {
                 $name = (string) $row->instance_name;
+                $sessionKey = $row->evolutionName();
                 $messages = WhatsappMessage::query()
-                    ->where('instance_name', $name)
+                    ->where('instance_name', $sessionKey)
                     ->orderBy('_id', 'desc')
                     ->limit(500)
                     ->get();
@@ -52,17 +54,18 @@ class ConversationsController extends Controller
         ]);
     }
 
-    public function show(Request $request, string $instance)
+    public function show(Request $request, string $instance, BookingStateRepository $bookingStates)
     {
         $row = WhatsappInstance::query()->where('instance_name', $instance)->first();
         if (! $row) {
             abort(404);
         }
 
+        $sessionKey = $row->evolutionName();
         $phoneFilter = (string) $request->query('phone', '');
 
         $all = WhatsappMessage::query()
-            ->where('instance_name', $instance)
+            ->where('instance_name', $sessionKey)
             ->orderBy('_id', 'desc')
             ->limit(2000)
             ->get()
@@ -71,9 +74,10 @@ class ConversationsController extends Controller
 
         $threads = $all
             ->groupBy(fn (WhatsappMessage $m) => (string) ($m->user_phone ?? ''))
-            ->map(function ($group, $phone) {
+            ->map(function ($group, $phone) use ($sessionKey, $bookingStates) {
                 /** @var WhatsappMessage $last */
                 $last = $group->last();
+                $booking = $bookingStates->find($sessionKey, (string) $phone);
 
                 return [
                     'user_phone' => (string) $phone,
@@ -81,6 +85,9 @@ class ConversationsController extends Controller
                     'last_role' => (string) ($last->role ?? ''),
                     'last_content' => mb_substr((string) ($last->content ?? ''), 0, 100),
                     'last_at' => $last->created_at?->toIso8601String(),
+                    'booking' => $booking
+                        ? $bookingStates->toAdminArray($booking)
+                        : null,
                 ];
             })
             ->filter(fn (array $t) => $t['user_phone'] !== '')
@@ -104,28 +111,63 @@ class ConversationsController extends Controller
             ->values()
             ->all();
 
+        $selectedBooking = null;
+        if ($phoneFilter !== '') {
+            $state = $bookingStates->find($sessionKey, $phoneFilter);
+            $selectedBooking = $state ? $bookingStates->toAdminArray($state) : null;
+        }
+
         return Inertia::render('Whatsapp/Conversations/Show', [
             'instance' => [
                 'instance_name' => (string) $row->instance_name,
+                'evolution_instance_name' => $sessionKey,
                 'status' => (string) ($row->status ?? 'active'),
+                'business_name' => (string) ($row->business_name ?? ''),
             ],
             'threads' => $threads,
             'messages' => $messages,
+            'booking' => $selectedBooking,
             'filters' => [
                 'phone' => $phoneFilter,
             ],
         ]);
     }
 
-    public function destroyThread(string $instance, string $phone, ConversationRepository $conversations, BookingStateRepository $bookingStates)
-    {
-        $exists = WhatsappInstance::query()->where('instance_name', $instance)->exists();
-        if (! $exists) {
+    public function resumeBot(
+        string $instance,
+        string $phone,
+        BookingStateRepository $bookingStates,
+        EvolutionApiClient $evolution,
+    ) {
+        $row = WhatsappInstance::query()->where('instance_name', $instance)->first();
+        if (! $row) {
             abort(404);
         }
 
-        $deleted = $conversations->clearThread($instance, $phone);
-        $bookingStates->resetBookingFields($instance, preg_replace('/\D+/', '', $phone) ?? $phone);
+        $normalized = $evolution->normalizePhone($phone);
+        $bookingStates->resumeBot($row->evolutionName(), $normalized);
+
+        return redirect()
+            ->route('whatsapp.conversations.show', [
+                'instance' => $instance,
+                'phone' => $normalized,
+            ])
+            ->with('flash', [
+                'type' => 'success',
+                'message' => "Bot reactivado para {$normalized}. Volverá a responder automáticamente.",
+            ]);
+    }
+
+    public function destroyThread(string $instance, string $phone, ConversationRepository $conversations, BookingStateRepository $bookingStates)
+    {
+        $row = WhatsappInstance::query()->where('instance_name', $instance)->first();
+        if (! $row) {
+            abort(404);
+        }
+
+        $sessionKey = $row->evolutionName();
+        $deleted = $conversations->clearThread($sessionKey, $phone);
+        $bookingStates->resetBookingFields($sessionKey, preg_replace('/\D+/', '', $phone) ?? $phone);
 
         return redirect()
             ->route('whatsapp.conversations.show', ['instance' => $instance])
@@ -137,12 +179,12 @@ class ConversationsController extends Controller
 
     public function destroyInstanceMessages(string $instance, ConversationRepository $conversations)
     {
-        $exists = WhatsappInstance::query()->where('instance_name', $instance)->exists();
-        if (! $exists) {
+        $row = WhatsappInstance::query()->where('instance_name', $instance)->first();
+        if (! $row) {
             abort(404);
         }
 
-        $deleted = $conversations->clearInstance($instance);
+        $deleted = $conversations->clearInstance($row->evolutionName());
 
         return redirect()
             ->route('whatsapp.conversations.show', ['instance' => $instance])

@@ -66,6 +66,7 @@ Route::middleware(['auth', 'permission:whatsapp'])->group(function () {
         Route::get('/whatsapp/instances', [WhatsappInstancesController::class, 'index'])->name('whatsapp.instances');
         Route::post('/whatsapp/instances', [WhatsappInstancesController::class, 'store'])->name('whatsapp.instances.store');
         Route::match(['patch', 'post'], '/whatsapp/instances/{instance}', [WhatsappInstancesController::class, 'update'])->name('whatsapp.instances.update');
+        Route::post('/whatsapp/instances/{instance}/duplicate', [WhatsappInstancesController::class, 'duplicate'])->name('whatsapp.instances.duplicate');
         Route::delete('/whatsapp/instances/{instance}', [WhatsappInstancesController::class, 'destroy'])->name('whatsapp.instances.destroy');
         Route::post('/whatsapp/instances/{instance}/connect', [WhatsappInstancesController::class, 'connect'])->name('whatsapp.instances.connect');
     });
@@ -75,12 +76,14 @@ Route::middleware(['auth', 'permission:whatsapp'])->group(function () {
         Route::get('/whatsapp/conversations/{instance}', [WhatsappConversationsController::class, 'show'])->name('whatsapp.conversations.show');
         Route::delete('/whatsapp/conversations/{instance}/messages', [WhatsappConversationsController::class, 'destroyInstanceMessages'])->name('whatsapp.conversations.clear');
         Route::delete('/whatsapp/conversations/{instance}/{phone}', [WhatsappConversationsController::class, 'destroyThread'])->name('whatsapp.conversations.thread.destroy');
+        Route::post('/whatsapp/conversations/{instance}/{phone}/resume-bot', [WhatsappConversationsController::class, 'resumeBot'])->name('whatsapp.conversations.resume');
     });
 
     Route::middleware(['permission:whatsapp.calendar'])->group(function () {
         Route::get('/whatsapp/calendar', [WhatsappCalendarController::class, 'index'])->name('whatsapp.calendar');
         Route::get('/whatsapp/calendar/{instance}', [WhatsappCalendarController::class, 'show'])->name('whatsapp.calendar.show');
         Route::post('/whatsapp/calendar/{instance}/sync', [WhatsappCalendarController::class, 'sync'])->name('whatsapp.calendar.sync');
+        Route::delete('/whatsapp/calendar/{instance}/{appointment}', [WhatsappCalendarController::class, 'destroy'])->name('whatsapp.calendar.destroy');
     });
 
     Route::middleware(['permission:whatsapp.send'])->group(function () {

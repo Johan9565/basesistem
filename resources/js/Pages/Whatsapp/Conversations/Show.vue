@@ -21,6 +21,10 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    booking: {
+        type: Object,
+        default: null,
+    },
     filters: {
         type: Object,
         default: () => ({ phone: '' }),
@@ -29,6 +33,7 @@ const props = defineProps({
 
 const messagesEl = ref(null);
 const clearing = ref(false);
+const resuming = ref(false);
 
 watch(
     () => page.props.flash,
@@ -117,6 +122,24 @@ function clearAll() {
         },
     );
 }
+
+function resumeBot(phone) {
+    if (!phone) return;
+    resuming.value = true;
+    router.post(
+        route('whatsapp.conversations.resume', {
+            instance: props.instance.instance_name,
+            phone,
+        }),
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                resuming.value = false;
+            },
+        },
+    );
+}
 </script>
 
 <template>
@@ -187,6 +210,18 @@ function clearAll() {
                             @click="selectPhone(thread.user_phone)"
                         >
                             <span class="font-medium">{{ thread.user_phone }}</span>
+                            <span
+                                v-if="thread.booking?.bot_paused"
+                                class="badge badge-warning badge-sm w-fit"
+                            >
+                                Bot pausado
+                            </span>
+                            <span
+                                v-else-if="thread.booking?.step_label"
+                                class="text-[10px] uppercase tracking-wide text-base-content/40"
+                            >
+                                {{ thread.booking.step_label }}
+                            </span>
                             <span class="line-clamp-1 text-xs text-base-content/50">
                                 {{ thread.last_content || '—' }}
                             </span>
@@ -201,7 +236,7 @@ function clearAll() {
 
                     <section class="flex min-h-[24rem] flex-col">
                         <div
-                            class="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-3"
+                            class="flex flex-wrap items-center justify-between gap-2 border-b border-base-300 px-4 py-3"
                         >
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-medium text-base-content">
@@ -215,18 +250,67 @@ function clearAll() {
                                     {{ messages.length }} mensaje{{
                                         messages.length !== 1 ? 's' : ''
                                     }}
+                                    <template v-if="booking?.step_label">
+                                        · {{ booking.step_label }}
+                                    </template>
+                                </p>
+                                <p
+                                    v-if="booking?.bot_paused"
+                                    class="mt-1 text-xs text-warning"
+                                >
+                                    Bot pausado
+                                    <template v-if="booking.escalation_reason">
+                                        · {{ booking.escalation_reason }}
+                                    </template>
+                                    <template v-if="booking.escalation_detail">
+                                        — {{ booking.escalation_detail }}
+                                    </template>
                                 </p>
                             </div>
-                            <Button
-                                v-if="selectedPhone"
-                                label="Borrar chat"
-                                icon="pi pi-trash"
-                                size="small"
-                                severity="danger"
-                                text
-                                :disabled="clearing"
-                                @click="clearThread(selectedPhone)"
-                            />
+                            <div class="flex flex-wrap gap-1">
+                                <Button
+                                    v-if="selectedPhone && booking?.bot_paused"
+                                    label="Reactivar bot"
+                                    icon="pi pi-play"
+                                    size="small"
+                                    severity="success"
+                                    :loading="resuming"
+                                    :disabled="resuming || clearing"
+                                    @click="resumeBot(selectedPhone)"
+                                />
+                                <Button
+                                    v-if="selectedPhone"
+                                    label="Borrar chat"
+                                    icon="pi pi-trash"
+                                    size="small"
+                                    severity="danger"
+                                    text
+                                    :disabled="clearing"
+                                    @click="clearThread(selectedPhone)"
+                                />
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="selectedPhone && booking"
+                            class="flex flex-wrap gap-2 border-b border-base-300 bg-base-200/40 px-4 py-2 text-xs"
+                        >
+                            <span class="badge badge-ghost badge-sm">
+                                {{ booking.name || 'Sin nombre' }}
+                            </span>
+                            <span class="badge badge-ghost badge-sm">
+                                {{ booking.service || 'Sin servicio' }}
+                            </span>
+                            <span class="badge badge-ghost badge-sm">
+                                {{ booking.date || 'Sin fecha' }}
+                                <template v-if="booking.time"> · {{ booking.time }}</template>
+                            </span>
+                            <span
+                                v-if="booking.location"
+                                class="badge badge-ghost badge-sm"
+                            >
+                                {{ booking.location }}
+                            </span>
                         </div>
 
                         <div

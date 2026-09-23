@@ -60,6 +60,20 @@ class GoogleCalendarService
         ];
     }
 
+    public function deleteEvent(
+        string $calendarId,
+        string $eventId,
+        ?string $credentialsPath = null,
+    ): void {
+        $calendar = new Calendar($this->makeClient($credentialsPath));
+        $calendar->events->delete($calendarId, $eventId);
+
+        Log::info('Google Calendar event deleted', [
+            'calendar_id' => $calendarId,
+            'event_id' => $eventId,
+        ]);
+    }
+
     /**
      * @return list<array{id: string, summary: string, description: ?string, start: ?string, end: ?string, html_link: ?string, status: ?string}>
      */
@@ -179,12 +193,12 @@ class GoogleCalendarService
             $end = Carbon::parse($event['end'], $timezone);
 
             $existing = WhatsappAppointment::query()
-                ->where('instance_name', $instance->instance_name)
+                ->where('instance_name', $instance->evolutionName())
                 ->where('google_event_id', $event['id'])
                 ->first();
 
             $payload = [
-                'instance_name' => (string) $instance->instance_name,
+                'instance_name' => $instance->evolutionName(),
                 'user_phone' => $existing?->user_phone ?: 'google',
                 'summary' => $event['summary'],
                 'description' => $event['description'],

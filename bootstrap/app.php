@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
             'evolution.webhook' => \App\Http\Middleware\VerifyEvolutionWebhookSecret::class,
+            'telegram.webhook' => \App\Http\Middleware\VerifyTelegramWebhookSecret::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

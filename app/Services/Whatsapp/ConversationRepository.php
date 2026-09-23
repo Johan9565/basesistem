@@ -43,13 +43,19 @@ class ConversationRepository
     }
 
     /**
-     * Historial corto para DeepSeek: solo turnos user/assistant (sin tools).
-     * El estado de reserva va en el system prompt, no en 15 mensajes viejos.
+     * Mensajes para el LLM con prefijo cacheable:
+     * 1) system estático (reglas + catálogo)
+     * 2) system dinámico (fecha/hora + estado)
+     * 3) historial user/assistant
      *
      * @return list<array<string, mixed>>
      */
-    public function toDeepSeekMessages(string $instanceName, string $userPhone, string $systemPrompt): array
-    {
+    public function toLlmMessages(
+        string $instanceName,
+        string $userPhone,
+        string $staticSystemPrompt,
+        string $dynamicSystemPrompt,
+    ): array {
         $maxTurns = max(1, (int) config('services.whatsapp.history_turns', 3));
         $fetchLimit = max(
             $maxTurns * 4,
@@ -59,9 +65,16 @@ class ConversationRepository
         $messages = [
             [
                 'role' => 'system',
-                'content' => $systemPrompt,
+                'content' => $staticSystemPrompt,
             ],
         ];
+
+        if (trim($dynamicSystemPrompt) !== '') {
+            $messages[] = [
+                'role' => 'system',
+                'content' => $dynamicSystemPrompt,
+            ];
+        }
 
         $turns = [];
         foreach ($this->recent($instanceName, $userPhone, $fetchLimit) as $row) {
@@ -99,6 +112,16 @@ class ConversationRepository
         }
 
         return array_merge($messages, $turns);
+    }
+
+    /**
+     * @deprecated Usar toLlmMessages con system estático + dinámico.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function toDeepSeekMessages(string $instanceName, string $userPhone, string $systemPrompt): array
+    {
+        return $this->toLlmMessages($instanceName, $userPhone, $systemPrompt, '');
     }
 
     public function clearThread(string $instanceName, string $userPhone): int

@@ -36,11 +36,11 @@ class MessagesController extends Controller
             'text' => 'required|string|max:4000',
         ]);
 
-        $exists = WhatsappInstance::query()
+        $row = WhatsappInstance::query()
             ->where('instance_name', $validated['instance_name'])
-            ->exists();
+            ->first();
 
-        if (! $exists) {
+        if (! $row) {
             return back()->withInput()->with('flash', [
                 'type' => 'error',
                 'message' => 'La instancia no existe en Mongo.',
@@ -49,7 +49,7 @@ class MessagesController extends Controller
 
         try {
             $evolution->sendText(
-                $validated['instance_name'],
+                $row->evolutionName(),
                 $validated['phone'],
                 $validated['text'],
             );

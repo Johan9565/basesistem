@@ -8,7 +8,7 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
-class DeepSeekClient implements LlmChatClient
+class MimoClient implements LlmChatClient
 {
     use HasWhatsappBookingTools;
 
@@ -18,24 +18,26 @@ class DeepSeekClient implements LlmChatClient
      */
     public function chat(array $messages, bool $withTools = true, ?array $tools = null): array
     {
-        $apiKey = (string) config('services.deepseek.key');
-        $baseUrl = rtrim((string) config('services.deepseek.base_url'), '/');
-        $model = (string) config('services.deepseek.model', 'deepseek-chat');
+        $apiKey = (string) config('services.mimo.key');
+        $baseUrl = rtrim((string) config('services.mimo.base_url'), '/');
+        $model = (string) config('services.mimo.model', 'mimo-v2-flash');
 
         if ($apiKey === '') {
-            throw new RuntimeException('DEEPSEEK_API_KEY no está configurada.');
+            throw new RuntimeException('MIMO_API_KEY no está configurada.');
         }
 
         $payload = [
             'model' => $model,
             'messages' => $messages,
-            'max_tokens' => (int) config('services.deepseek.max_tokens', 150),
-            'temperature' => (float) config('services.deepseek.temperature', 0.25),
+            'max_tokens' => (int) config('services.mimo.max_tokens', 150),
+            'temperature' => (float) config('services.mimo.temperature', 0.25),
+            'stream' => false,
+            // Flash puede activar thinking; lo desactivamos para respuestas cortas de WhatsApp.
+            'thinking' => ['type' => 'disabled'],
         ];
 
-        $stop = config('services.deepseek.stop', []);
+        $stop = config('services.mimo.stop', []);
         if (is_array($stop) && $stop !== []) {
-            // Env con "\n\n" literal → convertir escapes.
             $payload['stop'] = array_map(static function ($s) {
                 return str_replace(['\\n', '\n'], "\n", (string) $s);
             }, $stop);
@@ -55,7 +57,7 @@ class DeepSeekClient implements LlmChatClient
                 ->throw()
                 ->json();
         } catch (RequestException $e) {
-            throw new RuntimeException('Error al llamar a DeepSeek: '.$e->getMessage(), 0, $e);
+            throw new RuntimeException('Error al llamar a MiMo: '.$e->getMessage(), 0, $e);
         }
 
         return $response;

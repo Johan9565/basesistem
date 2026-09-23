@@ -47,11 +47,25 @@ return [
         'key' => env('DEEPSEEK_API_KEY'),
         'base_url' => env('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
         'model' => env('DEEPSEEK_MODEL', 'deepseek-chat'),
-        'max_tokens' => (int) env('DEEPSEEK_MAX_TOKENS', 150),
+        'max_tokens' => (int) env('DEEPSEEK_MAX_TOKENS', 400),
         'temperature' => (float) env('DEEPSEEK_TEMPERATURE', 0.25),
-        'stop' => env('DEEPSEEK_STOP') !== null && env('DEEPSEEK_STOP') !== ''
-            ? array_values(array_filter(array_map('trim', explode('|', (string) env('DEEPSEEK_STOP')))))
-            : ["\n\n"],
+        // Vacío por defecto: "\n\n" cortaba los resúmenes de confirmación a media frase.
+        'stop' => array_values(array_filter(array_map(
+            'trim',
+            explode('|', (string) env('DEEPSEEK_STOP', '')),
+        ))),
+    ],
+
+    'mimo' => [
+        'key' => env('MIMO_API_KEY'),
+        'base_url' => env('MIMO_BASE_URL', 'https://api.xiaomimimo.com/v1'),
+        'model' => env('MIMO_MODEL', 'mimo-v2-flash'),
+        'max_tokens' => (int) env('MIMO_MAX_TOKENS', 400),
+        'temperature' => (float) env('MIMO_TEMPERATURE', 0.25),
+        'stop' => array_values(array_filter(array_map(
+            'trim',
+            explode('|', (string) env('MIMO_STOP', '')),
+        ))),
     ],
 
     'google_calendar' => [
@@ -77,6 +91,33 @@ return [
             'WHATSAPP_MEDIA_MESSAGE',
             'Por favor, escribe tu mensaje en texto para ayudarte a agendar.'
         ),
+        // Tras N horarios no disponibles seguidos, pausa el bot y alerta al staff.
+        'friction_escalate_after' => (int) env('WHATSAPP_FRICTION_ESCALATE_AFTER', 3),
+        'escalation_courtesy' => env(
+            'WHATSAPP_ESCALATION_COURTESY',
+            'Déjame revisar ese detalle específico con el equipo para darte la información exacta. En un momento te confirmo por aquí mismo.'
+        ),
+        // Opcional: WhatsApp del encargado (número) e instancia Evolution para alertas.
+        'escalation_phone' => env('WHATSAPP_ESCALATION_PHONE', ''),
+        'escalation_instance' => env('WHATSAPP_ESCALATION_INSTANCE', ''),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Telegram (asistente admin por instancia WhatsApp)
+    |--------------------------------------------------------------------------
+    |
+    | El token del bot vive en cada WhatsappInstance. Aquí solo la URL base
+    | pública para registrar el webhook: {base}/api/telegram/{instance}/webhook
+    |
+    */
+    'telegram' => [
+        'webhook_base_url' => rtrim(
+            (string) (env('TELEGRAM_WEBHOOK_BASE_URL') ?: env('APP_URL', 'http://localhost')),
+            '/',
+        ),
+        'history_limit' => (int) env('TELEGRAM_ADMIN_HISTORY_LIMIT', 12),
+        'history_turns' => (int) env('TELEGRAM_ADMIN_HISTORY_TURNS', 4),
     ],
 
 ];
