@@ -337,6 +337,7 @@ class AppointmentOrchestrator
                 $end = $start->copy()->addMinutes(30);
             }
 
+            $slotMinutes = max(15, (int) $start->diffInMinutes($end));
             $now = Carbon::now($timezone);
             if ($start->lt($now->copy()->startOfMinute())) {
                 return [
@@ -355,6 +356,7 @@ class AppointmentOrchestrator
             );
 
             $googleBusy = false;
+            $googleError = null;
             if ($calendarId !== '' && ($instance->google_credentials_path || config('services.google_calendar.credentials_path'))) {
                 try {
                     $googleBusy = $this->calendar->hasBusyConflict(
@@ -364,6 +366,7 @@ class AppointmentOrchestrator
                         $instance->google_credentials_path ?: null,
                     );
                 } catch (Throwable $e) {
+                    $googleError = $e->getMessage();
                     Log::warning('check_availability Google failed', [
                         'error' => $e->getMessage(),
                         'instance' => $instance->instance_name,
@@ -371,20 +374,63 @@ class AppointmentOrchestrator
                 }
             }
 
-            $labels = collect($localConflicts)->map(function ($a) {
-                $from = optional($a->starts_at)->format('Y-m-d H:i');
-                $to = optional($a->ends_at)->format('H:i');
+            $labels = collect($localConflicts)->map(function ($a) use ($timezone) {
+                $from = optional($a->starts_at)->copy()->timezone($timezone)->format('H:i');
+                $to = optional($a->ends_at)->copy()->timezone($timezone)->format('H:i');
 
-                return trim(($a->summary ?? 'Cita')." ($from–$to)");
+                return trim(($a->summary ?? 'Cita')." ({$from}–{$to})");
             })->take(3)->implode('; ');
 
             if ($localConflicts !== [] || $googleBusy) {
+                $nextSlots = $this->suggestNextOpenSlots(
+                    $instance,
+                    $start,
+                    $slotMinutes,
+                    $calendarId,
+                    maxSuggestions: 3,
+                );
+
+                $nextLabels = collect($nextSlots)->pluck('label')->implode('; ');
+
                 return [
                     'ok' => true,
                     'available' => false,
-                    'reason' => $googleBusy ? 'google_busy' : 'local_busy',
+                    'reason' => $googleBusy && $localConflicts === [] ? 'google_busy' : 'slot_busy',
                     'conflicts' => $labels,
-                    'message' => 'NO disponible'.($labels !== '' ? ": {$labels}" : '').'. No digas que está libre. Ofrece otro horario y vuelve a llamar check_availability antes de proponerlo como disponible.',
+                    'requested' => $start->locale('es')->isoFormat('dddd D [de] MMMM HH:mm'),
+                    'next_slots' => $nextSlots,
+                    'message' => 'OCUPADO: ya hay una cita/agenda en ese horario'
+                        .($labels !== '' ? " ({$labels})" : '')
+                        .'. Di EXPLÍCITAMENTE al cliente que a esa hora ya hay una cita agendada (no digas "no pude verificar"). '
+                        .'Ofrece el siguiente turno libre'
+                        .($nextLabels !== '' ? ": {$nextLabels}" : ' (busca otra hora y vuelve a check_availability)')
+                        .'. No reinicies nombre/servicio; solo actualiza date/time si elige otro horario.'
+                        .$this->instanceSlotBusyPolicySuffix($instance),
+                ];
+            }
+
+            // Google falló pero local libre: no inventes "no pude verificar" como si estuviera libre al 100%.
+            if ($googleError !== null) {
+                $nextSlots = $this->suggestNextOpenSlots(
+                    $instance,
+                    $start,
+                    $slotMinutes,
+                    $calendarId,
+                    maxSuggestions: 2,
+                );
+
+                return [
+                    'ok' => true,
+                    'available' => false,
+                    'reason' => 'verify_uncertain',
+                    'google_error' => $googleError,
+                    'requested' => $start->locale('es')->isoFormat('dddd D [de] MMMM HH:mm'),
+                    'next_slots' => $nextSlots,
+                    'message' => 'No se pudo consultar Google Calendar, así que NO affirmes que el horario está libre. '
+                        .'Di que ese horario no se pudo confirmar en agenda y propone alternativas '
+                        .(collect($nextSlots)->pluck('label')->implode('; ') ?: 'u otra hora')
+                        .'.'
+                        .$this->instanceSlotBusyPolicySuffix($instance),
                 ];
             }
 
@@ -399,9 +445,81 @@ class AppointmentOrchestrator
             return [
                 'ok' => false,
                 'error' => $e->getMessage(),
-                'message' => 'No se pudo verificar disponibilidad. No affirmes que el horario está libre.',
+                'message' => 'Error técnico al verificar. NO digas que está libre. Propón otra hora.'
+                    .$this->instanceSlotBusyPolicySuffix($instance),
             ];
         }
+    }
+
+    /**
+     * Política extra solo si la instancia la define (ej. SAC: urgencia con costo extra).
+     */
+    protected function instanceSlotBusyPolicySuffix(WhatsappInstance $instance): string
+    {
+        $policy = trim((string) ($instance->slot_busy_policy ?? ''));
+        if ($policy === '') {
+            return '';
+        }
+
+        return ' Política de esta instancia: '.$policy;
+    }
+
+    /**
+     * @return list<array{start: string, end: string, label: string}>
+     */
+    protected function suggestNextOpenSlots(
+        WhatsappInstance $instance,
+        Carbon $from,
+        int $slotMinutes,
+        string $calendarId,
+        int $maxSuggestions = 3,
+    ): array {
+        $timezone = (string) ($instance->timezone ?: config('services.google_calendar.timezone'));
+        $cursor = $from->copy()->addMinutes($slotMinutes);
+        $limit = $from->copy()->addDays(2)->endOfDay();
+        $found = [];
+        $guard = 0;
+
+        while (count($found) < $maxSuggestions && $cursor->lt($limit) && $guard < 96) {
+            $guard++;
+            $slotEnd = $cursor->copy()->addMinutes($slotMinutes);
+
+            // Evitar madrugada absurda (antes de 7 o después de 21) salvo que el negocio sea 24/7;
+            // igual permitimos proponer; el cliente/urgencia decide.
+            $localConflicts = $this->calendar->findLocalConflicts(
+                $instance->evolutionName(),
+                $cursor,
+                $slotEnd,
+            );
+
+            $busy = $localConflicts !== [];
+            if (! $busy && $calendarId !== '') {
+                try {
+                    $busy = $this->calendar->hasBusyConflict(
+                        $calendarId,
+                        $cursor,
+                        $slotEnd,
+                        $instance->google_credentials_path ?: null,
+                    );
+                } catch (Throwable) {
+                    // Si Google falla, aún podemos sugerir según agenda local.
+                    $busy = false;
+                }
+            }
+
+            if (! $busy && $cursor->gte(Carbon::now($timezone))) {
+                $found[] = [
+                    'start' => $cursor->toIso8601String(),
+                    'end' => $slotEnd->toIso8601String(),
+                    'label' => $cursor->locale('es')->isoFormat('dddd D [de] MMMM HH:mm')
+                        .'–'.$slotEnd->format('H:i'),
+                ];
+            }
+
+            $cursor->addMinutes($slotMinutes);
+        }
+
+        return $found;
     }
 
     /**
@@ -1055,7 +1173,7 @@ Cuando el cliente indique lugar, conserva la localidad/ciudad especificada (Canc
 Disponibilidad y agendado (anti-alucinación — CRÍTICO):
 1) No inventes ni asumas que un horario está libre. Antes de ofrecerlo como disponible, llama check_availability y espera el resultado.
 2) Nunca digas que una cita quedó "confirmada", "agendada", "reservada" o "lista" a menos que create_calendar_event haya respondido ok=true en ESTE turno.
-3) Si create_calendar_event o check_availability responden ok=false / available=false (p. ej. horario ocupado), NO digas que quedó confirmada: informa el conflicto y ofrece otra hora.
+3) Si available=false / ocupado: di que YA HAY una cita agendada a esa hora (no digas "no pude verificar"). Propón el siguiente turno de next_slots (verifica con check_availability antes de afirmar que está libre). Si la instancia define una política extra en el resultado de la tool (campo/mensaje de política), síguela; si no, solo ofrece otro horario.
 4) Pedir confirmación del resumen al cliente NO es lo mismo que haber registrado la cita. Primero tool ok=true, después mensaje de éxito.
 
 Cancelación de citas (MUY PRECAVIDO — CRÍTICO):

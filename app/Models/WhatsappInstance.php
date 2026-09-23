@@ -33,6 +33,7 @@ class WhatsappInstance extends Model
         'telegram_webhook_secret',
         'telegram_link_code',
         'telegram_allowed_user_ids',
+        'slot_busy_policy',
     ];
 
     protected $hidden = [
