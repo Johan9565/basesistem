@@ -9,6 +9,7 @@ services:
         args:
             WWWGROUP: '${WWWGROUP}'
     image: 'sail-8.5/app'
+    pull_policy: build
     extra_hosts:
         - 'host.docker.internal:host-gateway'
     environment:
@@ -17,7 +18,7 @@ services:
         XDEBUG_MODE: 'off'
         IGNITION_LOCAL_SITES_PATH: '/var/www/html/basesistem'
     volumes:
-        - '/var/www/html/basesistem:/var/www/html'
+        - '.:/var/www/html'
     ports:
         - '${FORWARD_APP_PORT:-8000}:80'
         - '${VITE_PORT:-5173}:${VITE_PORT:-5173}'
