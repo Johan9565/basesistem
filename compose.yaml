@@ -43,10 +43,12 @@ services:
       - sail-mongo:/data/db
     networks:
       - sail
-  # Redis: solo para Evolution API (Laravel usa file/sync)
+  # Redis: cache/locks de Laravel + Evolution API
   redis:
     image: redis:alpine
     restart: always
+    ports:
+      - '${FORWARD_REDIS_PORT:-6379}:6379'
     volumes:
       - sail-redis:/data
     networks:

@@ -100,6 +100,12 @@ return [
         // Opcional: WhatsApp del encargado (número) e instancia Evolution para alertas.
         'escalation_phone' => env('WHATSAPP_ESCALATION_PHONE', ''),
         'escalation_instance' => env('WHATSAPP_ESCALATION_INSTANCE', ''),
+        // Concurrencia: lock Redis + debounce de ráfagas (ms).
+        'process_lock_seconds' => (int) env('WHATSAPP_PROCESS_LOCK_SECONDS', 120),
+        'process_lock_wait_seconds' => (int) env('WHATSAPP_PROCESS_LOCK_WAIT_SECONDS', 90),
+        'burst_debounce_ms' => (int) env('WHATSAPP_BURST_DEBOUNCE_MS', 2500),
+        // Soft-hold de slot al entrar en CONFIRMING (minutos).
+        'slot_hold_minutes' => (int) env('WHATSAPP_SLOT_HOLD_MINUTES', 10),
     ],
 
     /*

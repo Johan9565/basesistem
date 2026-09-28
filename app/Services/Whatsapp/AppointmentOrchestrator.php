@@ -10,8 +10,11 @@ use App\Models\WhatsappBookingState;
 use App\Models\WhatsappInstance;
 use App\Services\Telegram\AdminAssistantOrchestrator;
 use App\Services\Whatsapp\Contracts\LlmChatClient;
+use App\Services\Whatsapp\Contracts\MessengerGatewayInterface;
 use App\Support\NotificationLinkResolver;
 use Carbon\Carbon;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
@@ -24,7 +27,7 @@ class AppointmentOrchestrator
         protected DeepSeekClient $deepSeek,
         protected MimoClient $mimo,
         protected GoogleCalendarService $calendar,
-        protected EvolutionApiClient $evolution,
+        protected MessengerGatewayInterface $evolution,
         protected AdminAssistantOrchestrator $telegramAdmin,
     ) {}
 
@@ -41,6 +44,7 @@ class AppointmentOrchestrator
         $phone = $this->evolution->normalizePhone($userPhone);
         $booking = $this->bookingStates->touch($sessionKey, $phone);
 
+        // Append ANTES del lock: el mensaje no se pierde si otro worker procesa la ráfaga.
         $this->conversations->append($sessionKey, $phone, 'user', $text);
 
         if ($this->bookingStates->isBotPaused($booking)) {
@@ -53,8 +57,73 @@ class AppointmentOrchestrator
             return null;
         }
 
+        $burstKey = "wa:burst:{$sessionKey}:{$phone}";
+        $lockKey = "wa:process:{$sessionKey}:{$phone}";
+        $burstToken = (string) (int) (microtime(true) * 1000000);
+        Cache::put($burstKey, $burstToken, 120);
+
+        $lockSeconds = max(30, (int) config('services.whatsapp.process_lock_seconds', 120));
+        $lockWait = max(5, (int) config('services.whatsapp.process_lock_wait_seconds', 90));
+        $debounceMs = max(0, (int) config('services.whatsapp.burst_debounce_ms', 2500));
+
+        $lock = Cache::lock($lockKey, $lockSeconds);
+
+        try {
+            $lock->block($lockWait);
+        } catch (LockTimeoutException $e) {
+            Log::warning('WhatsApp process lock not acquired', [
+                'instance' => $sessionKey,
+                'phone' => $phone,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        } catch (Throwable $e) {
+            Log::warning('WhatsApp process lock wait failed', [
+                'instance' => $sessionKey,
+                'phone' => $phone,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        try {
+            if ($debounceMs > 0) {
+                usleep($debounceMs * 1000);
+            }
+
+            // Solo el último mensaje de la ráfaga genera respuesta (el resto ya está en historial).
+            if ((string) Cache::get($burstKey) !== $burstToken) {
+                Log::info('WhatsApp burst debounce: deferring to newer message', [
+                    'instance' => $sessionKey,
+                    'phone' => $phone,
+                ]);
+
+                return null;
+            }
+
+            // Expectativa del usuario mientras el LLM + tools corren.
+            $this->evolution->sendTyping($sessionKey, $phone);
+
+            return $this->processIncomingLocked($instance, $sessionKey, $phone, $booking, $text);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    protected function processIncomingLocked(
+        WhatsappInstance $instance,
+        string $sessionKey,
+        string $phone,
+        WhatsappBookingState $booking,
+        string $text,
+    ): ?string {
         $timezone = $instance->timezone ?? config('services.google_calendar.timezone');
         $this->bookingStates->backfillMissingFromTranscript($sessionKey, $phone);
+        $booking = $this->bookingStates->find($sessionKey, $phone) ?? $booking;
+        // Renueva soft-hold si sigue en CONFIRMING con fecha/hora.
+        $this->bookingStates->syncSlotHoldForState($booking->fresh() ?? $booking, (string) $timezone);
         $booking = $this->bookingStates->find($sessionKey, $phone) ?? $booking;
         $staticPrompt = $this->buildStaticSystemPrompt($instance, (string) $timezone);
         $dynamicPrompt = $this->buildDynamicSystemPrompt(
@@ -277,7 +346,7 @@ class AppointmentOrchestrator
 
         return match ($name) {
             'update_booking_state' => $this->toolUpdateBookingState($instance, $phone, $args),
-            'check_availability' => $this->toolCheckAvailability($instance, $args),
+            'check_availability' => $this->toolCheckAvailability($instance, $phone, $args),
             'reset_booking' => $this->toolResetBooking($instance, $phone, $args),
             'escalate_to_human' => $this->toolEscalateToHuman($instance, $phone, $args),
             'create_calendar_event' => $this->toolCreateCalendarEvent($instance, $phone, $args),
@@ -315,7 +384,7 @@ class AppointmentOrchestrator
      * @param  array<string, mixed>  $args
      * @return array<string, mixed>
      */
-    protected function toolCheckAvailability(WhatsappInstance $instance, array $args): array
+    protected function toolCheckAvailability(WhatsappInstance $instance, string $phone, array $args): array
     {
         $startIso = (string) ($args['start_iso'] ?? '');
         $endIso = (string) ($args['end_iso'] ?? '');
@@ -346,6 +415,38 @@ class AppointmentOrchestrator
                     'reason' => 'past',
                     'message' => 'Ese horario ya pasó. No lo ofrezcas; pide una fecha/hora futuras.',
                     'requested' => $start->locale('es')->isoFormat('dddd D [de] MMMM [de] YYYY HH:mm'),
+                ];
+            }
+
+            $slotHolds = $this->bookingStates->findActiveSlotHolds(
+                $instance->evolutionName(),
+                $start,
+                $end,
+                $phone,
+            );
+
+            if ($slotHolds !== []) {
+                $nextSlots = $this->suggestNextOpenSlots(
+                    $instance,
+                    $start,
+                    $slotMinutes,
+                    $calendarId,
+                    maxSuggestions: 3,
+                    excludePhone: $phone,
+                );
+                $nextLabels = collect($nextSlots)->pluck('label')->implode('; ');
+
+                return [
+                    'ok' => true,
+                    'available' => false,
+                    'reason' => 'slot_held',
+                    'requested' => $start->locale('es')->isoFormat('dddd D [de] MMMM HH:mm'),
+                    'next_slots' => $nextSlots,
+                    'message' => 'OCUPADO (reserva temporal): otro cliente está confirmando ese horario. '
+                        .'Di que ese turno acaba de quedar en proceso de reserva y ofrece el siguiente libre'
+                        .($nextLabels !== '' ? ": {$nextLabels}" : ' (otra hora; vuelve a check_availability)')
+                        .'. No reinicies nombre/servicio.'
+                        .$this->instanceSlotBusyPolicySuffix($instance),
                 ];
             }
 
@@ -473,6 +574,7 @@ class AppointmentOrchestrator
         int $slotMinutes,
         string $calendarId,
         int $maxSuggestions = 3,
+        ?string $excludePhone = null,
     ): array {
         $timezone = (string) ($instance->timezone ?: config('services.google_calendar.timezone'));
         $cursor = $from->copy()->addMinutes($slotMinutes);
@@ -493,6 +595,14 @@ class AppointmentOrchestrator
             );
 
             $busy = $localConflicts !== [];
+            if (! $busy) {
+                $busy = $this->bookingStates->findActiveSlotHolds(
+                    $instance->evolutionName(),
+                    $cursor,
+                    $slotEnd,
+                    $excludePhone,
+                ) !== [];
+            }
             if (! $busy && $calendarId !== '') {
                 try {
                     $busy = $this->calendar->hasBusyConflict(
@@ -657,6 +767,13 @@ class AppointmentOrchestrator
                 $end,
             );
 
+            $slotHolds = $this->bookingStates->findActiveSlotHolds(
+                $instance->evolutionName(),
+                $start,
+                $end,
+                $phone,
+            );
+
             $googleBusy = false;
             if ($calendarId !== '' && ($instance->google_credentials_path || config('services.google_calendar.credentials_path'))) {
                 try {
@@ -674,7 +791,7 @@ class AppointmentOrchestrator
                 }
             }
 
-            if ($localConflicts !== [] || $googleBusy) {
+            if ($localConflicts !== [] || $googleBusy || $slotHolds !== []) {
                 $friction = $this->bookingStates->incrementFriction(
                     $instance->evolutionName(),
                     $phone,
@@ -686,6 +803,10 @@ class AppointmentOrchestrator
 
                     return trim(($a->summary ?? 'Cita')." ($from–$to)");
                 })->take(3)->implode('; ');
+
+                if ($slotHolds !== [] && $labels === '') {
+                    $labels = 'reserva temporal de otro cliente';
+                }
 
                 $threshold = (int) config('services.whatsapp.friction_escalate_after', 3);
                 if ($friction >= $threshold) {
@@ -705,7 +826,9 @@ class AppointmentOrchestrator
 
                 return [
                     'ok' => false,
-                    'error' => $googleBusy ? 'Horario ocupado en Google Calendar.' : 'Horario ocupado en el sistema.',
+                    'error' => $slotHolds !== []
+                        ? 'Horario en soft-hold de otro cliente.'
+                        : ($googleBusy ? 'Horario ocupado en Google Calendar.' : 'Horario ocupado en el sistema.'),
                     'conflicts' => $labels,
                     'friction_count' => $friction,
                     'message' => 'Ese horario NO está disponible'.($labels !== '' ? ": {$labels}" : '').'. PROHIBIDO decir que la cita quedó confirmada. Informa que el horario está ocupado, ofrece otra opción y usa check_availability antes de proponerla. Si insiste 3 veces, escalate_to_human.',

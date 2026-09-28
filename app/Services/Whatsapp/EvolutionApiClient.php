@@ -2,6 +2,7 @@
 
 namespace App\Services\Whatsapp;
 
+use App\Services\Whatsapp\Contracts\MessengerGatewayInterface;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
@@ -9,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
 
-class EvolutionApiClient
+class EvolutionApiClient implements MessengerGatewayInterface
 {
     public function sendText(string $instance, string $phone, string $text): array
     {
@@ -34,6 +35,27 @@ class EvolutionApiClient
         }
 
         return is_array($response) ? $response : [];
+    }
+
+    public function sendTyping(string $instance, string $phone): void
+    {
+        $number = $this->normalizePhone($phone);
+
+        try {
+            // Evolution API v2 — presencia "composing" (best-effort).
+            $this->http(8)
+                ->post("/chat/sendPresence/{$instance}", [
+                    'number' => $number,
+                    'presence' => 'composing',
+                    'delay' => 0,
+                ]);
+        } catch (Throwable $e) {
+            Log::debug('Evolution sendTyping failed (ignored)', [
+                'instance' => $instance,
+                'phone' => $number,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

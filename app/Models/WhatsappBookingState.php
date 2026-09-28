@@ -45,6 +45,9 @@ class WhatsappBookingState extends Model
         'escalation_detail',
         'last_interaction_at',
         'welcome_sent_at',
+        'slot_hold_starts_at',
+        'slot_hold_ends_at',
+        'slot_hold_expires_at',
     ];
 
     protected function casts(): array
@@ -54,6 +57,9 @@ class WhatsappBookingState extends Model
             'bot_paused_at' => 'datetime',
             'last_interaction_at' => 'datetime',
             'welcome_sent_at' => 'datetime',
+            'slot_hold_starts_at' => 'datetime',
+            'slot_hold_ends_at' => 'datetime',
+            'slot_hold_expires_at' => 'datetime',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];

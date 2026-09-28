@@ -4,6 +4,7 @@ namespace App\Services\Whatsapp;
 
 use App\Models\WhatsappBookingState;
 use Carbon\Carbon;
+use Throwable;
 
 class BookingStateRepository
 {
@@ -185,6 +186,7 @@ class BookingStateRepository
             }
             $state->last_interaction_at = now();
             $state->save();
+            $this->syncSlotHoldForState($state);
         }
     }
 
@@ -267,7 +269,9 @@ class BookingStateRepository
         $state->last_interaction_at = now();
         $state->save();
 
-        return $state;
+        $this->syncSlotHoldForState($state);
+
+        return $state->fresh() ?? $state;
     }
 
     public function hasRequiredBookingData(WhatsappBookingState $state): bool
@@ -283,6 +287,7 @@ class BookingStateRepository
         $state = $this->findOrCreate($instanceName, $userPhone);
         $state->step = WhatsappBookingState::STAGE_COMPLETED;
         $state->friction_count = 0;
+        $this->clearSlotHoldAttributes($state);
         $state->last_interaction_at = now();
         $state->save();
     }
@@ -338,6 +343,7 @@ class BookingStateRepository
         $state->notes = null;
         $state->intent = null;
         $state->friction_count = 0;
+        $this->clearSlotHoldAttributes($state);
         if ($resumeBot) {
             $state->bot_paused_at = null;
             $state->escalation_reason = null;
@@ -347,6 +353,106 @@ class BookingStateRepository
         $state->save();
 
         return $state;
+    }
+
+    /**
+     * Soft-hold del slot al entrar/permanecer en CONFIRMING (anti double-booking).
+     */
+    public function syncSlotHoldForState(WhatsappBookingState $state, ?string $timezone = null): void
+    {
+        $stage = $this->normalizeStage((string) ($state->step ?? ''));
+
+        if (
+            $stage !== WhatsappBookingState::STAGE_CONFIRMING
+            || ! filled($state->date)
+            || ! filled($state->time)
+        ) {
+            if ($state->slot_hold_expires_at !== null) {
+                $this->clearSlotHoldAttributes($state);
+                $state->save();
+            }
+
+            return;
+        }
+
+        $tz = $timezone ?: (string) config('services.google_calendar.timezone');
+        $minutes = max(1, (int) config('services.whatsapp.slot_hold_minutes', 10));
+
+        try {
+            $start = Carbon::parse(trim((string) $state->date).' '.trim((string) $state->time), $tz);
+        } catch (Throwable) {
+            $this->clearSlotHoldAttributes($state);
+            $state->save();
+
+            return;
+        }
+
+        $end = $start->copy()->addMinutes(30);
+        $expires = now()->addMinutes($minutes);
+
+        $state->slot_hold_starts_at = $start;
+        $state->slot_hold_ends_at = $end;
+        $state->slot_hold_expires_at = $expires;
+        $state->save();
+    }
+
+    public function clearSlotHold(string $instanceName, string $userPhone): void
+    {
+        $state = $this->find($instanceName, $userPhone);
+        if (! $state) {
+            return;
+        }
+
+        $this->clearSlotHoldAttributes($state);
+        $state->save();
+    }
+
+    protected function clearSlotHoldAttributes(WhatsappBookingState $state): void
+    {
+        $state->slot_hold_starts_at = null;
+        $state->slot_hold_ends_at = null;
+        $state->slot_hold_expires_at = null;
+    }
+
+    /**
+     * Hold activo de OTRO teléfono sobre el mismo intervalo (solape).
+     *
+     * @return list<WhatsappBookingState>
+     */
+    public function findActiveSlotHolds(
+        string $instanceName,
+        Carbon $start,
+        Carbon $end,
+        ?string $excludePhone = null,
+    ): array {
+        $now = now();
+        $startUtc = $start->copy()->utc();
+        $endUtc = $end->copy()->utc();
+
+        $query = WhatsappBookingState::query()
+            ->where('instance_name', $instanceName)
+            ->where('step', WhatsappBookingState::STAGE_CONFIRMING)
+            ->whereNotNull('slot_hold_expires_at')
+            ->where('slot_hold_expires_at', '>', $now);
+
+        if ($excludePhone !== null && $excludePhone !== '') {
+            $query->where('user_phone', '!=', $excludePhone);
+        }
+
+        return $query
+            ->get()
+            ->filter(function (WhatsappBookingState $hold) use ($startUtc, $endUtc) {
+                if (! $hold->slot_hold_starts_at || ! $hold->slot_hold_ends_at) {
+                    return false;
+                }
+
+                $s = Carbon::parse($hold->slot_hold_starts_at)->utc();
+                $e = Carbon::parse($hold->slot_hold_ends_at)->utc();
+
+                return $s->lt($endUtc) && $e->gt($startUtc);
+            })
+            ->values()
+            ->all();
     }
 
     public function isBotPaused(WhatsappBookingState $state): bool
