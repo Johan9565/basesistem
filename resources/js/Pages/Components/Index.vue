@@ -452,7 +452,7 @@ watch(() => props.theme, (t) => {
                         <div>
                             <h3 class="text-lg font-semibold text-base-content">Paleta de la página de inicio</h3>
                             <p class="mt-1 text-sm text-base-content/70">
-                                Estos colores se aplican a la landing pública de Small Animal Clinic.
+                                Estos colores se aplican a la landing pública de GestionDesk.
                             </p>
                         </div>
                         <a
@@ -497,7 +497,7 @@ watch(() => props.theme, (t) => {
                         >
                             <div>
                                 <p class="text-xs uppercase tracking-[0.2em] opacity-80">Vista previa</p>
-                                <p class="font-semibold">Small Animal Clinic</p>
+                                <p class="font-semibold">GestionDesk</p>
                             </div>
                         </div>
                         <div class="flex flex-wrap items-center gap-3 p-4" :style="{ background: localLandingPalette['--landing-bg'] }">

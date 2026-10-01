@@ -5,27 +5,28 @@ namespace App\Support;
 class LandingPalette
 {
     /**
-     * Default blue palette for the public landing page.
+     * Default GestionDesk palette for the public landing page.
      *
      * @return array<string, string>
      */
     public static function defaults(): array
     {
         return [
-            '--landing-bg' => '#f3f7fc',
-            '--landing-ink' => '#0c2440',
-            '--landing-primary' => '#1a4b8c',
-            '--landing-primary-deep' => '#123868',
-            '--landing-primary-soft' => '#dbeafe',
-            '--landing-accent' => '#93c5fd',
-            '--landing-accent-strong' => '#2563eb',
-            '--landing-muted' => '#5b738c',
-            '--landing-cta' => '#60a5fa',
-            '--landing-cta-text' => '#0c2440',
-            '--landing-surface' => '#e8f1fb',
-            '--landing-footer' => '#0a1f38',
-            '--landing-hero-from' => '#0f3a6e',
-            '--landing-border' => '#c5d8ef',
+            '--landing-bg' => '#F4F6F8',
+            '--landing-ink' => '#1A0C48',
+            '--landing-primary' => '#311B92',
+            '--landing-primary-deep' => '#1F1060',
+            '--landing-primary-soft' => '#EDE7F6',
+            '--landing-accent' => '#00E5FF',
+            '--landing-accent-strong' => '#00B4D8',
+            '--landing-success' => '#00E676',
+            '--landing-muted' => '#5C5470',
+            '--landing-cta' => '#00E5FF',
+            '--landing-cta-text' => '#1A0C48',
+            '--landing-surface' => '#FFFFFF',
+            '--landing-footer' => '#15093D',
+            '--landing-hero-from' => '#311B92',
+            '--landing-border' => '#E0E3EB',
         ];
     }
 
@@ -37,46 +38,48 @@ class LandingPalette
     public static function presets(): array
     {
         return [
-            'azul' => [
-                'label' => 'Azul océano',
+            'gestiondesk' => [
+                'label' => 'GestionDesk Oficial (Púrpura & Cian)',
                 'colors' => self::defaults(),
             ],
-            'verde' => [
-                'label' => 'Verde clínico',
+            'neon_night' => [
+                'label' => 'Neon Night',
                 'colors' => [
-                    '--landing-bg' => '#f9fbf8',
-                    '--landing-ink' => '#19352f',
-                    '--landing-primary' => '#315b50',
-                    '--landing-primary-deep' => '#234b42',
-                    '--landing-primary-soft' => '#eaf3ef',
-                    '--landing-accent' => '#f6c990',
-                    '--landing-accent-strong' => '#c47a42',
-                    '--landing-muted' => '#60736d',
-                    '--landing-cta' => '#f3b46b',
-                    '--landing-cta-text' => '#25453d',
-                    '--landing-surface' => '#eaf2ee',
-                    '--landing-footer' => '#1d3f37',
-                    '--landing-hero-from' => '#234b42',
-                    '--landing-border' => '#dce7e2',
+                    '--landing-bg' => '#0F0826',
+                    '--landing-ink' => '#FFFFFF',
+                    '--landing-primary' => '#311B92',
+                    '--landing-primary-deep' => '#15093D',
+                    '--landing-primary-soft' => '#241468',
+                    '--landing-accent' => '#00E5FF',
+                    '--landing-accent-strong' => '#00E676',
+                    '--landing-success' => '#00E676',
+                    '--landing-muted' => '#9E94B8',
+                    '--landing-cta' => '#00E5FF',
+                    '--landing-cta-text' => '#15093D',
+                    '--landing-surface' => '#1A0C48',
+                    '--landing-footer' => '#0A041A',
+                    '--landing-hero-from' => '#1F1060',
+                    '--landing-border' => '#3B2682',
                 ],
             ],
-            'noche' => [
-                'label' => 'Azul noche',
+            'verde_menta' => [
+                'label' => 'Menta Neón & Púrpura',
                 'colors' => [
-                    '--landing-bg' => '#eef2f7',
-                    '--landing-ink' => '#0b1220',
-                    '--landing-primary' => '#1e293b',
-                    '--landing-primary-deep' => '#0f172a',
-                    '--landing-primary-soft' => '#e2e8f0',
-                    '--landing-accent' => '#38bdf8',
-                    '--landing-accent-strong' => '#0ea5e9',
-                    '--landing-muted' => '#64748b',
-                    '--landing-cta' => '#38bdf8',
-                    '--landing-cta-text' => '#0b1220',
-                    '--landing-surface' => '#e2e8f0',
-                    '--landing-footer' => '#020617',
-                    '--landing-hero-from' => '#0f172a',
-                    '--landing-border' => '#cbd5e1',
+                    '--landing-bg' => '#F4F6F8',
+                    '--landing-ink' => '#15093D',
+                    '--landing-primary' => '#311B92',
+                    '--landing-primary-deep' => '#1A0C48',
+                    '--landing-primary-soft' => '#E8F5E9',
+                    '--landing-accent' => '#00E676',
+                    '--landing-accent-strong' => '#00C853',
+                    '--landing-success' => '#00E676',
+                    '--landing-muted' => '#5C5470',
+                    '--landing-cta' => '#00E676',
+                    '--landing-cta-text' => '#15093D',
+                    '--landing-surface' => '#FFFFFF',
+                    '--landing-footer' => '#15093D',
+                    '--landing-hero-from' => '#311B92',
+                    '--landing-border' => '#D5E6DC',
                 ],
             ],
         ];

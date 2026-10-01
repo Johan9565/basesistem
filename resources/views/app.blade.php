@@ -12,13 +12,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f172a">
 
-    <title inertia>{{ config('app.name', 'Small Animal Clinic') }}</title>
+    <title inertia>{{ config('app.name', 'GestionDesk') }}</title>
     <!-- Favicon & Logo para Navegador y Buscadores -->
     <link rel="icon" type="image/png" href="{{ asset('images/logo_without_name.png') }}">
     <link rel="shortcut icon" href="{{ asset('favicon.ico') }}">
     <link rel="apple-touch-icon" href="{{ asset('images/logo_without_name.png') }}">
 
-    <meta property="og:site_name" content="{{ config('app.name', 'Small Animal Clinic') }}" />
+    <meta property="og:site_name" content="{{ config('app.name', 'GestionDesk') }}" />
     <meta property="og:image" content="{{ asset('images/logo_without_name.png') }}" />
     <meta name="twitter:image" content="{{ asset('images/logo_without_name.png') }}" />
 

@@ -74,6 +74,24 @@ return [
         'timezone' => env('GOOGLE_CALENDAR_TIMEZONE', 'America/Merida'),
     ],
 
+    'deepgram' => [
+        'key' => env('DEEPGRAM_API_KEY'),
+        'base_url' => env('DEEPGRAM_BASE_URL', 'https://api.deepgram.com/v1'),
+        'model' => env('DEEPGRAM_MODEL', 'nova-3'),
+        'language' => env('DEEPGRAM_LANGUAGE', 'es'),
+    ],
+
+    'openai' => [
+        'key' => env('OPENAI_API_KEY'),
+        'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+    ],
+
+    'groq' => [
+        'key' => env('GROQ_API_KEY'),
+        'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
+        'whisper_model' => env('GROQ_WHISPER_MODEL', 'whisper-large-v3-turbo'),
+    ],
+
     'whatsapp' => [
         // Mensajes a leer de Mongo antes de recortar (margen).
         'history_limit' => (int) env('WHATSAPP_HISTORY_LIMIT', 12),
@@ -91,6 +109,16 @@ return [
             'WHATSAPP_MEDIA_MESSAGE',
             'Por favor, escribe tu mensaje en texto para ayudarte a agendar.'
         ),
+        // Compresión de contexto en Mongo ("estilo cavernícola" para ahorro de tokens)
+        'compress_memory' => filter_var(env('WHATSAPP_COMPRESS_MEMORY', true), FILTER_VALIDATE_BOOLEAN),
+        'compress_memory_trigger_turns' => (int) env('WHATSAPP_COMPRESS_TRIGGER_TURNS', 4),
+        // Humanizer & Splitter de mensajes
+        'split_messages' => filter_var(env('WHATSAPP_SPLIT_MESSAGES', true), FILTER_VALIDATE_BOOLEAN),
+        'split_delay_ms' => (int) env('WHATSAPP_SPLIT_DELAY_MS', 1000),
+        'human_typing' => filter_var(env('WHATSAPP_HUMAN_TYPING', true), FILTER_VALIDATE_BOOLEAN),
+        // Transcripción de audios / notas de voz (Deepgram / Groq / OpenAI)
+        'transcribe_audio' => filter_var(env('WHATSAPP_TRANSCRIBE_AUDIO', true), FILTER_VALIDATE_BOOLEAN),
+        'transcription_driver' => env('WHATSAPP_TRANSCRIPTION_DRIVER', 'deepgram'), // 'deepgram', 'groq' o 'openai'
         // Tras N horarios no disponibles seguidos, pausa el bot y alerta al staff.
         'friction_escalate_after' => (int) env('WHATSAPP_FRICTION_ESCALATE_AFTER', 3),
         'escalation_courtesy' => env(

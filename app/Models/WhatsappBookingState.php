@@ -45,6 +45,7 @@ class WhatsappBookingState extends Model
         'escalation_detail',
         'last_interaction_at',
         'welcome_sent_at',
+        'context_summary',
         'slot_hold_starts_at',
         'slot_hold_ends_at',
         'slot_hold_expires_at',

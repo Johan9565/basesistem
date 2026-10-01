@@ -10,7 +10,7 @@ import PrimeVue from 'primevue/config';
 import ToastService from 'primevue/toastservice';
 import Aura from '@primeuix/themes/aura';
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+const appName = import.meta.env.VITE_APP_NAME || 'GestionDesk';
 
 createInertiaApp({
     title: (title) => (title ? (title.includes(appName) ? title : `${title} - ${appName}`) : appName),

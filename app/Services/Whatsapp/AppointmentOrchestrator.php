@@ -21,15 +21,49 @@ use Throwable;
 
 class AppointmentOrchestrator
 {
+    /** @var ConversationRepository */
+    protected $conversations;
+
+    /** @var BookingStateRepository */
+    protected $bookingStates;
+
+    /** @var DeepSeekClient */
+    protected $deepSeek;
+
+    /** @var MimoClient */
+    protected $mimo;
+
+    /** @var GoogleCalendarService */
+    protected $calendar;
+
+    /** @var MessengerGatewayInterface|EvolutionApiClient */
+    protected $evolution;
+
+    /** @var AdminAssistantOrchestrator */
+    protected $telegramAdmin;
+
+    /** @var MessageDispatcher */
+    protected $dispatcher;
+
     public function __construct(
-        protected ConversationRepository $conversations,
-        protected BookingStateRepository $bookingStates,
-        protected DeepSeekClient $deepSeek,
-        protected MimoClient $mimo,
-        protected GoogleCalendarService $calendar,
-        protected MessengerGatewayInterface $evolution,
-        protected AdminAssistantOrchestrator $telegramAdmin,
-    ) {}
+        ConversationRepository $conversations,
+        BookingStateRepository $bookingStates,
+        DeepSeekClient $deepSeek,
+        MimoClient $mimo,
+        GoogleCalendarService $calendar,
+        MessengerGatewayInterface $evolution,
+        AdminAssistantOrchestrator $telegramAdmin,
+        ?MessageDispatcher $dispatcher = null
+    ) {
+        $this->conversations = $conversations;
+        $this->bookingStates = $bookingStates;
+        $this->deepSeek = $deepSeek;
+        $this->mimo = $mimo;
+        $this->calendar = $calendar;
+        $this->evolution = $evolution;
+        $this->telegramAdmin = $telegramAdmin;
+        $this->dispatcher = $dispatcher ?? new MessageDispatcher($evolution);
+    }
 
     public function handleIncoming(string $instanceName, string $userPhone, string $text): ?string
     {
@@ -117,7 +151,7 @@ class AppointmentOrchestrator
         string $sessionKey,
         string $phone,
         WhatsappBookingState $booking,
-        string $text,
+        string $text
     ): ?string {
         $timezone = $instance->timezone ?? config('services.google_calendar.timezone');
         $this->bookingStates->backfillMissingFromTranscript($sessionKey, $phone);
@@ -132,13 +166,35 @@ class AppointmentOrchestrator
             (string) $timezone,
         );
 
+        $provider = $this->resolveProvider($instance);
+
+        // Compresión periódica de memoria estilo telegráfico (ahorro de tokens en Mongo)
+        $contextSummary = (string) ($booking->context_summary ?? '');
+        if (config('services.whatsapp.compress_memory', true)) {
+            $recentCount = $this->conversations->recent($sessionKey, $phone, 20)->count();
+            $triggerTurns = (int) config('services.whatsapp.compress_memory_trigger_turns', 4);
+            if ($recentCount >= ($triggerTurns * 2) && $contextSummary === '') {
+                $compressed = $this->conversations->compressHistory(
+                    $sessionKey,
+                    $phone,
+                    $this->llmClient($provider)
+                );
+                if ($compressed) {
+                    $contextSummary = $compressed;
+                    WhatsappBookingState::where('instance_name', $sessionKey)
+                        ->where('user_phone', $phone)
+                        ->update(['context_summary' => $compressed]);
+                }
+            }
+        }
+
         $messages = $this->conversations->toLlmMessages(
             $sessionKey,
             $phone,
             $staticPrompt,
             $dynamicPrompt,
+            $contextSummary
         );
-        $provider = $this->resolveProvider($instance);
 
         try {
             $loop = $this->runLlmLoop($messages, $instance, $sessionKey, $phone, $provider);
@@ -170,12 +226,14 @@ class AppointmentOrchestrator
             $reply,
             $bookingAfter,
             (bool) ($loop['calendar_ok'] ?? false),
-            is_array($loop['calendar_failure'] ?? null) ? $loop['calendar_failure'] : null,
+            is_array($loop['calendar_failure'] ?? null) ? $loop['calendar_failure'] : null
         );
 
-        // Si durante el loop se pausó el bot (escalado), igual enviamos la cortesía del modelo.
+        // Guardar respuesta completa en el historial
         $this->conversations->append($sessionKey, $phone, 'assistant', $reply);
-        $this->evolution->sendText($sessionKey, $phone, $reply);
+
+        // Despachar con MessageDispatcher (Splitting inteligente + typing natural)
+        $this->dispatcher->dispatch($sessionKey, $phone, $reply);
         $this->bookingStates->touch($sessionKey, $phone);
 
         return $reply;
@@ -184,10 +242,10 @@ class AppointmentOrchestrator
     public function sendStaticReply(string $instanceName, string $userPhone, string $text): void
     {
         $instance = WhatsappInstance::resolveActiveByEvolutionSession($instanceName);
-        $sessionKey = $instance?->evolutionName() ?: $instanceName;
+        $sessionKey = $instance ? $instance->evolutionName() : $instanceName;
         $phone = $this->evolution->normalizePhone($userPhone);
         $this->conversations->append($sessionKey, $phone, 'assistant', $text);
-        $this->evolution->sendText($sessionKey, $phone, $text);
+        $this->dispatcher->dispatch($sessionKey, $phone, $text);
         $this->bookingStates->touch($sessionKey, $phone);
     }
 

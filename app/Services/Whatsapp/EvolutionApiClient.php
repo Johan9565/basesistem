@@ -186,6 +186,64 @@ class EvolutionApiClient implements MessengerGatewayInterface
         return is_array($response) ? $response : [];
     }
 
+    public function sendPresence(string $instance, string $phone, string $presence = 'composing', int $delay = 1500): void
+    {
+        $number = $this->normalizePhone($phone);
+
+        try {
+            $this->http(8)
+                ->post("/chat/sendPresence/{$instance}", [
+                    'number' => $number,
+                    'presence' => $presence,
+                    'delay' => $delay,
+                ]);
+        } catch (Throwable $e) {
+            Log::debug('Evolution sendPresence failed (ignored)', [
+                'instance' => $instance,
+                'phone' => $number,
+                'presence' => $presence,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Descarga el Base64 de un mensaje de medios (audio, imagen, documento) desde Evolution API v2.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    public function downloadMediaBase64(string $instance, array $message): ?string
+    {
+        // 1. Si el webhook ya incluye base64 directo
+        if (! empty($message['base64'])) {
+            return (string) $message['base64'];
+        }
+
+        // 2. Consultar el endpoint de Evolution v2 getBase64FromMediaMessage
+        try {
+            $payload = [
+                'message' => $message,
+                'convertToMp4' => false,
+            ];
+
+            $response = $this->http(45)
+                ->post("/chat/getBase64FromMediaMessage/{$instance}", $payload)
+                ->throw()
+                ->json();
+
+            if (is_array($response) && ! empty($response['base64'])) {
+                return (string) $response['base64'];
+            }
+        } catch (Throwable $e) {
+            Log::warning('Evolution downloadMediaBase64 failed', [
+                'instance' => $instance,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
+    }
+
     public function normalizePhone(string $phone): string
     {
         $phone = preg_replace('/@.+$/', '', $phone) ?? $phone;

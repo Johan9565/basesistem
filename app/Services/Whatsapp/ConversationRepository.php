@@ -29,7 +29,7 @@ class ConversationRepository
         string $content,
         ?string $toolCallId = null,
         ?string $toolName = null,
-        ?array $metadata = null,
+        ?array $metadata = null
     ): WhatsappMessage {
         return WhatsappMessage::query()->create([
             'instance_name' => $instanceName,
@@ -45,8 +45,8 @@ class ConversationRepository
     /**
      * Mensajes para el LLM con prefijo cacheable:
      * 1) system estático (reglas + catálogo)
-     * 2) system dinámico (fecha/hora + estado)
-     * 3) historial user/assistant
+     * 2) system dinámico (fecha/hora + estado + memoria telegráfica comprimida)
+     * 3) historial user/assistant (acotado a turnos recientes para ahorrar tokens)
      *
      * @return list<array<string, mixed>>
      */
@@ -55,6 +55,7 @@ class ConversationRepository
         string $userPhone,
         string $staticSystemPrompt,
         string $dynamicSystemPrompt,
+        ?string $contextSummary = null
     ): array {
         $maxTurns = max(1, (int) config('services.whatsapp.history_turns', 3));
         $fetchLimit = max(
@@ -69,10 +70,18 @@ class ConversationRepository
             ],
         ];
 
+        $dynamicParts = [];
         if (trim($dynamicSystemPrompt) !== '') {
+            $dynamicParts[] = trim($dynamicSystemPrompt);
+        }
+        if (! empty($contextSummary)) {
+            $dynamicParts[] = "MEMORIA TELEGRÁFICA PREVIA: " . trim($contextSummary);
+        }
+
+        if ($dynamicParts !== []) {
             $messages[] = [
                 'role' => 'system',
-                'content' => $dynamicSystemPrompt,
+                'content' => implode("\n\n", $dynamicParts),
             ];
         }
 
@@ -112,6 +121,68 @@ class ConversationRepository
         }
 
         return array_merge($messages, $turns);
+    }
+
+    /**
+     * Comprime el historial conversacional previo en formato telegráfico "estilo cavernícola" (ahorro masivo de tokens).
+     */
+    public function compressHistory(
+        string $instanceName,
+        string $userPhone,
+        $llmClient,
+        int $minMessages = 6
+    ): ?string {
+        $recentMessages = $this->recent($instanceName, $userPhone, 15);
+        if ($recentMessages->count() < $minMessages) {
+            return null;
+        }
+
+        $chatLines = [];
+        foreach ($recentMessages as $msg) {
+            $r = $msg->role === 'assistant' ? 'Bot' : 'Cliente';
+            $c = trim((string) $msg->content);
+            if ($c !== '') {
+                $chatLines[] = "{$r}: {$c}";
+            }
+        }
+
+        if (count($chatLines) < $minMessages) {
+            return null;
+        }
+
+        $rawTranscript = implode("\n", $chatLines);
+
+        $prompt = [
+            [
+                'role' => 'system',
+                'content' => "Eres un extractor de hechos telegráfico estilo cavernícola/ultra-compacto.\n"
+                    . "Resume la conversación en HECHOS ATÓMICOS usando estrictamente este formato:\n"
+                    . "Cliente: [Nombre] | Interés: [Servicio/Tratamiento] | Rechaza: [Horarios/Precios] | Quiere: [Fecha/Hora deseada] | Estado: [Etapa actual]\n"
+                    . "REGLAS:\n"
+                    . "- Máximo 30 palabras en total.\n"
+                    . "- Sin saludos, sin explicaciones ni introducciones.\n"
+                    . "- Omite campos si no existen datos.",
+            ],
+            [
+                'role' => 'user',
+                'content' => "Historial a resumir:\n" . $rawTranscript,
+            ],
+        ];
+
+        try {
+            $res = $llmClient->chat($prompt, false);
+            $summary = trim((string) ($res['choices'][0]['message']['content'] ?? ''));
+
+            return $summary !== '' ? $summary : null;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Conversation history compression failed (ignored)', [
+                'instance' => $instanceName,
+                'phone' => $userPhone,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 
     /**

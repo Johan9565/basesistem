@@ -16,6 +16,7 @@ class EvolutionWebhookController extends Controller
         Request $request,
         AppointmentOrchestrator $orchestrator,
         EvolutionApiClient $evolution,
+        \App\Services\Whatsapp\AudioTranscriptionService $transcriber
     ): JsonResponse {
         $payload = $request->all();
         $event = strtoupper((string) ($payload['event'] ?? $payload['type'] ?? ''));
@@ -46,14 +47,43 @@ class EvolutionWebhookController extends Controller
 
             $phone = $evolution->normalizePhone($phone);
 
-            // Media sin texto → respuesta estática solo si está habilitado.
-            if ($this->isNonTextMedia($message)) {
+            // 1. Manejo de Notas de Voz / Audio con Whisper
+            $text = $this->extractText($message);
+            if ($text === '' && $this->isAudioMessage($message)) {
+                if (config('services.whatsapp.transcribe_audio', true)) {
+                    try {
+                        $evolution->sendPresence($instance, $phone, 'composing', 2000);
+                        $base64Audio = $evolution->downloadMediaBase64($instance, $message);
+
+                        if ($base64Audio) {
+                            $transcribed = $transcriber->transcribe($base64Audio, 'ogg');
+                            if (trim($transcribed) !== '') {
+                                $text = trim($transcribed);
+                                Log::info('Audio message transcribed successfully', [
+                                    'instance' => $instance,
+                                    'phone' => $phone,
+                                    'text' => $text,
+                                ]);
+                            }
+                        }
+                    } catch (Throwable $e) {
+                        Log::warning('Audio transcription failed, falling back', [
+                            'instance' => $instance,
+                            'phone' => $phone,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+            }
+
+            // 2. Media sin texto ni audio procesable → respuesta estática solo si está habilitado.
+            if ($text === '' && $this->isNonTextMedia($message)) {
                 if (config('services.whatsapp.auto_media_reply')) {
                     try {
                         $orchestrator->sendStaticReply(
                             $instance,
                             $phone,
-                            (string) config('services.whatsapp.media_message'),
+                            (string) config('services.whatsapp.media_message')
                         );
                     } catch (Throwable $e) {
                         Log::error('WhatsApp media static reply failed', [
@@ -67,7 +97,6 @@ class EvolutionWebhookController extends Controller
                 continue;
             }
 
-            $text = $this->extractText($message);
             if ($text === '') {
                 Log::debug('Evolution webhook skipped incomplete message', [
                     'instance' => $instance,
@@ -99,6 +128,16 @@ class EvolutionWebhookController extends Controller
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    protected function isAudioMessage(array $message): bool
+    {
+        $msg = data_get($message, 'message');
+        if (! is_array($msg)) {
+            return false;
+        }
+
+        return isset($msg['audioMessage']) || isset($msg['pttMessage']);
     }
 
     protected function isGreetingOnly(string $text): bool
