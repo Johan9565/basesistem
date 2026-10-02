@@ -39,7 +39,6 @@ const display = computed(() => {
         ape_mat: u?.ape_mat ?? '—',
         email: u?.email ?? '—',
         role: page.props.auth?.role ?? '—',
-        area: '—',
         status: '—',
         avatar_url: null,
         banner_url: null,
@@ -381,22 +380,12 @@ function onCropApplied(file) {
                                 </div>
                                 <div
                                     class="w-full mb-4"
-                                    :class="fieldHighlightClass('area')"
+                                    :class="fieldHighlightClass('status')"
                                 >
-                                    <h3 class="dark:text-gray-300 mb-2 text-sm font-medium">Área</h3>
+                                    <h3 class="dark:text-gray-300 mb-2 text-sm font-medium">Estado</h3>
                                     <div :class="[inputReadonlyClass, 'mt-0!']">
-                                        {{ display.area || '—' }}
+                                        {{ display.status || '—' }}
                                     </div>
-                                </div>
-                            </div>
-
-                            <div
-                                class="w-full mb-2"
-                                :class="fieldHighlightClass('status')"
-                            >
-                                <h3 class="dark:text-gray-300 mb-2 text-sm font-medium">Estado</h3>
-                                <div :class="[inputReadonlyClass, 'mt-0!']">
-                                    {{ display.status || '—' }}
                                 </div>
                             </div>
 

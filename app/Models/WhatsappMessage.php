@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use MongoDB\Laravel\Eloquent\Model;
+use App\Models\Concerns\BelongsToCompany;
 
 class WhatsappMessage extends Model
 {
+    use BelongsToCompany;
+
     protected $connection = 'mongodb';
 
     protected $collection = 'whatsapp_messages';
@@ -13,6 +16,7 @@ class WhatsappMessage extends Model
     protected $table = 'whatsapp_messages';
 
     protected $fillable = [
+        'company_id',
         'instance_name',
         'user_phone',
         'role',

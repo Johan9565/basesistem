@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diagramas de Flujo — Base Sistema</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(22, 27, 46, 0.85);
+      --card-border: rgba(99, 102, 241, 0.2);
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --accent-glow: rgba(99, 102, 241, 0.35);
+      --success: #10b981;
+      --warning: #f59e0b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: radial-gradient(circle at 10% 20%, rgba(30, 27, 75, 0.8) 0%, rgba(9, 13, 22, 1) 90%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 1.5rem 2rem;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--card-border);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 9999px;
+      background: rgba(99, 102, 241, 0.2);
+      color: var(--accent-hover);
+      border: 1px solid var(--accent);
+    }
+
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 30%, #a5b4fc 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 0.5rem;
+      padding: 1rem 2rem;
+      background: rgba(15, 23, 42, 0.5);
+      overflow-x: auto;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 0.6rem 1.1rem;
+      border-radius: 0.6rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-btn.active {
+      color: #fff;
+      background: var(--accent);
+      box-shadow: 0 0 15px var(--accent-glow);
+      border-color: var(--accent-hover);
+    }
+
+    main {
+      flex: 1;
+      padding: 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 1rem;
+      padding: 2rem;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      backdrop-filter: blur(16px);
+      margin-bottom: 2rem;
+    }
+
+    .card-header {
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      padding-bottom: 1rem;
+    }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .card-description {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-top: 0.4rem;
+      line-height: 1.5;
+    }
+
+    .diagram-container {
+      background: #0d111d;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      overflow-x: auto;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 350px;
+    }
+
+    .diagram-container svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .chip {
+      font-size: 0.8rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 0.35rem;
+      background: rgba(255, 255, 255, 0.05);
+      color: #cbd5e1;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    footer {
+      text-align: center;
+      padding: 1.5rem;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo-badge">
+      <h1>Base Sistema — Diagramas de Flujo</h1>
+      <span class="badge">Laravel 12 · Vue 3 · Mongo</span>
+    </div>
+    <div style="font-size: 0.85rem; color: var(--text-muted);">
+      Documento interactivo
+    </div>
+  </header>
+
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab(0)">1. Arquitectura Global</button>
+    <button class="tab-btn" onclick="switchTab(1)">2. Auth & Permisos</button>
+    <button class="tab-btn" onclick="switchTab(2)">3. WhatsApp Booking Bot</button>
+    <button class="tab-btn" onclick="switchTab(3)">4. Telegram Staff Bot</button>
+    <button class="tab-btn" onclick="switchTab(4)">5. Notificaciones Reverb</button>
+    <button class="tab-btn" onclick="switchTab(5)">6. Panel de Administración</button>
+    <button class="tab-btn" onclick="switchTab(6)">7. Multi-Empresa & Módulos (SaaS)</button>
+  </div>
+
+  <main>
+    <!-- TAB 1: Global -->
+    <div class="tab-content active">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">🌐 1. Arquitectura Global y Ciclo de Peticiones</h2>
+          <p class="card-description">Muestra los 4 canales de entrada (Web, WhatsApp, Telegram, Eventos), las capas de seguridad, orquestación, persistencia en MongoDB y servicios externos.</p>
+          <div class="chips">
+            <span class="chip">routes/web.php</span>
+            <span class="chip">routes/api.php</span>
+            <span class="chip">MongoDB</span>
+            <span class="chip">Redis</span>
+            <span class="chip">Reverb :8080</span>
+          </div>
+        </div>
+        <div class="diagram-container">
+          <pre class="mermaid">
+flowchart TD
+    subgraph INGRESS ["🌐 Fuentes de Entrada"]
+        ClientWeb["💻 Usuario Web / Admin (Navegador)"]
+        ClientWA["📱 Cliente WhatsApp"]
+        StaffTG["🤖 Staff / Admin Telegram"]
+        ExtService["⚡ Eventos del Sistema (Jobs / Triggers)"]
+    end
+
+    subgraph GATEWAY ["🛡️ Capa de Ruteo & Seguridad (Laravel)"]
+        WebRoutes["Web Routes (routes/web.php)"]
+        AuthMiddleware{"¿Autenticado & Verificado?"}
+        PermMiddleware{"¿Tiene Permiso Requerido?"}
+        
+        ApiRoutes["API Webhooks (routes/api.php)"]
+        VerifyEvoSecret{"¿Firma Evolution Válida?"}
+        VerifyTGSecret{"¿Firma Telegram Válida?"}
+    end
+
+    subgraph CORE ["⚙️ Controladores & Orquestadores"]
+        InertiaControllers["Controladores Web & Inertia
+        (Users, Roles, Profile,
+        Components, Dependencies,
+        Whatsapp UI, Notifications)"]
+
+        AppOrchestrator["AppointmentOrchestrator
+        (Bot WhatsApp de Citas)"]
+
+        AdminOrchestrator["AdminAssistantOrchestrator
+        (Asistente Telegram Staff)"]
+
+        NotifBroadcaster["Notification Link Resolver &
+        Event Broadcaster (NotificacionToUser)"]
+    end
+
+    subgraph EXTERNAL ["☁️ Servicios Externos e IA"]
+        EvoAPI["Evolution API (Baileys / WhatsApp)"]
+        TGBotAPI["Telegram Bot API"]
+        LLM["IA LLM (DeepSeek / Xiaomi MiMo)"]
+        GCalendar["Google Calendar API"]
+        ReverbWS["Servidor Reverb (WebSockets :8080)"]
+    end
+
+    subgraph STORAGE ["💾 Persistencia (MongoDB) & Caché (Redis)"]
+        MongoUsers[("users & roles")]
+        MongoWA[("whatsapp_instances
+        whatsapp_messages
+        whatsapp_booking_states
+        whatsapp_appointments")]
+        MongoNotif[("notifications")]
+        MongoConfig[("component_themes
+        dependencies")]
+        RedisCache[("Redis (Sesiones / Cache / Queues)")]
+    end
+
+    ClientWeb --> WebRoutes
+    WebRoutes --> AuthMiddleware
+    AuthMiddleware -- No --> LoginFlow["Redirección a /login"]
+    AuthMiddleware -- Sí --> PermMiddleware
+    PermMiddleware -- No --> Forbidden["403 Forbidden"]
+    PermMiddleware -- Sí --> InertiaControllers
+    InertiaControllers <--> MongoUsers & MongoConfig & MongoWA & MongoNotif & RedisCache
+    InertiaControllers -->|Renderiza| VueInertia["Vue 3 + PrimeVue / SSR"]
+    VueInertia --> ClientWeb
+
+    ClientWA -->|Envía mensaje| EvoAPI
+    EvoAPI -->|POST /api/evolution/webhook| ApiRoutes
+    ApiRoutes --> VerifyEvoSecret
+    VerifyEvoSecret -- No --> DropEvo["401 Unauthorized / Ignorar"]
+    VerifyEvoSecret -- Sí --> AppOrchestrator
+
+    AppOrchestrator <--> MongoWA
+    AppOrchestrator <--> LLM
+    AppOrchestrator <--> GCalendar
+    AppOrchestrator -->|Enviar respuesta| EvoAPI
+    EvoAPI -->|Entrega mensaje| ClientWA
+
+    StaffTG -->|Comando / Consulta| TGBotAPI
+    TGBotAPI -->|POST /api/telegram/{instance}/webhook| ApiRoutes
+    ApiRoutes --> VerifyTGSecret
+    VerifyTGSecret -- No --> DropTG["401 Unauthorized"]
+    VerifyTGSecret -- Sí --> AdminOrchestrator
+
+    AdminOrchestrator <--> MongoWA
+    AdminOrchestrator <--> LLM
+    AdminOrchestrator <--> GCalendar
+    AdminOrchestrator -->|Respuesta bot| TGBotAPI
+    TGBotAPI --> StaffTG
+
+    ExtService & InertiaControllers --> NotifBroadcaster
+    NotifBroadcaster --> MongoNotif
+    NotifBroadcaster -->|Broadcast Event| ReverbWS
+    ReverbWS -->|WebSocket Push (Echo)| ClientWeb
+          </pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Auth -->
+    <div class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">🔐 2. Flujo de Autenticación, Roles y Permisos</h2>
+          <p class="card-description">Control de acceso granular por permisos en middleware (`permission:xyz`) y autenticación basada en sesiones y MongoDB.</p>
+          <div class="chips">
+            <span class="chip">App\Http\Controllers\users</span>
+            <span class="chip">App\Http\Controllers\RolesController</span>
+            <span class="chip">App\Models\RoleModel</span>
+            <span class="chip">App\Models\PermissionsModel</span>
+          </div>
+        </div>
+        <div class="diagram-container">
+          <pre class="mermaid">
+flowchart TD
+    Start([Usuario intenta acceder a una ruta protegida]) --> IsLogged{¿Tiene sesión activa?}
+    
+    IsLogged -- No --> GoLogin[Redirigir a /login]
+    GoLogin --> SubmitLogin[Ingresa credenciales]
+    SubmitLogin --> ValidateCreds{¿Credenciales válidas?}
+    ValidateCreds -- No --> ShowAuthError[Mostrar error de credenciales]
+    ValidateCreds -- Sí --> RegenerateSession[Iniciar sesión en Redis / Cookie]
+    RegenerateSession --> CheckVerified{¿Email verificado?}
+    
+    CheckVerified -- No --> EmailVerifyPage[Redirigir a verificación]
+    CheckVerified -- Sí --> LoadPermissions[Cargar Rol y Matriz de Permisos]
+    
+    IsLogged -- Sí --> CheckRoutePerm{¿La ruta exige permisos específicos?}
+    
+    CheckRoutePerm -- No (ej: /dashboard, /profile) --> AllowAccess[Renderizar Vista Inertia]
+    CheckRoutePerm -- Sí --> HasPermission{¿El usuario tiene el permiso requerido?}
+    
+    HasPermission -- No --> Abort403[403: No autorizado]
+    HasPermission -- Sí --> CheckModule{Ruta solicitada}
+    
+    CheckModule -->|permission:administration| AdminModule[Módulo Administración]
+    CheckModule -->|permission:whatsapp| WAModule[Módulo WhatsApp CRM]
+    CheckModule -->|permission:users| UsersCRUD[Gestión de Usuarios]
+    CheckModule -->|permission:roles| RolesMatrix[Matriz de Permisos & Roles]
+    CheckModule -->|permission:components| ThemeConfig[Personalizador de Temas y Branding]
+    CheckModule -->|permission:dependencies| DepConfig[Gestión de Dependencias]
+          </pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: WhatsApp Bot -->
+    <div class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">💬 3. Flujo del Bot de WhatsApp (Agendamiento de Citas)</h2>
+          <p class="card-description">Orquestación del flujo conversacional con soporte de notas de voz, LLM, control de estado y Google Calendar.</p>
+          <div class="chips">
+            <span class="chip">AppointmentOrchestrator.php</span>
+            <span class="chip">AudioTranscriptionService.php</span>
+            <span class="chip">DeepSeekClient / MimoClient</span>
+            <span class="chip">GoogleCalendarService.php</span>
+          </div>
+        </div>
+        <div class="diagram-container">
+          <pre class="mermaid">
+flowchart TD
+    A([Webhook Evolution API recibido]) --> B[Verificar cabeceras y API Secret]
+    B --> C{¿Evento es messages.upsert?}
+    C -- No --> EndIgnored([Ignorar evento / Actualizar estado de instancia])
+    C -- Sí --> D[Extraer remitente, texto o audio]
+    
+    D --> E{¿Es audio/nota de voz?}
+    E -- Sí --> F[AudioTranscriptionService: Descargar y transcribir con IA]
+    F --> G[Obtener texto transcrito]
+    E -- No --> G[Obtener texto directo]
+    
+    G --> H[WhatsappInstance::resolveActiveByEvolutionSession]
+    H --> I{¿Existe instancia activa para esta sesión?}
+    I -- No --> EndInactive([Instancia inactiva o bot pausado: Finalizar])
+    
+    I -- Sí --> J[Obtener o crear WhatsappBookingState para evolutionName + Teléfono]
+    J --> K[Guardar mensaje entrante en whatsapp_messages]
+    
+    K --> L[Preparar contexto del negocio, prompt del perfil y slots de Google Calendar]
+    L --> M[Llamar LLM: DeepSeek / Xiaomi MiMo con Function Calling]
+    
+    M --> N{¿El LLM solicita acción / tool?}
+    
+    N -->|Consultar disponibilidad| O[GoogleCalendarService: Buscar huecos libres]
+    O --> M
+    
+    N -->|Confirmar / Agendar cita| P[GoogleCalendarService: Crear evento en Google Calendar]
+    P --> Q[Guardar en whatsapp_appointments]
+    Q --> R[Actualizar WhatsappBookingState: confirmed]
+    R --> M
+    
+    N -->|Cancelar / Reagendar| S[Actualizar Google Calendar y cita local]
+    S --> M
+    
+    N -- Respuesta final en texto --> T[Guardar mensaje de salida en whatsapp_messages]
+    T --> U[EvolutionApiClient: Enviar mensaje a WhatsApp]
+    U --> V([Fin del ciclo de atención])
+          </pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: Telegram Admin Bot -->
+    <div class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">🤖 4. Flujo del Asistente de Telegram para Staff/Admin</h2>
+          <p class="card-description">Gestión de consultas administrativas, revisión de agenda, estado de instancias y comandos ejecutivos desde Telegram.</p>
+          <div class="chips">
+            <span class="chip">AdminAssistantOrchestrator.php</span>
+            <span class="chip">TelegramWebhookController.php</span>
+            <span class="chip">TelegramBotClient.php</span>
+          </div>
+        </div>
+        <div class="diagram-container">
+          <pre class="mermaid">
+flowchart TD
+    A([Webhook Telegram recibido en /api/telegram/:instance/webhook]) --> B[Verificar X-Telegram-Bot-Api-Secret-Token]
+    B --> C[Buscar WhatsappInstance por instance_name y telegram_bot_token]
+    
+    C --> D{¿Instancia y token válidos?}
+    D -- No --> E401([401 / 404 No autorizado])
+    
+    D -- Sí --> E[Extraer chat_id, user_id y mensaje]
+    E --> F{¿chat_id está autorizado en el perfil?}
+    F -- No --> RejectMsg[Responder: 'Usuario no autorizado para este bot']
+    
+    F -- Sí --> G[Recuperar historial reciente de TelegramAdminMessage]
+    G --> H[Determinar intención con LLM (Consultar citas, métricas, estado de instancias)]
+    
+    H --> I{Acción solicitada}
+    I -->|Ver citas de hoy/semana| J[Consultar whatsapp_appointments y Google Calendar]
+    I -->|Cambiar perfil activo| K[Activar nuevo perfil y desactivar hermanos de la misma sesión]
+    I -->|Verificar estado WhatsApp| L[Consultar estado de conexión en Evolution API]
+    I -->|Consulta general / Soporte| M[Generar respuesta asistida por IA]
+    
+    J & K & L & M --> N[Persistir mensaje en TelegramAdminMessage]
+    N --> O[TelegramBotClient: sendMessage con teclado inline / formato Markdown]
+    O --> P([Respuesta entregada al Staff])
+          </pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: Notificaciones -->
+    <div class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">🔔 5. Flujo de Notificaciones y WebSockets en Tiempo Real</h2>
+          <p class="card-description">Entrega de notificaciones push en tiempo real con Reverb, resolución de rutas y panel con VirtualScroller perezoso.</p>
+          <div class="chips">
+            <span class="chip">NotificacionToUser.php</span>
+            <span class="chip">NotificationLinkResolver.php</span>
+            <span class="chip">NotificationsController.php</span>
+            <span class="chip">NotificationBell.vue</span>
+          </div>
+        </div>
+        <div class="diagram-container">
+          <pre class="mermaid">
+flowchart TD
+    EventTrigger([Acción en el sistema / Controlador / Job]) --> ResolveLinks[NotificationLinkResolver: Resuelve rutas Ziggy a URLs canónicas]
+    
+    ResolveLinks --> SaveMongo[Guardar documento en colección notifications:
+    - user_id
+    - message
+    - item_ids
+    - links: label + href
+    - is_read: false]
+    
+    SaveMongo --> BroadcastEvent[Disparar evento NotificacionToUser en PrivateChannel: user.{id}]
+    
+    BroadcastEvent --> ReverbServer[Servidor Laravel Reverb WS :8080]
+    ReverbServer --> EchoClient[Laravel Echo en el navegador del usuario]
+    
+    EchoClient --> ToastUI[Mostrar Toast interactivo con botones por cada link]
+    EchoClient --> BadgeUI[Incrementar contador de campana: auth.notification_unread_count]
+    
+    subgraph PanelCampana ["Interactuación del Usuario con la Campana"]
+        UserClickBell[Usuario abre Popover de Notificaciones]
+        UserClickBell --> LazyFeed[GET /notifications/feed con VirtualScroller lazy]
+        LazyFeed --> FilterChoice{Filtro seleccionado}
+        FilterChoice -->|Todas| ShowAll[Listar notificaciones del mes]
+        FilterChoice -->|No leídas| ShowUnread[Listar solo pendientes]
+        
+        UserAction{Acción del usuario}
+        UserAction -->|Clic en enlace| MarkOne[PATCH /notifications/:id/read -> Navegar con Inertia]
+        UserAction -->|Marcar todas| MarkAll[POST /notifications/mark-all-read]
+    end
+          </pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 6: Panel Admin -->
+    <div class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">📊 6. Flujo de Navegación del Panel de Administración</h2>
+          <p class="card-description">Mapeo de rutas y módulos del front-end en Vue 3 con Inertia.</p>
+          <div class="chips">
+            <span class="chip">resources/js/Pages</span>
+            <span class="chip">PrimeVue</span>
+            <span class="chip">DaisyUI</span>
+          </div>
+        </div>
+        <div class="diagram-container">
+          <pre class="mermaid">
+flowchart TD
+    Dashboard([Panel Principal: /dashboard]) --> ModulesMenu{Selección en Menú Lateral}
+    
+    ModulesMenu -->|Usuarios| UsersView["/users (Listado, Alta, Modificación, Asignación de Roles)"]
+    ModulesMenu -->|Roles| RolesView["/roles (Matriz interactiva de permisos por rol)"]
+    
+    ModulesMenu -->|Branding / Temas| CompView["/components (Configuración de paletas, modo claro/oscuro, logos e imágenes)"]
+    CompView --> UploadBrand[Subir Logo/Favicon -> /components/branding/upload]
+    CompView --> UpdatePalettes[Actualizar colores Tailwind -> /components/theme]
+    
+    ModulesMenu -->|WhatsApp Instancias| WAInstView["/whatsapp/instances
+    - Crear perfiles
+    - Duplicar perfil compartiendo sesión
+    - Conectar QR Evolution API
+    - Activar/Desactivar perfil"]
+    
+    ModulesMenu -->|WhatsApp Conversaciones| WAConvView["/whatsapp/conversations
+    - Ver chats en vivo por instancia
+    - Reanudar bot pausado
+    - Limpiar mensajes o vaciar hilo"]
+    
+    ModulesMenu -->|WhatsApp Calendario| WACalView["/whatsapp/calendar
+    - Vista interactiva de citas agendadas
+    - Sincronización manual con Google Calendar
+    - Cancelación de citas"]
+    
+    ModulesMenu -->|WhatsApp Envíos| WASendView["/whatsapp/send (Envío masivo o individual de mensajes)"]
+          </pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 7: Multi-Tenant -->
+    <div class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">🏢 7. Arquitectura Multi-Empresa, Módulos y Contexto (SaaS)</h2>
+          <p class="card-description">Aislamiento por empresa con Global Scopes, resolución en memoria con CompanyContext, validación modular con CheckCompanyModule y desacoplamiento de herramientas de IA en WhatsApp.</p>
+          <div class="chips">
+            <span class="chip">App\Services\Tenancy\CompanyContext</span>
+            <span class="chip">App\Http\Middleware\SetCompanyContext</span>
+            <span class="chip">App\Models\Concerns\BelongsToCompany</span>
+            <span class="chip">App\Http\Middleware\CheckCompanyModule</span>
+            <span class="chip">App\Services\Tenancy\PermissionCacheService</span>
+          </div>
+        </div>
+        <div class="diagram-container">
+          <pre class="mermaid">
+flowchart TD
+    subgraph TENANT ["🏢 Jerarquía Multi-Empresa (MongoDB)"]
+        ClientDoc[("Client (Cuenta / Facturación)")]
+        CompanyA[("Company A: Sucursal Norte
+        modules: inventory, whatsapp")]
+        CompanyB[("Company B: Clínica Sur
+        modules: services, appointments, whatsapp")]
+        
+        ClientDoc --> CompanyA & CompanyB
+        
+        UserA["User (Carlos)"]
+        UserA -->|company_user: Admin| CompanyA
+        UserA -->|company_user: Operador| CompanyB
+    end
+
+    subgraph CONTEXT ["⚙️ Capa de Contexto Backend (Laravel)"]
+        RequestWeb["Petición HTTP Web"] --> MiddlewareContext["SetCompanyContext Middleware"]
+        MiddlewareContext --> SessionStore["Lee/Asigna active_company_id en Sesión"]
+        SessionStore --> CompanyContextService["CompanyContext Singleton (en memoria)"]
+        
+        RequestWH["Webhook WhatsApp / Telegram"] --> ExtractInstance["Resuelve WhatsappInstance"]
+        ExtractInstance --> FixWHContext["CompanyContext::setCompanyId(instance.company_id)"]
+    end
+
+    subgraph SECURITY ["🛡️ Seguridad & Control Modular"]
+        CompanyContextService --> ScopeFilter["BelongsToCompany (Global Scope)
+        Filtra automáticamente:
+        - Product::all()
+        - Service::all()
+        - WhatsappAppointment::all()"]
+        
+        CompanyContextService --> ModuleCheck["CheckCompanyModule Middleware
+        Bloquea rutas si module.enabled == false"]
+        
+        CompanyContextService --> PermCache["PermissionCacheService
+        Cache en Redis: user_perms:{user_id}:{company_id}"]
+    end
+
+    subgraph AI_ROUTING ["🤖 Desacoplamiento de IA en WhatsApp"]
+        CompanyContextService --> DecoupledTools["resolveToolsForCompany(activeCompany)
+        - Si appointments: OFF -> Quita Google Calendar
+        - Si inventory: ON -> Agrega query_inventory_products
+        - Si services: ON -> Agrega query_company_services"]
+        
+        DecoupledTools --> LLMCall["LLM (DeepSeek / MiMo)
+        Recibe solo tools e información del catálogo activo"]
+    end
+          </pre>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Base Sistema · Laravel 12 + Inertia SSR + MongoDB + Redis + Reverb
+  </footer>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        darkMode: true,
+        background: '#0d111d',
+        primaryColor: '#6366f1',
+        primaryTextColor: '#ffffff',
+        primaryBorderColor: '#818cf8',
+        lineColor: '#94a3b8',
+        secondaryColor: '#1e293b',
+        tertiaryColor: '#0f172a'
+      }
+    });
+
+    function switchTab(index) {
+      const tabs = document.querySelectorAll('.tab-btn');
+      const contents = document.querySelectorAll('.tab-content');
+      
+      tabs.forEach((tab, i) => {
+        if (i === index) {
+          tab.classList.add('active');
+        } else {
+          tab.classList.remove('active');
+        }
+      });
+
+      contents.forEach((content, i) => {
+        if (i === index) {
+          content.classList.add('active');
+        } else {
+          content.classList.remove('active');
+        }
+      });
+    }
+  </script>
+</body>
+</html>

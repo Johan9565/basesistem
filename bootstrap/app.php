@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
 
         $middleware->web(append: [
+            \App\Http\Middleware\SetCompanyContext::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
             \App\Http\Middleware\EnsureUserAccountState::class,
@@ -23,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
+            'module' => \App\Http\Middleware\CheckCompanyModule::class,
             'evolution.webhook' => \App\Http\Middleware\VerifyEvolutionWebhookSecret::class,
             'telegram.webhook' => \App\Http\Middleware\VerifyTelegramWebhookSecret::class,
         ]);

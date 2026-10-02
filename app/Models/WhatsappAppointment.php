@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use MongoDB\Laravel\Eloquent\Model;
+use App\Models\Concerns\BelongsToCompany;
 
 class WhatsappAppointment extends Model
 {
+    use BelongsToCompany;
+
     protected $connection = 'mongodb';
 
     protected $collection = 'whatsapp_appointments';
@@ -13,6 +16,9 @@ class WhatsappAppointment extends Model
     protected $table = 'whatsapp_appointments';
 
     protected $fillable = [
+        'company_id',
+        'service_id',
+        'employee_id',
         'instance_name',
         'user_phone',
         'summary',
@@ -27,6 +33,16 @@ class WhatsappAppointment extends Model
         'sync_error',
         'source',
     ];
+
+    public function service()
+    {
+        return $this->belongsTo(Service::class, 'service_id');
+    }
+
+    public function employee()
+    {
+        return $this->belongsTo(User::class, 'employee_id');
+    }
 
     protected function casts(): array
     {

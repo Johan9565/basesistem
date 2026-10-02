@@ -15,6 +15,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->singleton(\App\Services\Tenancy\CompanyContext::class);
+
         $this->app->bind(
             \App\Services\Whatsapp\Contracts\MessengerGatewayInterface::class,
             \App\Services\Whatsapp\EvolutionApiClient::class,

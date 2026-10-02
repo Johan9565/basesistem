@@ -7,6 +7,7 @@ import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import ThemeSelector from '@/Components/ThemeSelector.vue';
 import NotificationBell from '@/Components/NotificationBell.vue';
+import CompanySwitcher from '@/Components/CompanySwitcher.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import Toast from 'primevue/toast';
 import Button from 'primevue/button';
@@ -70,7 +71,8 @@ function pathnameMatchesCurrentPaths(paths) {
 
 onMounted(() => {
     const echo = window.Echo;
-    const userId = page.props?.auth?.user?.id;
+    const userObj = page.props?.auth?.user;
+    const userId = userObj?.id || userObj?._id;
     if (!echo || userId == null || userId === '') {
         return;
     }
@@ -121,20 +123,25 @@ onMounted(() => {
             scopedInertia?.preserveScroll !== false &&
             globalInertia?.preserveScroll !== false;
 
+        const reloadOptions = {
+            preserveScroll,
+            onSuccess: () => {
+                if (scopedContextMatched && highlightKeys?.length) {
+                    window.dispatchEvent(
+                        new CustomEvent(PROFILE_HIGHLIGHT_FIELDS_EVENT, {
+                            detail: { keys: highlightKeys },
+                        }),
+                    );
+                }
+            },
+        };
+
         if (mergedOnly.length) {
-            router.reload({
-                only: mergedOnly,
-                preserveScroll,
-                onSuccess: () => {
-                    if (scopedContextMatched && highlightKeys?.length) {
-                        window.dispatchEvent(
-                            new CustomEvent(PROFILE_HIGHLIGHT_FIELDS_EVENT, {
-                                detail: { keys: highlightKeys },
-                            }),
-                        );
-                    }
-                },
-            });
+            reloadOptions.only = mergedOnly;
+        }
+
+        if (globalInertia !== undefined || scopedContextMatched) {
+            router.reload(reloadOptions);
         } else if (scopedContextMatched && highlightKeys?.length) {
             window.dispatchEvent(
                 new CustomEvent(PROFILE_HIGHLIGHT_FIELDS_EVENT, {
@@ -147,7 +154,8 @@ onMounted(() => {
 
 onUnmounted(() => {
     const echo = window.Echo;
-    const userId = page.props?.auth?.user?.id;
+    const userObj = page.props?.auth?.user;
+    const userId = userObj?.id || userObj?._id;
     if (!echo || userId == null || userId === '') {
         return;
     }
@@ -257,7 +265,8 @@ onUnmounted(() => {
                             </div>
                         </div>
 
-                        <div class="hidden sm:ms-6 sm:flex sm:items-center sm:gap-1">
+                        <div class="hidden sm:ms-6 sm:flex sm:items-center sm:gap-2">
+                            <CompanySwitcher />
                             <NotificationBell />
                             <ThemeSelector />
                             <!-- Settings Dropdown -->

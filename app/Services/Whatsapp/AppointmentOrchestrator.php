@@ -311,8 +311,11 @@ class AppointmentOrchestrator
         $calendarOk = false;
         $calendarFailure = null;
 
+        $company = $instance->company ?: (!empty($instance->company_id) ? \App\Models\Company::find($instance->company_id) : null);
+        $tools = (new DeepSeekClient)->resolveToolsForCompany($company);
+
         for ($round = 0; $round < $maxRounds; $round++) {
-            $response = $client->chat($messages, withTools: true);
+            $response = $client->chat($messages, withTools: true, tools: $tools);
             $choice = $response['choices'][0]['message'] ?? null;
 
             if (! is_array($choice)) {
@@ -410,8 +413,86 @@ class AppointmentOrchestrator
             'create_calendar_event' => $this->toolCreateCalendarEvent($instance, $phone, $args),
             'list_my_appointments' => $this->toolListMyAppointments($instance, $phone, $args),
             'cancel_appointment' => $this->toolCancelAppointment($instance, $phone, $args),
+            'query_inventory_products' => $this->toolQueryInventoryProducts($instance, $args),
+            'query_company_services' => $this->toolQueryCompanyServices($instance, $args),
             default => ['ok' => false, 'error' => "Herramienta desconocida: {$name}"],
         };
+    }
+
+    /**
+     * Consulta el catálogo de productos de la empresa en inventario.
+     */
+    protected function toolQueryInventoryProducts(WhatsappInstance $instance, array $args): array
+    {
+        $search = trim((string) ($args['search'] ?? ''));
+        $category = trim((string) ($args['category'] ?? ''));
+
+        $query = \App\Models\Product::query()->where('is_active', true);
+        if (!empty($instance->company_id)) {
+            $query->where('company_id', (string) $instance->company_id);
+        }
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('sku', 'like', "%{$search}%")
+                  ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        if ($category !== '') {
+            $query->where('category', 'like', "%{$category}%");
+        }
+
+        $products = $query->limit(8)->get()->map(fn($p) => [
+            'id' => (string) $p->_id,
+            'sku' => $p->sku,
+            'name' => $p->name,
+            'price' => $p->price,
+            'stock' => $p->stock,
+            'category' => $p->category,
+            'available' => ($p->stock ?? 0) > 0,
+        ])->toArray();
+
+        return [
+            'ok' => true,
+            'count' => count($products),
+            'products' => $products,
+        ];
+    }
+
+    /**
+     * Consulta el catálogo de servicios de la empresa.
+     */
+    protected function toolQueryCompanyServices(WhatsappInstance $instance, array $args): array
+    {
+        $search = trim((string) ($args['search'] ?? ''));
+
+        $query = \App\Models\Service::query()->where('is_active', true);
+        if (!empty($instance->company_id)) {
+            $query->where('company_id', (string) $instance->company_id);
+        }
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        $services = $query->limit(10)->get()->map(fn($s) => [
+            'id' => (string) $s->_id,
+            'name' => $s->name,
+            'duration_minutes' => $s->duration_minutes,
+            'price' => $s->price,
+            'description' => $s->description,
+        ])->toArray();
+
+        return [
+            'ok' => true,
+            'count' => count($services),
+            'services' => $services,
+        ];
     }
 
     /**
@@ -893,7 +974,31 @@ class AppointmentOrchestrator
                 ];
             }
 
+            $companyId = $instance->company_id ? (string) $instance->company_id : null;
+            $matchedServiceId = null;
+            $matchedEmployeeId = null;
+
+            if (!empty($companyId)) {
+                $serviceName = (string) ($booking->service ?? $summary);
+                $matchedService = \App\Models\Service::where('company_id', $companyId)
+                    ->where('is_active', true)
+                    ->where(function ($q) use ($serviceName) {
+                        $q->where('name', 'like', "%{$serviceName}%");
+                    })
+                    ->first();
+
+                if ($matchedService) {
+                    $matchedServiceId = (string) $matchedService->_id;
+                    if (!empty($matchedService->assigned_user_ids)) {
+                        $matchedEmployeeId = (string) $matchedService->assigned_user_ids[0];
+                    }
+                }
+            }
+
             $appointment = WhatsappAppointment::query()->create([
+                'company_id' => $companyId,
+                'service_id' => $matchedServiceId,
+                'employee_id' => $matchedEmployeeId,
                 'instance_name' => $instance->evolutionName(),
                 'user_phone' => $phone,
                 'summary' => $summary,
@@ -1598,6 +1703,33 @@ PROMPT;
             'Promociones' => trim((string) ($instance->promotions ?? '')),
             'Ubicaciones' => trim((string) ($instance->locations ?? '')),
         ];
+
+        // Inyección dinámica de servicios y productos según módulos activos de la empresa
+        if (!empty($instance->company_id)) {
+            $company = $instance->company ?: \App\Models\Company::find($instance->company_id);
+
+            if ($company && $company->isModuleEnabled('services')) {
+                $dbServices = \App\Models\Service::where('company_id', (string) $instance->company_id)
+                    ->where('is_active', true)
+                    ->get();
+                if ($dbServices->isNotEmpty()) {
+                    $servicesText = $dbServices->map(fn($s) => "- {$s->name}: \${$s->price} ({$s->duration_minutes} min)".($s->description ? " - {$s->description}" : ''))->implode("\n");
+                    $sections['Catálogo oficial de Servicios'] = $servicesText;
+                }
+            }
+
+            if ($company && $company->isModuleEnabled('inventory')) {
+                $dbProducts = \App\Models\Product::where('company_id', (string) $instance->company_id)
+                    ->where('is_active', true)
+                    ->where('stock', '>', 0)
+                    ->limit(20)
+                    ->get();
+                if ($dbProducts->isNotEmpty()) {
+                    $productsText = $dbProducts->map(fn($p) => "- [{$p->sku}] {$p->name}: \${$p->price} (Stock: {$p->stock})".($p->description ? " - {$p->description}" : ''))->implode("\n");
+                    $sections['Catálogo de Productos disponibles en Inventario'] = $productsText;
+                }
+            }
+        }
 
         $lines = [];
         foreach ($sections as $label => $value) {

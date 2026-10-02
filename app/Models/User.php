@@ -24,10 +24,11 @@ class User extends Authenticatable
         'name',
         'ape_pat',
         'ape_mat',
-        'area_id',
         'email',
         'password',
         'role_id',
+        'user_type',
+        'client_id',
         'status',
         'active',
         'profile_photo_path',
@@ -64,9 +65,60 @@ class User extends Authenticatable
         return $this->belongsTo(RoleModel::class, 'role_id');
     }
 
-    public function hasPermission(string $permission): bool
+    public function companyMemberships()
     {
-        $role = $this->role_data()->first();
+        return $this->hasMany(CompanyUser::class, 'user_id');
+    }
+
+    public function companies()
+    {
+        return $this->belongsToMany(
+            Company::class,
+            null,
+            'user_id',
+            'company_id',
+            '_id',
+            '_id',
+            'company_user'
+        );
+    }
+
+    public function getMembershipForCompany(?string $companyId): ?CompanyUser
+    {
+        if (empty($companyId)) {
+            return null;
+        }
+
+        $userId = (string) $this->getKey();
+
+        return CompanyUser::where('user_id', $userId)
+            ->where('company_id', (string) $companyId)
+            ->where('status', 'active')
+            ->first();
+    }
+
+    /**
+     * Evalúa si el usuario tiene un permiso específico, contextualizado a una empresa si se pasa $companyId.
+     */
+    public function hasPermission(string $permission, ?string $companyId = null): bool
+    {
+        $role = null;
+
+        if (!empty($companyId)) {
+            $membership = $this->getMembershipForCompany($companyId);
+            if ($membership) {
+                // Si la membresía tiene excepciones personalizadas
+                if (!empty($membership->custom_permissions) && in_array($permission, $membership->custom_permissions, true)) {
+                    return true;
+                }
+                $role = $membership->role;
+            }
+        }
+
+        // Fallback al rol asignado directo al usuario (compatibilidad global)
+        if (!$role) {
+            $role = $this->role_data()->first();
+        }
 
         if (!$role) {
             return false;

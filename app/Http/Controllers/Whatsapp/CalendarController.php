@@ -13,20 +13,37 @@ use Throwable;
 
 class CalendarController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $user = $request->user();
+        $companyContext = app(\App\Services\Tenancy\CompanyContext::class);
+        $companyId = $companyContext->getCompanyId();
+        $membership = $user ? $user->getMembershipForCompany($companyId) : null;
+        $roleModel = $user ? $user->role_data()->first() : null;
+        $isSuperAdmin = ($user && $user->email === 'johan_palma45@hotmail.com') || (bool) ($membership ? $membership->is_owner : false) || ($roleModel && $roleModel->role === 'superadmin');
+        $roleSlug = $membership && $membership->role ? $membership->role->role : ($roleModel ? $roleModel->role : null);
+        $isSpecialist = ($roleSlug === 'especialista') && ! $isSuperAdmin;
+
         $instances = WhatsappInstance::query()
             ->orderBy('instance_name')
             ->get()
-            ->map(function (WhatsappInstance $row) {
+            ->map(function (WhatsappInstance $row) use ($user, $isSpecialist) {
                 $name = (string) $row->instance_name;
                 $sessionKey = $row->evolutionName();
-                $count = WhatsappAppointment::query()
-                    ->where('instance_name', $sessionKey)
-                    ->count();
 
-                $next = WhatsappAppointment::query()
-                    ->where('instance_name', $sessionKey)
+                $query = WhatsappAppointment::query()
+                    ->where('instance_name', $sessionKey);
+
+                if ($isSpecialist) {
+                    $query->where(function ($q) use ($user) {
+                        $q->where('employee_id', (string) $user->getKey())
+                          ->orWhereNull('employee_id');
+                    });
+                }
+
+                $count = (clone $query)->count();
+
+                $next = (clone $query)
                     ->where('starts_at', '>=', now())
                     ->orderBy('starts_at')
                     ->first();
@@ -53,6 +70,15 @@ class CalendarController extends Controller
             abort(404);
         }
 
+        $user = $request->user();
+        $companyContext = app(\App\Services\Tenancy\CompanyContext::class);
+        $companyId = $companyContext->getCompanyId();
+        $membership = $user ? $user->getMembershipForCompany($companyId) : null;
+        $roleModel = $user ? $user->role_data()->first() : null;
+        $isSuperAdmin = ($user && $user->email === 'johan_palma45@hotmail.com') || (bool) ($membership ? $membership->is_owner : false) || ($roleModel && $roleModel->role === 'superadmin');
+        $roleSlug = $membership && $membership->role ? $membership->role->role : ($roleModel ? $roleModel->role : null);
+        $isSpecialist = ($roleSlug === 'especialista') && ! $isSuperAdmin;
+
         $from = $request->query('from');
         $to = $request->query('to');
 
@@ -65,6 +91,13 @@ class CalendarController extends Controller
         $query = WhatsappAppointment::query()
             ->where('instance_name', $row->evolutionName())
             ->orderBy('starts_at', 'asc');
+
+        if ($isSpecialist) {
+            $query->where(function ($q) use ($user) {
+                $q->where('employee_id', (string) $user->getKey())
+                  ->orWhereNull('employee_id');
+            });
+        }
 
         if (is_string($from) && $from !== '') {
             $query->where(

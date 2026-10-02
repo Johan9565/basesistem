@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Events\NotificacionToUser;
-use App\Models\DependenciesModel;
+use App\Models\Company;
+use App\Models\CompanyUser;
 use App\Models\RoleModel;
 use App\Models\User;
+use App\Services\Tenancy\PermissionCacheService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -15,18 +17,27 @@ use MongoDB\BSON\ObjectId;
 use App\Models\LogsModel;
 use App\Models\NotificationsModel;
 use App\Support\NotificationLinkResolver;
+
 class users extends Controller
 {
+    /**
+     * Gestión de Cuentas Principales de Clientes y Superadministrador (Nivel SaaS / Global).
+     */
     public function index(Request $request)
     {
         $filters = $request->validate([
-            'search' => 'nullable|string|max:255',
+            'search'  => 'nullable|string|max:255',
             'role_id' => 'nullable|string',
-            'status' => 'nullable|in:0,1',
-            'area_id' => 'nullable|string',
+            'status'  => 'nullable|in:0,1',
         ]);
 
-        $query = User::query();
+        $query = User::query()
+            ->where(function ($q) {
+                $q->where('user_type', 'client')
+                  ->orWhere('user_type', 'superadmin')
+                  ->orWhereNull('user_type');
+            })
+            ->where('user_type', '!=', 'employee');
 
         $search = isset($filters['search']) ? trim($filters['search']) : '';
         if ($search !== '') {
@@ -38,69 +49,78 @@ class users extends Controller
             });
         }
 
-        if (! empty($filters['role_id'])) {
+        if (!empty($filters['role_id'])) {
             try {
                 $query->where('role_id', new ObjectId($filters['role_id']));
             } catch (\Throwable $e) {
-                // id inválido: no aplicar filtro de rol
+                // id inválido: no aplicar filtro
             }
         }
 
         if (array_key_exists('status', $filters) && $filters['status'] !== null && $filters['status'] !== '') {
             $query->where('status', (int) $filters['status']);
         }
-        if (! empty($filters['area_id'])) {
-            try {
-                $query->where('area_id', new ObjectId($filters['area_id']));
-            } catch (\Throwable $e) {
-                // id inválido: no aplicar filtro de area
-            }
-        }
+
+        $allMemberships = CompanyUser::all();
+        $allCompanies = Company::all()->keyBy(fn($c) => (string) $c->_id);
 
         $users = $query->orderBy('name')
             ->paginate(12)
             ->withQueryString()
-            ->through(function ($user) {
-                $role = $user->role_data()->first();
-                $areaId = $user->area_id ?? null;
+            ->through(function ($user) use ($allMemberships, $allCompanies) {
+                $userId = (string) $user->getKey();
+                $globalRole = $user->role_data()->first();
+
+                // Empresas a las que pertenece el usuario
+                $userCompanyIds = $allMemberships
+                    ->where('user_id', $userId)
+                    ->pluck('company_id')
+                    ->filter()
+                    ->toArray();
+
+                $companiesList = collect($userCompanyIds)
+                    ->map(function ($cid) use ($allCompanies) {
+                        $c = $allCompanies->get($cid);
+                        return $c ? $c->name : null;
+                    })
+                    ->filter()
+                    ->values()
+                    ->toArray();
 
                 return [
-                    'id' => (string) $user->id,
-                    'name' => $user->name,
-                    'ape_pat' => $user->ape_pat ?? '',
-                    'ape_mat' => $user->ape_mat ?? '',
-                    'email' => $user->email,
-                    'role' => $role ? $role->role : '—',
-                    'role_id' => $role ? (string) $role->getKey() : '',
-                    'status' => $user->status ?? 1,
-                    'area_id' => $areaId ? (string) $areaId : '',
+                    'id'              => $userId,
+                    'name'            => $user->name,
+                    'ape_pat'         => $user->ape_pat ?? '',
+                    'ape_mat'         => $user->ape_mat ?? '',
+                    'email'           => $user->email,
+                    'role'            => $globalRole ? $globalRole->role : '—',
+                    'role_id'         => $globalRole ? (string) $globalRole->getKey() : '',
+                    'status'          => $user->status ?? 1,
+                    'companies_count' => count($companiesList),
+                    'companies_list'  => $companiesList,
                 ];
             });
 
+        // Roles globales del sistema (Super Administrador, Administrador de Empresa, etc.)
         $roles = RoleModel::where('status', 1)
+            ->where(function ($q) {
+                $q->whereNull('company_id')->orWhere('company_id', '');
+            })
             ->get(['id', 'name', 'role'])
             ->map(fn ($r) => [
-                'id' => (string) $r->id,
+                'id'   => (string) $r->id,
                 'name' => $r->role,
-            ]);
-        $areas = DependenciesModel::where('status', 1)
-            ->get(['id', 'name'])
-            ->map(fn ($a) => [
-                'id' => (string) $a->id,
-                'name' => $a->name,
             ]);
 
         return Inertia::render('Users/Index', [
-            'users' => $users,
-            'roles' => $roles,
-            'areas' => $areas,
+            'users'   => $users,
+            'roles'   => $roles,
             'filters' => [
-                'search' => $search,
+                'search'  => $search,
                 'role_id' => $filters['role_id'] ?? '',
-                'status' => array_key_exists('status', $filters) && $filters['status'] !== null && $filters['status'] !== ''
+                'status'  => array_key_exists('status', $filters) && $filters['status'] !== null && $filters['status'] !== ''
                     ? (string) $filters['status']
                     : '',
-                'area_id' => $filters['area_id'] ?? '',
             ],
         ]);
     }
@@ -108,31 +128,35 @@ class users extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
-            'ape_pat' => 'required|string|max:255',
-            'ape_mat' => 'required|string|max:255',
-            'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
+            'name'     => 'required|string|max:255',
+            'ape_pat'  => 'required|string|max:255',
+            'ape_mat'  => 'required|string|max:255',
+            'email'    => 'required|string|lowercase|email|max:255|unique:'.User::class,
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'role_id' => 'required|string',
-            'area_id' => 'required|string',
-            'status' => 'required|in:0,1',
+            'role_id'  => 'required|string',
+            'status'   => 'required|in:0,1',
         ]);
 
         $role = RoleModel::findOrFail($request->role_id);
 
-        User::create([
-            'name' => $request->name,
-            'ape_pat' => $request->ape_pat,
-            'ape_mat' => $request->ape_mat,
-            'email' => $request->email,
-            'area_id' => new ObjectId($request->area_id),
-            'password' => Hash::make($request->password),
-            'role_id' => new ObjectId($role->getKey()),
-            'status' => (int) $request->status,
-            'active' => false,
+        $user = User::create([
+            'name'      => $request->name,
+            'ape_pat'   => $request->ape_pat,
+            'ape_mat'   => $request->ape_mat,
+            'email'     => $request->email,
+            'password'  => Hash::make($request->password),
+            'role_id'   => new ObjectId($role->getKey()),
+            'user_type' => 'client',
+            'status'    => (int) $request->status,
+            'active'    => false,
         ]);
 
-        return redirect()->route('users');
+        app(PermissionCacheService::class)->invalidateUser((string) $user->_id);
+
+        return redirect()->route('users')->with('flash', [
+            'type'    => 'success',
+            'message' => 'Usuario del sistema registrado correctamente.',
+        ]);
     }
 
     public function update(Request $request, $userId)
@@ -140,10 +164,10 @@ class users extends Controller
         $user = User::findOrFail(new ObjectId($userId));
 
         $request->validate([
-            'name' => 'required|string|max:255',
-            'ape_pat' => 'required|string|max:255',
-            'ape_mat' => 'required|string|max:255',
-            'email' => [
+            'name'     => 'required|string|max:255',
+            'ape_pat'  => 'required|string|max:255',
+            'ape_mat'  => 'required|string|max:255',
+            'email'    => [
                 'required',
                 'string',
                 'lowercase',
@@ -152,217 +176,49 @@ class users extends Controller
                 Rule::unique(User::class, 'email')->ignore($userId),
             ],
             'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
-            'role_id' => 'required|string',
-            'status' => 'required|in:0,1',
-            'area_id' => 'required|string',
+            'role_id'  => 'required|string',
+            'status'   => 'required|in:0,1',
         ]);
 
         $role = RoleModel::findOrFail($request->role_id);
 
         $data = [
-            'name' => $request->name,
+            'name'    => $request->name,
             'ape_pat' => $request->ape_pat,
             'ape_mat' => $request->ape_mat,
-            'email' => $request->email,
-            'area_id' => new ObjectId($request->area_id),
+            'email'   => $request->email,
             'role_id' => new ObjectId($role->getKey()),
-            'status' => (int) $request->status,
+            'status'  => (int) $request->status,
         ];
 
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
         }
 
-        $before = [
-            'name' => (string) ($user->name ?? ''),
-            'ape_pat' => (string) ($user->ape_pat ?? ''),
-            'ape_mat' => (string) ($user->ape_mat ?? ''),
-            'email' => (string) ($user->email ?? ''),
-            'role_id' => $user->role_id ? (string) $user->role_id : '',
-            'area_id' => $user->area_id ? (string) $user->area_id : '',
-            'status' => (int) ($user->status ?? 1),
-        ];
-
         $user->update($data);
         $user->refresh();
 
-        $after = [
-            'name' => (string) ($user->name ?? ''),
-            'ape_pat' => (string) ($user->ape_pat ?? ''),
-            'ape_mat' => (string) ($user->ape_mat ?? ''),
-            'email' => (string) ($user->email ?? ''),
-            'role_id' => $user->role_id ? (string) $user->role_id : '',
-            'area_id' => $user->area_id ? (string) $user->area_id : '',
-            'status' => (int) ($user->status ?? 1),
-        ];
+        app(PermissionCacheService::class)->invalidateUser((string) $user->_id);
 
-        $cambios = [];
-        foreach (['name', 'ape_pat', 'ape_mat', 'email', 'role_id', 'area_id', 'status'] as $key) {
-            if ($before[$key] !== $after[$key]) {
-                $cambios[$key] = [
-                    'antes' => $before[$key],
-                    'después' => $after[$key],
-                ];
-            }
-        }
-        if ($request->filled('password')) {
-            $cambios['password'] = true;
-        }
-
-        $fieldLabels = [
-            'name' => 'Nombre',
-            'ape_pat' => 'Apellido paterno',
-            'ape_mat' => 'Apellido materno',
-            'email' => 'Correo',
-            'role_id' => 'Rol',
-            'area_id' => 'Área',
-            'status' => 'Estado',
-        ];
-
-        $formatStatus = static function ($v): string {
-            return (int) $v === 1 ? 'Activo' : 'Inactivo';
-        };
-
-        $roleDisplay = static function (?string $id): string {
-            if ($id === null || $id === '') {
-                return '—';
-            }
-            try {
-                $m = RoleModel::find(new ObjectId($id));
-
-                return $m ? (string) $m->role : $id;
-            } catch (\Throwable $e) {
-                return $id;
-            }
-        };
-
-        $areaDisplay = static function (?string $id): string {
-            if ($id === null || $id === '') {
-                return '—';
-            }
-            try {
-                $m = DependenciesModel::find(new ObjectId($id));
-
-                return $m ? (string) $m->name : $id;
-            } catch (\Throwable $e) {
-                return $id;
-            }
-        };
-
-        $partesCambios = [];
-        foreach ($cambios as $key => $val) {
-            if ($key === 'password') {
-                $partesCambios[] = 'Contraseña actualizada';
-                continue;
-            }
-            if (! is_array($val) || ! array_key_exists('antes', $val) || ! array_key_exists('después', $val)) {
-                continue;
-            }
-            $label = $fieldLabels[$key] ?? $key;
-            $antes = $val['antes'];
-            $después = $val['después'];
-            if ($key === 'status') {
-                $antes = $formatStatus($antes);
-                $después = $formatStatus($después);
-            } elseif ($key === 'role_id') {
-                $antes = $roleDisplay((string) $antes);
-                $después = $roleDisplay((string) $después);
-            } elseif ($key === 'area_id') {
-                $antes = $areaDisplay((string) $antes);
-                $después = $areaDisplay((string) $después);
-            } else {
-                $antes = (string) $antes;
-                $después = (string) $después;
-            }
-            // Sin comillas dobles: en JSON las escapan como \" y en algunas vistas se ven mal.
-            $partesCambios[] = $label.': '.$antes.' → '.$después;
-        }
-
-        $cambiosText = empty($partesCambios)
-            ? 'Sin cambios en los datos del perfil.'
-            : implode('. ', $partesCambios).'.';
-
-        $highlightDisplayKeys = [];
-        if ($before['name'] !== (string) ($user->name ?? '')) {
-            $highlightDisplayKeys[] = 'name';
-        }
-        if ($before['ape_pat'] !== (string) ($user->ape_pat ?? '')) {
-            $highlightDisplayKeys[] = 'ape_pat';
-        }
-        if ($before['ape_mat'] !== (string) ($user->ape_mat ?? '')) {
-            $highlightDisplayKeys[] = 'ape_mat';
-        }
-        if ($before['email'] !== (string) ($user->email ?? '')) {
-            $highlightDisplayKeys[] = 'email';
-        }
-        $newRoleId = $user->role_id ? (string) $user->role_id : '';
-        if ($before['role_id'] !== $newRoleId) {
-            $highlightDisplayKeys[] = 'role';
-        }
-        $newAreaId = $user->area_id ? (string) $user->area_id : '';
-        if ($before['area_id'] !== $newAreaId) {
-            $highlightDisplayKeys[] = 'area';
-        }
-        if ($before['status'] !== (int) ($user->status ?? 1)) {
-            $highlightDisplayKeys[] = 'status';
-        }
-
-        $recipientId = (string) $user->getKey();
-        $actorId = (string) $request->user()->getKey();
-        $actorNameCompletaName= (string) $request->user()->name.' '. (string) $request->user()->ape_pat.' '. (string) $request->user()->ape_mat;
-        $notificationItemIds = array_values(array_filter([
-            (string) $user->getKey(),
-            $actorId !== (string) $user->getKey() ? $actorId : null,
-        ]));
-        $notificationLinkDefs = [
-            ['label' => 'Ver perfil', 'route' => 'profile.edit', 'params' => []],
-        ];
-
-        NotificationsModel::create([
-            'user_id' => $recipientId,
-            'message' => $actorId === $recipientId
-                ? 'Tu cuenta ha sido actualizada correctamente.'
-                : 'Un administrador actualizó tu cuenta. Puedes revisar tu perfil.',
-            'item_ids' => $notificationItemIds,
-            'is_read' => false,
-            'read_at' => null,
-            'links' => NotificationLinkResolver::resolve($notificationLinkDefs),
+        return redirect()->route('users')->with('flash', [
+            'type'    => 'success',
+            'message' => 'Usuario del sistema actualizado correctamente.',
         ]);
-        LogsModel::create([
-            'user_id' => $recipientId,
-            'action' => 'Actualización de usuario',
-            'description' => 'El usuario '.$user->name.' ha sido actualizado por '.$actorNameCompletaName.'. '.$cambiosText,
-        ]);
-        NotificacionToUser::dispatch(
-            message: $actorId === $recipientId
-                ? 'Tu cuenta ha sido actualizada correctamente.'
-                : 'Un administrador actualizó tu cuenta. Puedes revisar tu perfil.',
-            userId: $recipientId,
-            itemIds: $notificationItemIds,
-            links: $notificationLinkDefs,
-            currentPaths: ['/profile'],
-            meta: [
-                'navigate' => false,
-                'inertiaGlobal' => [
-                    'only' => ['auth'],
-                    'preserveScroll' => true,
-                ],
-                'inertia' => [
-                    'only' => ['profileDisplay', 'mustVerifyEmail', 'status'],
-                    'preserveScroll' => true,
-                ],
-                'highlightDisplayKeys' => $highlightDisplayKeys,
-            ],
-        );
-
-        return redirect()->route('users');
     }
 
     public function destroy($userId)
     {
         $user = User::findOrFail(new ObjectId($userId));
+
+        // Eliminar membresías vinculadas
+        CompanyUser::where('user_id', (string) $user->_id)->delete();
         $user->delete();
 
-        return redirect()->route('users');
+        app(PermissionCacheService::class)->invalidateUser((string) $user->_id);
+
+        return redirect()->route('users')->with('flash', [
+            'type'    => 'success',
+            'message' => 'Usuario eliminado del sistema.',
+        ]);
     }
 }

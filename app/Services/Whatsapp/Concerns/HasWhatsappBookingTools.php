@@ -5,18 +5,112 @@ namespace App\Services\Whatsapp\Concerns;
 trait HasWhatsappBookingTools
 {
     /**
+     * Resuelve las herramientas disponibles según los módulos habilitados de la empresa.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function resolveToolsForCompany(?\App\Models\Company $company): array
+    {
+        $tools = $this->coreTools();
+
+        // Módulo de citas
+        if (!$company || $company->isModuleEnabled('appointments')) {
+            $tools = array_merge($tools, $this->appointmentTools());
+        }
+
+        // Módulo de inventario / productos
+        if ($company && $company->isModuleEnabled('inventory')) {
+            $tools[] = $this->queryInventoryProductsToolDefinition();
+        }
+
+        // Módulo de servicios
+        if ($company && $company->isModuleEnabled('services')) {
+            $tools[] = $this->queryCompanyServicesToolDefinition();
+        }
+
+        return $tools;
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function bookingTools(): array
     {
+        return $this->resolveToolsForCompany(null);
+    }
+
+    /**
+     * Herramientas básicas de conversación.
+     */
+    public function coreTools(): array
+    {
         return [
             $this->bookingStateToolDefinition(),
-            $this->checkAvailabilityToolDefinition(),
             $this->resetBookingToolDefinition(),
             $this->escalateToHumanToolDefinition(),
+        ];
+    }
+
+    /**
+     * Herramientas para gestión de citas y calendario.
+     */
+    public function appointmentTools(): array
+    {
+        return [
+            $this->checkAvailabilityToolDefinition(),
             $this->calendarToolDefinition(),
             $this->listMyAppointmentsToolDefinition(),
             $this->cancelAppointmentToolDefinition(),
+        ];
+    }
+
+    /**
+     * Herramienta para consultar catálogo y stock de productos en inventario.
+     */
+    public function queryInventoryProductsToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'query_inventory_products',
+                'description' => 'Consulta el inventario de productos disponibles, stock y precios. Úsala cuando el cliente pregunte por disponibilidad de productos o precios específicos.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'search' => [
+                            'type' => 'string',
+                            'description' => 'Término de búsqueda o nombre del producto.',
+                        ],
+                        'category' => [
+                            'type' => 'string',
+                            'description' => 'Categoría opcional.',
+                        ],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Herramienta para consultar el catálogo de servicios de la empresa.
+     */
+    public function queryCompanyServicesToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'query_company_services',
+                'description' => 'Consulta el catálogo de servicios ofrecidos, duración y precios. Úsala cuando el cliente solicite información sobre los servicios.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'search' => [
+                            'type' => 'string',
+                            'description' => 'Término de búsqueda o nombre del servicio.',
+                        ],
+                    ],
+                ],
+            ],
         ];
     }
 

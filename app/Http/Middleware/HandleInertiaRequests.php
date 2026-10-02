@@ -46,30 +46,65 @@ class HandleInertiaRequests extends Middleware
                 ->where('is_read', false)
                 ->count()
             : 0;
-        $role = $user?->role_data()->first();
+        $role = $user ? $user->role_data()->first() : null;
 
-        if ($user && $role) {
-            $rawPermissions = $role->getPermissionsList();
+        $companyContext = app(\App\Services\Tenancy\CompanyContext::class);
+        $activeCompany = $companyContext->getCompany();
+        $companyModules = $activeCompany ? ($activeCompany->modules ?? []) : [];
+        $userCompanies = [];
 
-            $permissionIds = collect($rawPermissions)
-                ->pluck('id')
-                ->filter()
-                ->map(fn($id) => (string) $id)
-                ->values()
-                ->toArray();
+        if ($user) {
+            $permissionCache = app(\App\Services\Tenancy\PermissionCacheService::class);
+            $userPermissions = $permissionCache->getUserPermissions($user, $companyContext->getCompanyId());
 
-            if (!empty($permissionIds)) {
-                $userPermissions = PermissionsModel::whereIn('_id', $permissionIds)
-                    ->where('status', 1)
-                    ->pluck('module')
+            // Obtener lista de empresas del usuario
+            $memberships = $user->companyMemberships()
+                ->where('status', 'active')
+                ->get();
+
+            $companyIds = $memberships->pluck('company_id')->filter()->toArray();
+            if (!empty($companyIds)) {
+                $userCompanies = \App\Models\Company::whereIn('_id', $companyIds)
+                    ->where('status', 'active')
+                    ->get()
+                    ->map(function ($comp) use ($companyContext) {
+                        return [
+                            'id'        => (string) $comp->_id,
+                            'name'      => $comp->name,
+                            'slug'      => $comp->slug,
+                            'is_active' => (string) $comp->_id === (string) $companyContext->getCompanyId(),
+                            'modules'   => $comp->modules ?? [],
+                        ];
+                    })
+                    ->values()
                     ->toArray();
+            }
 
+            if (!empty($userPermissions)) {
                 $allModules = ModulesModel::where('status', 1)
                     ->whereIn('route', $userPermissions)
                     ->orderBy('order_index', 'asc')
                     ->get()
-                    // Solo módulos con ruta Laravel real, o dropdowns (relation = 0)
-                    ->filter(function ($module) {
+                    // Filtrar según módulos habilitados en la empresa activa
+                    ->filter(function ($module) use ($activeCompany) {
+                        if (!$activeCompany) {
+                            return true;
+                        }
+
+                        $route = (string) $module->route;
+                        if (str_starts_with($route, 'products') && !$activeCompany->isModuleEnabled('inventory')) {
+                            return false;
+                        }
+                        if (str_starts_with($route, 'services') && !$activeCompany->isModuleEnabled('services')) {
+                            return false;
+                        }
+                        if ($route === 'whatsapp.calendar' && !$activeCompany->isModuleEnabled('appointments')) {
+                            return false;
+                        }
+                        if (str_starts_with($route, 'whatsapp') && $route !== 'whatsapp.calendar' && !$activeCompany->isModuleEnabled('whatsapp')) {
+                            return false;
+                        }
+
                         if ((string) $module->relation === '0' || $module->relation === 0) {
                             return true;
                         }
@@ -130,6 +165,14 @@ class HandleInertiaRequests extends Middleware
                 'menu'  => $userMenu,
                 'notification_unread_count' => $notificationUnreadCount,
                 'can'   => $userPermissions,
+                'active_company' => $activeCompany ? [
+                    'id'      => (string) $activeCompany->_id,
+                    'name'    => $activeCompany->name,
+                    'slug'    => $activeCompany->slug,
+                    'modules' => $activeCompany->modules ?? [],
+                ] : null,
+                'user_companies' => $userCompanies,
+                'company_modules' => $companyModules,
             ],
             'ziggy' => fn() => [
                 ...(new Ziggy)->toArray(),

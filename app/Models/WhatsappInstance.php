@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use MongoDB\Laravel\Eloquent\Model;
+use App\Models\Concerns\BelongsToCompany;
 
 class WhatsappInstance extends Model
 {
+    use BelongsToCompany;
+
     protected $connection = 'mongodb';
 
     protected $collection = 'whatsapp_instances';
@@ -13,6 +16,7 @@ class WhatsappInstance extends Model
     protected $table = 'whatsapp_instances';
 
     protected $fillable = [
+        'company_id',
         'instance_name',
         'evolution_instance_name',
         'google_calendar_id',
@@ -72,7 +76,7 @@ class WhatsappInstance extends Model
 
         // Filtrado en PHP: evita fallos de whereNull/orWhere raros en Mongo
         // cuando hay perfiles duplicados que comparten la misma sesión Evolution.
-        return static::query()
+        return static::withoutGlobalScopes()
             ->where('status', 'active')
             ->get()
             ->first(fn (self $row) => $row->evolutionName() === $evolutionName);

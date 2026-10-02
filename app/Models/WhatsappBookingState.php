@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use MongoDB\Laravel\Eloquent\Model;
+use App\Models\Concerns\BelongsToCompany;
 
 class WhatsappBookingState extends Model
 {
+    use BelongsToCompany;
+
     protected $connection = 'mongodb';
 
     protected $collection = 'whatsapp_booking_states';
@@ -29,6 +32,7 @@ class WhatsappBookingState extends Model
     ];
 
     protected $fillable = [
+        'company_id',
         'instance_name',
         'user_phone',
         'step',
