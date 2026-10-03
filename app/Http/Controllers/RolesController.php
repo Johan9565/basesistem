@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ModulesModel;
+use App\Models\PermissionsModel;
+use App\Models\RoleModel;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use App\Models\RoleModel;
-use App\Models\PermissionsModel;
-use App\Models\ModulesModel;
 
 class RolesController extends Controller
 {
@@ -23,8 +23,8 @@ class RolesController extends Controller
             $permSlug === 'calendario'
         ) {
             return [
-                'group_key'   => 'whatsapp',
-                'group_name'  => 'WhatsApp CRM',
+                'group_key' => 'whatsapp',
+                'group_name' => 'WhatsApp CRM',
                 'group_order' => 2,
             ];
         }
@@ -35,8 +35,8 @@ class RolesController extends Controller
             in_array($permSlug, ['administracion', 'users', 'usuarios', 'employees', 'empleados', 'roles', 'companies', 'empresas', 'components', 'componentes'])
         ) {
             return [
-                'group_key'   => 'administration',
-                'group_name'  => 'Administración',
+                'group_key' => 'administration',
+                'group_name' => 'Administración',
                 'group_order' => 1,
             ];
         }
@@ -47,8 +47,8 @@ class RolesController extends Controller
             in_array($permSlug, ['products', 'inventario', 'inventory', 'services', 'servicios'])
         ) {
             return [
-                'group_key'   => 'operations',
-                'group_name'  => 'Inventario y Servicios',
+                'group_key' => 'operations',
+                'group_name' => 'Inventario y Servicios',
                 'group_order' => 3,
             ];
         }
@@ -65,15 +65,15 @@ class RolesController extends Controller
         }
 
         return [
-            'group_key'   => 'general',
-            'group_name'  => 'General',
+            'group_key' => 'general',
+            'group_name' => 'General',
             'group_order' => 99,
         ];
     }
 
     public function index()
     {
-        $allModules = ModulesModel::where('status', 1)->get()->keyBy(fn($m) => strtolower(trim($m->route ?? '')));
+        $allModules = ModulesModel::where('status', 1)->get()->keyBy(fn ($m) => strtolower(trim($m->route ?? '')));
 
         $allPermissions = PermissionsModel::where('status', 1)
             ->get()
@@ -81,13 +81,13 @@ class RolesController extends Controller
                 $group = $this->resolvePermissionGroup($p->module ?? '', $p->name ?? '', $allModules);
 
                 return [
-                    'id'          => (string) $p->id,
-                    'name'        => $p->name,
+                    'id' => (string) $p->id,
+                    'name' => $p->name,
                     'description' => $p->description ?? '',
-                    'module'      => $p->module ?: 'general',
-                    'icon'        => $p->icon ?? '',
-                    'group_key'   => $group['group_key'],
-                    'group_name'  => $group['group_name'],
+                    'module' => $p->module ?: 'general',
+                    'icon' => $p->icon ?? '',
+                    'group_key' => $group['group_key'],
+                    'group_name' => $group['group_name'],
                     'group_order' => $group['group_order'],
                 ];
             })
@@ -103,7 +103,7 @@ class RolesController extends Controller
             ->get()
             ->map(function ($role) {
                 $permissionIds = collect($role->getPermissionsList())
-                    ->map(fn($p) => (string) ($p['id'] ?? ''))
+                    ->map(fn ($p) => (string) ($p['id'] ?? ''))
                     ->filter()
                     ->values()
                     ->toArray();
@@ -111,63 +111,63 @@ class RolesController extends Controller
                 $permissions = PermissionsModel::whereIn('_id', $permissionIds)
                     ->where('status', 1)
                     ->get()
-                    ->map(fn($p) => [
-                        'id'          => (string) $p->id,
-                        'name'        => $p->name,
+                    ->map(fn ($p) => [
+                        'id' => (string) $p->id,
+                        'name' => $p->name,
                         'description' => $p->description ?? '',
-                        'module'      => $p->module ?: 'general',
-                        'icon'        => $p->icon ?? '',
+                        'module' => $p->module ?: 'general',
+                        'icon' => $p->icon ?? '',
                     ])
                     ->values()
                     ->toArray();
 
                 return [
-                    'id'             => (string) $role->id,
-                    'name'           => $role->name,
-                    'role'           => $role->role,
-                    'status'         => $role->status ?? 1,
-                    'is_system'      => (bool) ($role->is_system ?? false),
+                    'id' => (string) $role->id,
+                    'name' => $role->name,
+                    'role' => $role->role,
+                    'status' => $role->status ?? 1,
+                    'is_system' => (bool) ($role->is_system ?? false),
                     'permission_ids' => $permissionIds,
-                    'permissions'    => $permissions,
+                    'permissions' => $permissions,
                 ];
             });
 
         $modules = ModulesModel::where('status', 1)
             ->orderBy('order_index')
             ->get()
-            ->map(fn($m) => [
-                'id'          => (string) $m->id,
-                'name'        => $m->name,
-                'route'       => $m->route,
-                'relation'    => $m->relation,
+            ->map(fn ($m) => [
+                'id' => (string) $m->id,
+                'name' => $m->name,
+                'route' => $m->route,
+                'relation' => $m->relation,
                 'order_index' => $m->order_index,
             ])
             ->toArray();
 
         return Inertia::render('Roles/Index', [
-            'roles'          => $roles,
+            'roles' => $roles,
             'allpermissions' => $allPermissions,
-            'modules'        => $modules,
+            'modules' => $modules,
         ]);
     }
 
     public function store(Request $request)
     {
         $request->validate([
-            'role'             => 'required|string|max:100',
-            'name'             => 'nullable|string|max:100',
-            'permission_ids'   => 'nullable|array',
+            'role' => 'required|string|max:100',
+            'name' => 'nullable|string|max:100',
+            'permission_ids' => 'nullable|array',
             'permission_ids.*' => 'string',
         ]);
 
         $permissionIds = $request->input('permission_ids', []);
         $permissions = [];
-        if (!empty($permissionIds)) {
+        if (! empty($permissionIds)) {
             $permissions = PermissionsModel::whereIn('_id', $permissionIds)
                 ->where('status', 1)
                 ->get()
-                ->map(fn($p) => [
-                    'id'   => (string) $p->id,
+                ->map(fn ($p) => [
+                    'id' => (string) $p->id,
                     'name' => $p->name,
                 ])
                 ->values()
@@ -179,10 +179,10 @@ class RolesController extends Controller
             : strtolower(trim(preg_replace('/[^a-zA-Z0-9_]+/', '_', $request->role)));
 
         RoleModel::create([
-            'name'        => $slug,
-            'role'        => trim($request->role),
-            'status'      => 1,
-            'is_system'   => false,
+            'name' => $slug,
+            'role' => trim($request->role),
+            'status' => 1,
+            'is_system' => false,
             'permissions' => $permissions,
         ]);
 
@@ -196,8 +196,8 @@ class RolesController extends Controller
         $role = RoleModel::findOrFail($roleId);
 
         $request->validate([
-            'role'   => 'required|string|max:100',
-            'name'   => 'nullable|string|max:100',
+            'role' => 'required|string|max:100',
+            'name' => 'nullable|string|max:100',
             'status' => 'sometimes|integer|in:0,1',
         ]);
 
@@ -205,7 +205,7 @@ class RolesController extends Controller
             'role' => trim($request->role),
         ];
 
-        if ($request->filled('name') && !$role->is_system) {
+        if ($request->filled('name') && ! $role->is_system) {
             $data['name'] = strtolower(trim(preg_replace('/[^a-zA-Z0-9_]+/', '_', $request->name)));
         }
 
@@ -238,7 +238,7 @@ class RolesController extends Controller
     public function updatePermissions(Request $request, string $roleId)
     {
         $request->validate([
-            'permission_ids'   => 'present|array',
+            'permission_ids' => 'present|array',
             'permission_ids.*' => 'string',
         ]);
 
@@ -246,13 +246,13 @@ class RolesController extends Controller
 
         $permissionIds = $request->input('permission_ids', []);
 
-        if (!empty($permissionIds)) {
+        if (! empty($permissionIds)) {
             $permissions = PermissionsModel::whereIn('_id', $permissionIds)
                 ->where('status', 1)
                 ->get();
 
-            $newPermissions = $permissions->map(fn($p) => [
-                'id'   => (string) $p->id,
+            $newPermissions = $permissions->map(fn ($p) => [
+                'id' => (string) $p->id,
                 'name' => $p->name,
             ])->values()->toArray();
         } else {

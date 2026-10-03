@@ -32,6 +32,7 @@ services:
   mongo:
     image: mongo:8
     restart: always
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/opt/keyfile/mongo-keyfile"]
     # Solo localhost (Compass vía túnel SSH/Tailscale)
     ports:
       - "127.0.0.1:27017:27017"
@@ -41,6 +42,7 @@ services:
       MONGO_INITDB_DATABASE: ${DB_DATABASE}
     volumes:
       - sail-mongo:/data/db
+      - ./docker/mongo/mongo-keyfile:/opt/keyfile/mongo-keyfile:ro
     networks:
       - sail
   # Redis: cache/locks de Laravel + Evolution API

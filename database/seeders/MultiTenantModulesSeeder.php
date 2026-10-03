@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\PermissionsModel;
 use App\Models\ModulesModel;
+use App\Models\PermissionsModel;
 use App\Models\RoleModel;
+use Illuminate\Database\Seeder;
 
 class MultiTenantModulesSeeder extends Seeder
 {
@@ -14,44 +14,44 @@ class MultiTenantModulesSeeder extends Seeder
         $definitions = [
             [
                 'permission' => [
-                    'name'        => 'empresas',
-                    'module'      => 'companies',
+                    'name' => 'empresas',
+                    'module' => 'companies',
                     'description' => 'Gestión de empresas y módulos',
                 ],
                 'module' => [
-                    'name'        => 'Empresas',
-                    'route'       => 'companies',
-                    'relation'    => 'administration',
+                    'name' => 'Empresas',
+                    'route' => 'companies',
+                    'relation' => 'administration',
                     'order_index' => 0,
-                    'status'      => 1,
+                    'status' => 1,
                 ],
             ],
             [
                 'permission' => [
-                    'name'        => 'inventario',
-                    'module'      => 'inventory',
+                    'name' => 'inventario',
+                    'module' => 'inventory',
                     'description' => 'Inventario de productos',
                 ],
                 'module' => [
-                    'name'        => 'Inventario',
-                    'route'       => 'products',
-                    'relation'    => 1, // Módulo directo en barra de navegación
+                    'name' => 'Inventario',
+                    'route' => 'products',
+                    'relation' => 1, // Módulo directo en barra de navegación
                     'order_index' => 2,
-                    'status'      => 1,
+                    'status' => 1,
                 ],
             ],
             [
                 'permission' => [
-                    'name'        => 'servicios',
-                    'module'      => 'services',
+                    'name' => 'servicios',
+                    'module' => 'services',
                     'description' => 'Catálogo de servicios',
                 ],
                 'module' => [
-                    'name'        => 'Servicios',
-                    'route'       => 'services',
-                    'relation'    => 1, // Módulo directo en barra de navegación
+                    'name' => 'Servicios',
+                    'route' => 'services',
+                    'relation' => 1, // Módulo directo en barra de navegación
                     'order_index' => 3,
-                    'status'      => 1,
+                    'status' => 1,
                 ],
             ],
         ];
@@ -62,14 +62,14 @@ class MultiTenantModulesSeeder extends Seeder
             $perm = PermissionsModel::firstOrCreate(
                 ['module' => $def['permission']['module']],
                 [
-                    'name'        => $def['permission']['name'],
+                    'name' => $def['permission']['name'],
                     'description' => $def['permission']['description'],
-                    'status'      => 1,
+                    'status' => 1,
                 ]
             );
 
             $newPermissionIds[] = [
-                'id'   => (string) $perm->_id,
+                'id' => (string) $perm->_id,
                 'name' => $perm->name,
             ];
 

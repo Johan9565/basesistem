@@ -2,9 +2,9 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\PermissionsModel;
 use App\Models\ModulesModel;
+use App\Models\PermissionsModel;
+use Illuminate\Database\Seeder;
 
 class ComponentsModuleSeeder extends Seeder
 {
@@ -14,18 +14,18 @@ class ComponentsModuleSeeder extends Seeder
             ['name' => 'components'],
             [
                 'description' => 'Módulo de componentes y estilos',
-                'module'      => 'components',
-                'status'      => 1,
+                'module' => 'components',
+                'status' => 1,
             ]
         );
 
         ModulesModel::firstOrCreate(
             ['route' => 'components'],
             [
-                'name'         => 'Componentes',
-                'route'       => 'components',
-                'status'      => 1,
-                'relation'    => '',
+                'name' => 'Componentes',
+                'route' => 'components',
+                'status' => 1,
+                'relation' => '',
                 'order_index' => 50,
             ]
         );

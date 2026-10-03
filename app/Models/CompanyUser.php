@@ -10,8 +10,10 @@ class CompanyUser extends Model
     use HasFactory;
 
     protected $connection = 'mongodb';
+
     protected $collection = 'company_user';
-    protected $table      = 'company_user';
+
+    protected $table = 'company_user';
 
     protected $fillable = [
         'user_id',
@@ -25,7 +27,7 @@ class CompanyUser extends Model
     protected function casts(): array
     {
         return [
-            'is_owner'           => 'boolean',
+            'is_owner' => 'boolean',
             'custom_permissions' => 'array',
         ];
     }

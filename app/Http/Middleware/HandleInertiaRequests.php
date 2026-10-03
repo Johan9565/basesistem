@@ -2,15 +2,14 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\ComponentThemeModel;
+use App\Models\ModulesModel;
+use App\Models\NotificationsModel;
+use App\Support\LandingPalette;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Middleware;
 use Tighten\Ziggy\Ziggy;
-use App\Models\ModulesModel;
-use App\Models\PermissionsModel;
-use App\Models\ComponentThemeModel;
-use App\Models\NotificationsModel;
-use App\Support\LandingPalette;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -37,7 +36,7 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
-        $userMenu        = [];
+        $userMenu = [];
         $userPermissions = []; // slugs del campo "module" del permiso (para v-if en Vue)
         $notificationUnreadCount = $user
             ? NotificationsModel::where('user_id', (string) $user->getKey())
@@ -63,45 +62,45 @@ class HandleInertiaRequests extends Middleware
                 ->get();
 
             $companyIds = $memberships->pluck('company_id')->filter()->toArray();
-            if (!empty($companyIds)) {
+            if (! empty($companyIds)) {
                 $userCompanies = \App\Models\Company::whereIn('_id', $companyIds)
                     ->where('status', 'active')
                     ->get()
                     ->map(function ($comp) use ($companyContext) {
                         return [
-                            'id'        => (string) $comp->_id,
-                            'name'      => $comp->name,
-                            'slug'      => $comp->slug,
+                            'id' => (string) $comp->_id,
+                            'name' => $comp->name,
+                            'slug' => $comp->slug,
                             'is_active' => (string) $comp->_id === (string) $companyContext->getCompanyId(),
-                            'modules'   => $comp->modules ?? [],
+                            'modules' => $comp->modules ?? [],
                         ];
                     })
                     ->values()
                     ->toArray();
             }
 
-            if (!empty($userPermissions)) {
+            if (! empty($userPermissions)) {
                 $allModules = ModulesModel::where('status', 1)
                     ->whereIn('route', $userPermissions)
                     ->orderBy('order_index', 'asc')
                     ->get()
                     // Filtrar según módulos habilitados en la empresa activa
                     ->filter(function ($module) use ($activeCompany) {
-                        if (!$activeCompany) {
+                        if (! $activeCompany) {
                             return true;
                         }
 
                         $route = (string) $module->route;
-                        if (str_starts_with($route, 'products') && !$activeCompany->isModuleEnabled('inventory')) {
+                        if (str_starts_with($route, 'products') && ! $activeCompany->isModuleEnabled('inventory')) {
                             return false;
                         }
-                        if (str_starts_with($route, 'services') && !$activeCompany->isModuleEnabled('services')) {
+                        if (str_starts_with($route, 'services') && ! $activeCompany->isModuleEnabled('services')) {
                             return false;
                         }
-                        if ($route === 'whatsapp.calendar' && !$activeCompany->isModuleEnabled('appointments')) {
+                        if ($route === 'whatsapp.calendar' && ! $activeCompany->isModuleEnabled('appointments')) {
                             return false;
                         }
-                        if (str_starts_with($route, 'whatsapp') && $route !== 'whatsapp.calendar' && !$activeCompany->isModuleEnabled('whatsapp')) {
+                        if (str_starts_with($route, 'whatsapp') && $route !== 'whatsapp.calendar' && ! $activeCompany->isModuleEnabled('whatsapp')) {
                             return false;
                         }
 
@@ -123,23 +122,24 @@ class HandleInertiaRequests extends Middleware
 
                 // Hijos agrupados por su relation (que apunta al route del padre)
                 $childrenMap = $allModules
-                    ->filter(fn($m) => in_array($m->relation, $dropdownRoutes))
+                    ->filter(fn ($m) => in_array($m->relation, $dropdownRoutes))
                     ->groupBy('relation');
 
                 // Menú top-level: los que NO son hijos de un dropdown
                 $userMenu = $allModules
-                    ->filter(fn($m) => !in_array($m->relation, $dropdownRoutes))
+                    ->filter(fn ($m) => ! in_array($m->relation, $dropdownRoutes))
                     ->map(function ($module) use ($childrenMap) {
                         $data = $module->toArray();
                         $data['is_dropdown'] = $module->relation == 0;
-                        $data['children']    = $childrenMap
+                        $data['children'] = $childrenMap
                             ->get($module->route, collect())
                             ->values()
                             ->toArray();
+
                         return $data;
                     })
                     // Ocultar dropdowns vacíos (sin hijos visibles)
-                    ->filter(fn($module) => !($module['is_dropdown'] ?? false) || !empty($module['children']))
+                    ->filter(fn ($module) => ! ($module['is_dropdown'] ?? false) || ! empty($module['children']))
                     ->values();
             }
         }
@@ -160,21 +160,21 @@ class HandleInertiaRequests extends Middleware
                 'auth_side_image_pos_y' => (float) ($themeDoc?->auth_side_image_pos_y ?? 50),
             ],
             'auth' => [
-                'user'  => $user,
-                'role'  => $role?->role ?? null,
-                'menu'  => $userMenu,
+                'user' => $user,
+                'role' => $role?->role ?? null,
+                'menu' => $userMenu,
                 'notification_unread_count' => $notificationUnreadCount,
-                'can'   => $userPermissions,
+                'can' => $userPermissions,
                 'active_company' => $activeCompany ? [
-                    'id'      => (string) $activeCompany->_id,
-                    'name'    => $activeCompany->name,
-                    'slug'    => $activeCompany->slug,
+                    'id' => (string) $activeCompany->_id,
+                    'name' => $activeCompany->name,
+                    'slug' => $activeCompany->slug,
                     'modules' => $activeCompany->modules ?? [],
                 ] : null,
                 'user_companies' => $userCompanies,
                 'company_modules' => $companyModules,
             ],
-            'ziggy' => fn() => [
+            'ziggy' => fn () => [
                 ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
             ],

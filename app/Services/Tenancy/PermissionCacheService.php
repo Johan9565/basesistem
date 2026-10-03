@@ -19,6 +19,7 @@ class PermissionCacheService
     protected function getCacheKey(string $userId, ?string $companyId = null): string
     {
         $comp = $companyId ?: 'global';
+
         return "user_perms:{$userId}:{$comp}";
     }
 
@@ -36,7 +37,7 @@ class PermissionCacheService
             $role = null;
             $customPermissions = [];
 
-            if (!empty($companyId)) {
+            if (! empty($companyId)) {
                 $membership = $user->getMembershipForCompany($companyId);
                 if ($membership) {
                     $role = $membership->role ?: (empty($membership->role_id) ? null : \App\Models\RoleModel::find($membership->role_id));
@@ -45,11 +46,11 @@ class PermissionCacheService
             }
 
             // Fallback a rol global del usuario
-            if (!$role && !empty($user->role_id)) {
+            if (! $role && ! empty($user->role_id)) {
                 $role = $user->role_data()->first() ?: \App\Models\RoleModel::find($user->role_id);
             }
 
-            if (!$role && empty($customPermissions)) {
+            if (! $role && empty($customPermissions)) {
                 return [];
             }
 
@@ -58,13 +59,13 @@ class PermissionCacheService
                 $permissionIds = collect($role->getPermissionsList())
                     ->pluck('id')
                     ->filter()
-                    ->map(fn($id) => (string) $id)
+                    ->map(fn ($id) => (string) $id)
                     ->values()
                     ->toArray();
             }
 
             $permissionsFromRole = [];
-            if (!empty($permissionIds)) {
+            if (! empty($permissionIds)) {
                 $permissionsFromRole = PermissionsModel::whereIn('_id', $permissionIds)
                     ->where('status', 1)
                     ->pluck('module')
@@ -128,7 +129,7 @@ class PermissionCacheService
     /**
      * Sincroniza en tiempo real los permisos y menú para uno o varios usuarios mediante WebSockets.
      *
-     * @param list<string> $userIds
+     * @param  list<string>  $userIds
      */
     public function broadcastPermissionUpdate(array $userIds, string $message = 'Se han actualizado tus permisos de acceso.'): void
     {
@@ -149,7 +150,7 @@ class PermissionCacheService
                     null,
                     [
                         'inertiaGlobal' => [
-                            'only'           => ['auth', 'company_modules'],
+                            'only' => ['auth', 'company_modules'],
                             'preserveScroll' => true,
                         ],
                     ]
@@ -172,12 +173,12 @@ class PermissionCacheService
             $fromUsers = User::where('role_id', new \MongoDB\BSON\ObjectId($roleId))
                 ->orWhere('role_id', $roleId)
                 ->pluck('_id')
-                ->map(fn($id) => (string) $id)
+                ->map(fn ($id) => (string) $id)
                 ->toArray();
         } catch (\Throwable $e) {
             $fromUsers = User::where('role_id', $roleId)
                 ->pluck('_id')
-                ->map(fn($id) => (string) $id)
+                ->map(fn ($id) => (string) $id)
                 ->toArray();
         }
 
@@ -186,12 +187,12 @@ class PermissionCacheService
             $fromMemberships = \App\Models\CompanyUser::where('role_id', new \MongoDB\BSON\ObjectId($roleId))
                 ->orWhere('role_id', $roleId)
                 ->pluck('user_id')
-                ->map(fn($id) => (string) $id)
+                ->map(fn ($id) => (string) $id)
                 ->toArray();
         } catch (\Throwable $e) {
             $fromMemberships = \App\Models\CompanyUser::where('role_id', $roleId)
                 ->pluck('user_id')
-                ->map(fn($id) => (string) $id)
+                ->map(fn ($id) => (string) $id)
                 ->toArray();
         }
 
@@ -208,7 +209,7 @@ class PermissionCacheService
 
         $companyUserIds = \App\Models\CompanyUser::where('company_id', (string) $companyId)
             ->pluck('user_id')
-            ->map(fn($id) => (string) $id)
+            ->map(fn ($id) => (string) $id)
             ->toArray();
 
         $this->broadcastPermissionUpdate($companyUserIds, $message);

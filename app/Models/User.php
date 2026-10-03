@@ -4,9 +4,8 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use MongoDB\Laravel\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use App\Models\PermissionsModel;
+use MongoDB\Laravel\Auth\User as Authenticatable;
 
 class User extends Authenticatable
 {
@@ -56,7 +55,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            'password'          => 'hashed',
+            'password' => 'hashed',
         ];
     }
 
@@ -104,11 +103,11 @@ class User extends Authenticatable
     {
         $role = null;
 
-        if (!empty($companyId)) {
+        if (! empty($companyId)) {
             $membership = $this->getMembershipForCompany($companyId);
             if ($membership) {
                 // Si la membresía tiene excepciones personalizadas
-                if (!empty($membership->custom_permissions) && in_array($permission, $membership->custom_permissions, true)) {
+                if (! empty($membership->custom_permissions) && in_array($permission, $membership->custom_permissions, true)) {
                     return true;
                 }
                 $role = $membership->role;
@@ -116,18 +115,18 @@ class User extends Authenticatable
         }
 
         // Fallback al rol asignado directo al usuario (compatibilidad global)
-        if (!$role) {
+        if (! $role) {
             $role = $this->role_data()->first();
         }
 
-        if (!$role) {
+        if (! $role) {
             return false;
         }
 
         $permissionIds = collect($role->getPermissionsList())
             ->pluck('id')
             ->filter()
-            ->map(fn($id) => (string) $id)
+            ->map(fn ($id) => (string) $id)
             ->toArray();
 
         if (empty($permissionIds)) {

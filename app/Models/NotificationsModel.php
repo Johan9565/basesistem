@@ -2,15 +2,18 @@
 
 namespace App\Models;
 
-use MongoDB\Laravel\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use MongoDB\Laravel\Eloquent\Model;
 
 class NotificationsModel extends Model
 {
     use HasFactory;
+
     protected $connection = 'mongodb';
+
     protected $collection = 'notifications';
-    protected $table      = 'notifications';
+
+    protected $table = 'notifications';
 
     protected $fillable = [
         'user_id',

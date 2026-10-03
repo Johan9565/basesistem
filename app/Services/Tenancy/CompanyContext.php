@@ -7,6 +7,7 @@ use App\Models\Company;
 class CompanyContext
 {
     protected ?Company $company = null;
+
     protected ?string $companyId = null;
 
     /**
@@ -24,7 +25,7 @@ class CompanyContext
     public function setCompanyId(?string $companyId): void
     {
         $this->companyId = $companyId;
-        if (!empty($companyId)) {
+        if (! empty($companyId)) {
             $this->company = Company::find($companyId);
         } else {
             $this->company = null;
@@ -36,7 +37,7 @@ class CompanyContext
      */
     public function getCompany(): ?Company
     {
-        if (!$this->company && !empty($this->companyId)) {
+        if (! $this->company && ! empty($this->companyId)) {
             $this->company = Company::find($this->companyId);
         }
 
@@ -56,7 +57,7 @@ class CompanyContext
      */
     public function hasCompany(): bool
     {
-        return !empty($this->getCompanyId());
+        return ! empty($this->getCompanyId());
     }
 
     /**
@@ -65,7 +66,7 @@ class CompanyContext
     public function isModuleEnabled(string $module): bool
     {
         $company = $this->getCompany();
-        if (!$company) {
+        if (! $company) {
             return false;
         }
 

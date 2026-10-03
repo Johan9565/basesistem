@@ -8,11 +8,13 @@ use MongoDB\Laravel\Eloquent\Model;
 
 class Service extends Model
 {
-    use HasFactory, BelongsToCompany;
+    use BelongsToCompany, HasFactory;
 
     protected $connection = 'mongodb';
+
     protected $collection = 'services';
-    protected $table      = 'services';
+
+    protected $table = 'services';
 
     protected $fillable = [
         'company_id',
@@ -28,11 +30,11 @@ class Service extends Model
     protected function casts(): array
     {
         return [
-            'duration_minutes'  => 'integer',
-            'price'             => 'float',
+            'duration_minutes' => 'integer',
+            'price' => 'float',
             'assigned_user_ids' => 'array',
-            'is_active'         => 'boolean',
-            'metadata'          => 'array',
+            'is_active' => 'boolean',
+            'metadata' => 'array',
         ];
     }
 

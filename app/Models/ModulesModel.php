@@ -8,9 +8,12 @@ use MongoDB\Laravel\Eloquent\Model;
 class ModulesModel extends Model
 {
     use HasFactory;
+
     protected $connection = 'mongodb';
+
     protected $collection = 'modules';
-    protected $table      = 'modules';
+
+    protected $table = 'modules';
 
     // Mapeamos los campos tal cual los tienes en tu JSON
     protected $fillable = [
@@ -18,6 +21,6 @@ class ModulesModel extends Model
         'status',
         'relation',
         'order_index',
-        'name'
+        'name',
     ];
 }

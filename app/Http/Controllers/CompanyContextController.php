@@ -15,7 +15,7 @@ class CompanyContextController extends Controller
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             abort(401);
         }
 
@@ -25,9 +25,9 @@ class CompanyContextController extends Controller
             ->where('status', 'active')
             ->exists();
 
-        if (!$hasMembership && !$user->hasPermission('administration')) {
+        if (! $hasMembership && ! $user->hasPermission('administration')) {
             return back()->with('flash', [
-                'type'    => 'error',
+                'type' => 'error',
                 'message' => 'No tienes acceso a la empresa seleccionada.',
             ]);
         }
@@ -35,7 +35,7 @@ class CompanyContextController extends Controller
         $request->session()->put('active_company_id', (string) $company->_id);
 
         return back()->with('flash', [
-            'type'    => 'success',
+            'type' => 'success',
             'message' => "Empresa activa cambiada a: {$company->name}",
         ]);
     }

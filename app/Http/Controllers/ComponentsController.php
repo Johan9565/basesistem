@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Inertia\Inertia;
 use App\Models\ComponentThemeModel;
 use App\Support\LandingPalette;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class ComponentsController extends Controller
 {
@@ -99,7 +99,7 @@ class ComponentsController extends Controller
         ]);
 
         $doc = ComponentThemeModel::first();
-        if (!$doc) {
+        if (! $doc) {
             ComponentThemeModel::create([
                 'styles' => $validated['styles'],
                 'active_theme' => 'custom',
@@ -121,7 +121,7 @@ class ComponentsController extends Controller
         ]);
 
         $doc = ComponentThemeModel::first();
-        if (!$doc) {
+        if (! $doc) {
             ComponentThemeModel::create([
                 'styles' => [],
                 'active_theme' => $validated['active_theme'],
@@ -150,7 +150,7 @@ class ComponentsController extends Controller
             'auth_side_image_pos_y' => isset($validated['auth_side_image_pos_y']) ? (float) $validated['auth_side_image_pos_y'] : 50.0,
         ];
 
-        if (!$doc) {
+        if (! $doc) {
             ComponentThemeModel::create([
                 'styles' => [],
                 'active_theme' => 'dark',
@@ -175,7 +175,7 @@ class ComponentsController extends Controller
         $field = $validated['asset'] === 'logo' ? 'logo_url' : 'auth_side_image_url';
 
         $doc = ComponentThemeModel::first();
-        if (!$doc) {
+        if (! $doc) {
             ComponentThemeModel::create([
                 'styles' => [],
                 'active_theme' => 'dark',

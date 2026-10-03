@@ -2,11 +2,11 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\Tenancy\CompanyContext;
 use Closure;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
-use App\Services\Tenancy\CompanyContext;
 use Illuminate\Support\Facades\Redirect;
+use Symfony\Component\HttpFoundation\Response;
 
 class CheckCompanyModule
 {
@@ -24,10 +24,10 @@ class CheckCompanyModule
     {
         $company = $this->companyContext->getCompany();
 
-        if (!$company || !$company->isModuleEnabled($module)) {
+        if (! $company || ! $company->isModuleEnabled($module)) {
             if ($request->expectsJson()) {
                 return response()->json([
-                    'ok'      => false,
+                    'ok' => false,
                     'message' => "El módulo '{$module}' no está habilitado para esta empresa.",
                 ], 403);
             }
@@ -37,7 +37,7 @@ class CheckCompanyModule
             }
 
             return Redirect::route('dashboard')->with('flash', [
-                'type'    => 'error',
+                'type' => 'error',
                 'message' => "El módulo '{$module}' no está habilitado para la empresa activa.",
             ]);
         }

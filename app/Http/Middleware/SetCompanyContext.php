@@ -2,11 +2,11 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Company;
+use App\Services\Tenancy\CompanyContext;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
-use App\Services\Tenancy\CompanyContext;
-use App\Models\Company;
 
 class SetCompanyContext
 {
@@ -28,7 +28,7 @@ class SetCompanyContext
             $sessionCompanyId = $request->session()->get('active_company_id');
             $activeCompany = null;
 
-            if (!empty($sessionCompanyId)) {
+            if (! empty($sessionCompanyId)) {
                 // Verificar que el usuario tenga membresía activa en la empresa seleccionada
                 $membership = $user->companyMemberships()
                     ->where('company_id', (string) $sessionCompanyId)
@@ -41,7 +41,7 @@ class SetCompanyContext
             }
 
             // Si no hay empresa válida en sesión, auto-asignar la primera empresa disponible del usuario
-            if (!$activeCompany) {
+            if (! $activeCompany) {
                 $firstMembership = $user->companyMemberships()
                     ->where('status', 'active')
                     ->first();

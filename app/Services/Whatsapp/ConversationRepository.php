@@ -75,7 +75,7 @@ class ConversationRepository
             $dynamicParts[] = trim($dynamicSystemPrompt);
         }
         if (! empty($contextSummary)) {
-            $dynamicParts[] = "MEMORIA TELEGRÁFICA PREVIA: " . trim($contextSummary);
+            $dynamicParts[] = 'MEMORIA TELEGRÁFICA PREVIA: '.trim($contextSummary);
         }
 
         if ($dynamicParts !== []) {
@@ -156,16 +156,16 @@ class ConversationRepository
             [
                 'role' => 'system',
                 'content' => "Eres un extractor de hechos telegráfico estilo cavernícola/ultra-compacto.\n"
-                    . "Resume la conversación en HECHOS ATÓMICOS usando estrictamente este formato:\n"
-                    . "Cliente: [Nombre] | Interés: [Servicio/Tratamiento] | Rechaza: [Horarios/Precios] | Quiere: [Fecha/Hora deseada] | Estado: [Etapa actual]\n"
-                    . "REGLAS:\n"
-                    . "- Máximo 30 palabras en total.\n"
-                    . "- Sin saludos, sin explicaciones ni introducciones.\n"
-                    . "- Omite campos si no existen datos.",
+                    ."Resume la conversación en HECHOS ATÓMICOS usando estrictamente este formato:\n"
+                    ."Cliente: [Nombre] | Interés: [Servicio/Tratamiento] | Rechaza: [Horarios/Precios] | Quiere: [Fecha/Hora deseada] | Estado: [Etapa actual]\n"
+                    ."REGLAS:\n"
+                    ."- Máximo 30 palabras en total.\n"
+                    ."- Sin saludos, sin explicaciones ni introducciones.\n"
+                    .'- Omite campos si no existen datos.',
             ],
             [
                 'role' => 'user',
-                'content' => "Historial a resumir:\n" . $rawTranscript,
+                'content' => "Historial a resumir:\n".$rawTranscript,
             ],
         ];
 

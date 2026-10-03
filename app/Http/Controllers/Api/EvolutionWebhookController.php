@@ -155,7 +155,6 @@ class EvolutionWebhookController extends Controller
     }
 
     /**
-     * @param  mixed  $data
      * @return list<array<string, mixed>>
      */
     protected function normalizeMessages(mixed $data): array

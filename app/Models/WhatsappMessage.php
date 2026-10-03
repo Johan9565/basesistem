@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use MongoDB\Laravel\Eloquent\Model;
 use App\Models\Concerns\BelongsToCompany;
+use MongoDB\Laravel\Eloquent\Model;
 
 class WhatsappMessage extends Model
 {

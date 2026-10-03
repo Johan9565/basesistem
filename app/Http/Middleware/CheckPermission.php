@@ -2,16 +2,17 @@
 
 namespace App\Http\Middleware;
 
-use Closure;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Redirect;
 use App\Models\User;
 use App\Services\Tenancy\CompanyContext;
 use App\Services\Tenancy\PermissionCacheService;
+use Closure;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Redirect;
 
 class CheckPermission
 {
     protected CompanyContext $companyContext;
+
     protected PermissionCacheService $permissionCache;
 
     public function __construct(CompanyContext $companyContext, PermissionCacheService $permissionCache)
@@ -25,17 +26,17 @@ class CheckPermission
         /** @var User|null $user */
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return Redirect::route('login');
         }
 
         $companyId = $this->companyContext->getCompanyId();
         $hasPermission = $this->permissionCache->hasPermission($user, $permission, $companyId);
 
-        if (!$hasPermission) {
+        if (! $hasPermission) {
             if ($request->expectsJson()) {
                 return response()->json([
-                    'ok'      => false,
+                    'ok' => false,
                     'message' => 'No tiene permiso de acceder a esta página en la empresa actual.',
                 ], 403);
             }
@@ -47,7 +48,7 @@ class CheckPermission
 
             return Redirect::route('dashboard')
                 ->with('flash', [
-                    'type'    => 'error',
+                    'type' => 'error',
                     'message' => 'No tiene permiso de acceder a esta página en la empresa actual.',
                 ]);
         }

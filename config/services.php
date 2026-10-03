@@ -103,7 +103,7 @@ return [
         'auto_media_reply' => filter_var(env('WHATSAPP_AUTO_MEDIA_REPLY', false), FILTER_VALIDATE_BOOLEAN),
         'welcome_message' => env(
             'WHATSAPP_WELCOME_MESSAGE',
-            "¡Hola! Soy el asistente de citas. Escribe qué necesitas (motivo y día/hora) y te ayudo a agendar."
+            '¡Hola! Soy el asistente de citas. Escribe qué necesitas (motivo y día/hora) y te ayudo a agendar.'
         ),
         'media_message' => env(
             'WHATSAPP_MEDIA_MESSAGE',

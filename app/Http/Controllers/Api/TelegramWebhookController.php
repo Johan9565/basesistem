@@ -28,7 +28,7 @@ class TelegramWebhookController extends Controller
             return response()->json(['ok' => true, 'ignored' => true, 'reason' => 'inactive_or_missing']);
         }
 
-        if (!empty($row->company_id)) {
+        if (! empty($row->company_id)) {
             app(\App\Services\Tenancy\CompanyContext::class)->setCompanyId($row->company_id);
         }
 

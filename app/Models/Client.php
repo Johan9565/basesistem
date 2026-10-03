@@ -10,8 +10,10 @@ class Client extends Model
     use HasFactory;
 
     protected $connection = 'mongodb';
+
     protected $collection = 'clients';
-    protected $table      = 'clients';
+
+    protected $table = 'clients';
 
     protected $fillable = [
         'name',
@@ -28,7 +30,7 @@ class Client extends Model
     {
         return [
             'max_companies' => 'integer',
-            'metadata'      => 'array',
+            'metadata' => 'array',
         ];
     }
 

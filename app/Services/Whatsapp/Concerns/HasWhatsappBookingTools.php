@@ -14,7 +14,7 @@ trait HasWhatsappBookingTools
         $tools = $this->coreTools();
 
         // Módulo de citas
-        if (!$company || $company->isModuleEnabled('appointments')) {
+        if (! $company || $company->isModuleEnabled('appointments')) {
             $tools = array_merge($tools, $this->appointmentTools());
         }
 

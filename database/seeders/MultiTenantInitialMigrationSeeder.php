@@ -2,15 +2,15 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Client;
 use App\Models\Company;
 use App\Models\CompanyUser;
 use App\Models\User;
+use App\Models\WhatsappAppointment;
+use App\Models\WhatsappBookingState;
 use App\Models\WhatsappInstance;
 use App\Models\WhatsappMessage;
-use App\Models\WhatsappBookingState;
-use App\Models\WhatsappAppointment;
+use Illuminate\Database\Seeder;
 
 class MultiTenantInitialMigrationSeeder extends Seeder
 {
@@ -25,16 +25,16 @@ class MultiTenantInitialMigrationSeeder extends Seeder
 
         // 1. Cliente principal por defecto
         $client = Client::first();
-        if (!$client) {
+        if (! $client) {
             $client = Client::create([
-                'name'            => 'Cliente Principal',
+                'name' => 'Cliente Principal',
                 'document_number' => 'CLI-001',
-                'billing_email'   => 'admin@example.com',
-                'phone'           => '+1234567890',
-                'status'          => 'active',
-                'plan'            => 'enterprise',
-                'max_companies'   => 10,
-                'metadata'        => ['migrated' => true],
+                'billing_email' => 'admin@example.com',
+                'phone' => '+1234567890',
+                'status' => 'active',
+                'plan' => 'enterprise',
+                'max_companies' => 10,
+                'metadata' => ['migrated' => true],
             ]);
             if ($this->command) {
                 $this->command->info("Cliente principal creado: {$client->name} [{$client->_id}]");
@@ -47,22 +47,22 @@ class MultiTenantInitialMigrationSeeder extends Seeder
 
         // 2. Empresa inicial vinculada al cliente
         $company = Company::where('client_id', (string) $client->_id)->first();
-        if (!$company) {
+        if (! $company) {
             $company = Company::create([
-                'client_id'       => (string) $client->_id,
-                'name'            => 'Empresa Principal',
-                'slug'            => 'empresa-principal',
+                'client_id' => (string) $client->_id,
+                'name' => 'Empresa Principal',
+                'slug' => 'empresa-principal',
                 'document_number' => 'EMP-001',
-                'email'           => 'contacto@empresa-principal.com',
-                'phone'           => '+1234567890',
-                'status'          => 'active',
-                'modules'         => [
-                    'whatsapp'     => true,
+                'email' => 'contacto@empresa-principal.com',
+                'phone' => '+1234567890',
+                'status' => 'active',
+                'modules' => [
+                    'whatsapp' => true,
                     'appointments' => true,
-                    'services'     => true,
-                    'inventory'    => true,
+                    'services' => true,
+                    'inventory' => true,
                 ],
-                'settings'        => [
+                'settings' => [
                     'timezone' => 'America/Mexico_City',
                     'currency' => 'USD',
                 ],
@@ -87,13 +87,13 @@ class MultiTenantInitialMigrationSeeder extends Seeder
                 ->where('company_id', $companyId)
                 ->first();
 
-            if (!$existingMembership) {
+            if (! $existingMembership) {
                 CompanyUser::create([
-                    'user_id'            => (string) $user->_id,
-                    'company_id'         => $companyId,
-                    'role_id'            => $user->role_id ? (string) $user->role_id : null,
-                    'status'             => 'active',
-                    'is_owner'           => ($index === 0), // El primer usuario queda como owner
+                    'user_id' => (string) $user->_id,
+                    'company_id' => $companyId,
+                    'role_id' => $user->role_id ? (string) $user->role_id : null,
+                    'status' => 'active',
+                    'is_owner' => ($index === 0), // El primer usuario queda como owner
                     'custom_permissions' => [],
                 ]);
                 $linkedUsersCount++;

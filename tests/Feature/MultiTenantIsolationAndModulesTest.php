@@ -4,8 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\Company;
-use App\Models\CompanyUser;
-use App\Models\PermissionsModel;
 use App\Models\Product;
 use App\Models\RoleModel;
 use App\Models\Service;
@@ -13,14 +11,16 @@ use App\Models\User;
 use App\Services\Tenancy\CompanyContext;
 use App\Services\Tenancy\PermissionCacheService;
 use App\Services\Whatsapp\DeepSeekClient;
-use Illuminate\Foundation\Testing\WithoutMiddleware;
 use Tests\TestCase;
 
 class MultiTenantIsolationAndModulesTest extends TestCase
 {
     protected Client $client;
+
     protected Company $companyAlfa;
+
     protected Company $companyBeta;
+
     protected User $user;
 
     protected function setUp(): void
@@ -60,10 +60,10 @@ class MultiTenantIsolationAndModulesTest extends TestCase
         // 1. Contexto en Empresa Alfa
         $context->setCompany($this->companyAlfa);
         $prodAlfa = Product::create([
-            'sku'       => 'SKU-ALFA',
-            'name'      => 'Producto Exclusivo Alfa',
-            'price'     => 100,
-            'stock'     => 10,
+            'sku' => 'SKU-ALFA',
+            'name' => 'Producto Exclusivo Alfa',
+            'price' => 100,
+            'stock' => 10,
             'is_active' => true,
         ]);
 
@@ -73,10 +73,10 @@ class MultiTenantIsolationAndModulesTest extends TestCase
         // 2. Cambiar contexto a Empresa Beta
         $context->setCompany($this->companyBeta);
         $prodBeta = Product::create([
-            'sku'       => 'SKU-BETA',
-            'name'      => 'Producto Exclusivo Beta',
-            'price'     => 200,
-            'stock'     => 5,
+            'sku' => 'SKU-BETA',
+            'name' => 'Producto Exclusivo Beta',
+            'price' => 200,
+            'stock' => 5,
             'is_active' => true,
         ]);
 
@@ -119,7 +119,7 @@ class MultiTenantIsolationAndModulesTest extends TestCase
      */
     public function test_whatsapp_ai_tools_decoupling(): void
     {
-        $deepSeek = new DeepSeekClient();
+        $deepSeek = new DeepSeekClient;
 
         // Empresa Alfa (appointments: false, inventory: true)
         $toolsAlfa = $deepSeek->resolveToolsForCompany($this->companyAlfa);

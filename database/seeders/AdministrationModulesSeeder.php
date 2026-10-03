@@ -2,12 +2,12 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\PermissionsModel;
-use App\Models\ModulesModel;
-use App\Models\RoleModel;
 use App\Models\ComponentThemeModel;
+use App\Models\ModulesModel;
+use App\Models\PermissionsModel;
+use App\Models\RoleModel;
 use App\Support\LandingPalette;
+use Illuminate\Database\Seeder;
 
 class AdministrationModulesSeeder extends Seeder
 {

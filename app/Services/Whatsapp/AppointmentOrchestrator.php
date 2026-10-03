@@ -311,7 +311,7 @@ class AppointmentOrchestrator
         $calendarOk = false;
         $calendarFailure = null;
 
-        $company = $instance->company ?: (!empty($instance->company_id) ? \App\Models\Company::find($instance->company_id) : null);
+        $company = $instance->company ?: (! empty($instance->company_id) ? \App\Models\Company::find($instance->company_id) : null);
         $tools = (new DeepSeekClient)->resolveToolsForCompany($company);
 
         for ($round = 0; $round < $maxRounds; $round++) {
@@ -428,15 +428,15 @@ class AppointmentOrchestrator
         $category = trim((string) ($args['category'] ?? ''));
 
         $query = \App\Models\Product::query()->where('is_active', true);
-        if (!empty($instance->company_id)) {
+        if (! empty($instance->company_id)) {
             $query->where('company_id', (string) $instance->company_id);
         }
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('sku', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('sku', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
@@ -444,7 +444,7 @@ class AppointmentOrchestrator
             $query->where('category', 'like', "%{$category}%");
         }
 
-        $products = $query->limit(8)->get()->map(fn($p) => [
+        $products = $query->limit(8)->get()->map(fn ($p) => [
             'id' => (string) $p->_id,
             'sku' => $p->sku,
             'name' => $p->name,
@@ -469,18 +469,18 @@ class AppointmentOrchestrator
         $search = trim((string) ($args['search'] ?? ''));
 
         $query = \App\Models\Service::query()->where('is_active', true);
-        if (!empty($instance->company_id)) {
+        if (! empty($instance->company_id)) {
             $query->where('company_id', (string) $instance->company_id);
         }
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
-        $services = $query->limit(10)->get()->map(fn($s) => [
+        $services = $query->limit(10)->get()->map(fn ($s) => [
             'id' => (string) $s->_id,
             'name' => $s->name,
             'duration_minutes' => $s->duration_minutes,
@@ -978,7 +978,7 @@ class AppointmentOrchestrator
             $matchedServiceId = null;
             $matchedEmployeeId = null;
 
-            if (!empty($companyId)) {
+            if (! empty($companyId)) {
                 $serviceName = (string) ($booking->service ?? $summary);
                 $matchedService = \App\Models\Service::where('company_id', $companyId)
                     ->where('is_active', true)
@@ -989,7 +989,7 @@ class AppointmentOrchestrator
 
                 if ($matchedService) {
                     $matchedServiceId = (string) $matchedService->_id;
-                    if (!empty($matchedService->assigned_user_ids)) {
+                    if (! empty($matchedService->assigned_user_ids)) {
                         $matchedEmployeeId = (string) $matchedService->assigned_user_ids[0];
                     }
                 }
@@ -1507,11 +1507,11 @@ Si propone un horario concreto, llama check_availability antes de decir que est�
 Cuando nombre, servicio, fecha y hora estén válidos, el sistema pasará a CONFIRMING: muestra el resumen completo (incluye ubicación si existe) y pide confirmación (aún no agendes).
 PROMPT,
             WhatsappBookingState::STAGE_CONFIRMING => $this->confirmingStagePrompt($businessName, $booking),
-            WhatsappBookingState::STAGE_COMPLETED => <<<PROMPT
+            WhatsappBookingState::STAGE_COMPLETED => <<<'PROMPT'
 ETAPA ACTUAL: COMPLETADO
 La cita ya quedó registrada. Atiende dudas breves. Si quiere una nueva cita, usa reset_booking o step=COLLECTING e inicia recolección de nuevo.
 PROMPT,
-            default => <<<PROMPT
+            default => <<<'PROMPT'
 ETAPA ACTUAL: 1 RECEPCIÓN (RECEPTION)
 Objetivo: recibir al cliente, resolver dudas generales del catálogo y detectar si desea comprar, agendar o cotizar.
 Responde breve y cordial. Si hay intención ("quiero apartar", "me interesa una cita", "quiero comprarlo", o da fecha/producto/paquete), invita a iniciar el proceso: guarda de inmediato en update_booking_state lo que ya dijo (service, location con ciudad si aplica), pide solo el primer dato que falte y usa step=COLLECTING (e intent).
@@ -1705,7 +1705,7 @@ PROMPT;
         ];
 
         // Inyección dinámica de servicios y productos según módulos activos de la empresa
-        if (!empty($instance->company_id)) {
+        if (! empty($instance->company_id)) {
             $company = $instance->company ?: \App\Models\Company::find($instance->company_id);
 
             if ($company && $company->isModuleEnabled('services')) {
@@ -1713,7 +1713,7 @@ PROMPT;
                     ->where('is_active', true)
                     ->get();
                 if ($dbServices->isNotEmpty()) {
-                    $servicesText = $dbServices->map(fn($s) => "- {$s->name}: \${$s->price} ({$s->duration_minutes} min)".($s->description ? " - {$s->description}" : ''))->implode("\n");
+                    $servicesText = $dbServices->map(fn ($s) => "- {$s->name}: \${$s->price} ({$s->duration_minutes} min)".($s->description ? " - {$s->description}" : ''))->implode("\n");
                     $sections['Catálogo oficial de Servicios'] = $servicesText;
                 }
             }
@@ -1725,7 +1725,7 @@ PROMPT;
                     ->limit(20)
                     ->get();
                 if ($dbProducts->isNotEmpty()) {
-                    $productsText = $dbProducts->map(fn($p) => "- [{$p->sku}] {$p->name}: \${$p->price} (Stock: {$p->stock})".($p->description ? " - {$p->description}" : ''))->implode("\n");
+                    $productsText = $dbProducts->map(fn ($p) => "- [{$p->sku}] {$p->name}: \${$p->price} (Stock: {$p->stock})".($p->description ? " - {$p->description}" : ''))->implode("\n");
                     $sections['Catálogo de Productos disponibles en Inventario'] = $productsText;
                 }
             }

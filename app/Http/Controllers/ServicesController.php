@@ -23,7 +23,7 @@ class ServicesController extends Controller
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
@@ -31,16 +31,16 @@ class ServicesController extends Controller
 
         $staffUsers = User::where('status', 1)
             ->get(['_id', 'name', 'ape_pat', 'email'])
-            ->map(fn($u) => [
-                'id'   => (string) $u->_id,
+            ->map(fn ($u) => [
+                'id' => (string) $u->_id,
                 'name' => trim("{$u->name} {$u->ape_pat}"),
                 'email' => $u->email,
             ]);
 
         return Inertia::render('Services/Index', [
             'services' => $services,
-            'staff'    => $staffUsers,
-            'filters'  => [
+            'staff' => $staffUsers,
+            'filters' => [
                 'search' => $search,
             ],
         ]);
@@ -52,19 +52,19 @@ class ServicesController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'name'              => 'required|string|max:255',
-            'description'       => 'nullable|string',
-            'duration_minutes'  => 'required|integer|min:5|max:480',
-            'price'             => 'required|numeric|min:0',
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'duration_minutes' => 'required|integer|min:5|max:480',
+            'price' => 'required|numeric|min:0',
             'assigned_user_ids' => 'nullable|array',
             'assigned_user_ids.*' => 'string',
-            'is_active'         => 'boolean',
+            'is_active' => 'boolean',
         ]);
 
         Service::create($validated);
 
         return back()->with('flash', [
-            'type'    => 'success',
+            'type' => 'success',
             'message' => 'Servicio creado exitosamente en el catálogo.',
         ]);
     }
@@ -75,19 +75,19 @@ class ServicesController extends Controller
     public function update(Request $request, Service $service): RedirectResponse
     {
         $validated = $request->validate([
-            'name'              => 'required|string|max:255',
-            'description'       => 'nullable|string',
-            'duration_minutes'  => 'required|integer|min:5|max:480',
-            'price'             => 'required|numeric|min:0',
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'duration_minutes' => 'required|integer|min:5|max:480',
+            'price' => 'required|numeric|min:0',
             'assigned_user_ids' => 'nullable|array',
             'assigned_user_ids.*' => 'string',
-            'is_active'         => 'boolean',
+            'is_active' => 'boolean',
         ]);
 
         $service->update($validated);
 
         return back()->with('flash', [
-            'type'    => 'success',
+            'type' => 'success',
             'message' => 'Servicio actualizado correctamente.',
         ]);
     }
@@ -100,7 +100,7 @@ class ServicesController extends Controller
         $service->delete();
 
         return back()->with('flash', [
-            'type'    => 'success',
+            'type' => 'success',
             'message' => 'Servicio eliminado del catálogo.',
         ]);
     }

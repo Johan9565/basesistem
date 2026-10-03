@@ -37,7 +37,7 @@ class CalendarController extends Controller
                 if ($isSpecialist) {
                     $query->where(function ($q) use ($user) {
                         $q->where('employee_id', (string) $user->getKey())
-                          ->orWhereNull('employee_id');
+                            ->orWhereNull('employee_id');
                     });
                 }
 
@@ -95,7 +95,7 @@ class CalendarController extends Controller
         if ($isSpecialist) {
             $query->where(function ($q) use ($user) {
                 $q->where('employee_id', (string) $user->getKey())
-                  ->orWhereNull('employee_id');
+                    ->orWhereNull('employee_id');
             });
         }
 

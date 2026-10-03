@@ -4,16 +4,19 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use MongoDB\Laravel\Eloquent\Model;
-use App\Models\PermissionsModel;
+
 class RoleModel extends Model
 {
     use HasFactory;
+
     protected $connection = 'mongodb';
+
     protected $collection = 'roles';
-    protected $table      = 'roles';
+
+    protected $table = 'roles';
 
     protected $fillable = [
-        'name', 'role', 'permissions', 'status', 'company_id', 'is_system'
+        'name', 'role', 'permissions', 'status', 'company_id', 'is_system',
     ];
 
     protected function casts(): array
@@ -47,7 +50,7 @@ class RoleModel extends Model
     {
         return $query->where(function ($q) use ($companyId) {
             $q->whereNull('company_id')->orWhere('company_id', '');
-            if (!empty($companyId)) {
+            if (! empty($companyId)) {
                 $q->orWhere('company_id', (string) $companyId);
             }
         });

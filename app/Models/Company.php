@@ -10,8 +10,10 @@ class Company extends Model
     use HasFactory;
 
     protected $connection = 'mongodb';
+
     protected $collection = 'companies';
-    protected $table      = 'companies';
+
+    protected $table = 'companies';
 
     protected $fillable = [
         'client_id',
@@ -28,7 +30,7 @@ class Company extends Model
     protected function casts(): array
     {
         return [
-            'modules'  => 'array',
+            'modules' => 'array',
             'settings' => 'array',
         ];
     }

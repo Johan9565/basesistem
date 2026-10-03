@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Events\NotificacionToUser;
 use App\Models\Company;
 use App\Models\CompanyUser;
 use App\Models\RoleModel;
@@ -14,9 +13,6 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 use Inertia\Inertia;
 use MongoDB\BSON\ObjectId;
-use App\Models\LogsModel;
-use App\Models\NotificationsModel;
-use App\Support\NotificationLinkResolver;
 
 class users extends Controller
 {
@@ -26,16 +22,16 @@ class users extends Controller
     public function index(Request $request)
     {
         $filters = $request->validate([
-            'search'  => 'nullable|string|max:255',
+            'search' => 'nullable|string|max:255',
             'role_id' => 'nullable|string',
-            'status'  => 'nullable|in:0,1',
+            'status' => 'nullable|in:0,1',
         ]);
 
         $query = User::query()
             ->where(function ($q) {
                 $q->where('user_type', 'client')
-                  ->orWhere('user_type', 'superadmin')
-                  ->orWhereNull('user_type');
+                    ->orWhere('user_type', 'superadmin')
+                    ->orWhereNull('user_type');
             })
             ->where('user_type', '!=', 'employee');
 
@@ -49,7 +45,7 @@ class users extends Controller
             });
         }
 
-        if (!empty($filters['role_id'])) {
+        if (! empty($filters['role_id'])) {
             try {
                 $query->where('role_id', new ObjectId($filters['role_id']));
             } catch (\Throwable $e) {
@@ -62,7 +58,7 @@ class users extends Controller
         }
 
         $allMemberships = CompanyUser::all();
-        $allCompanies = Company::all()->keyBy(fn($c) => (string) $c->_id);
+        $allCompanies = Company::all()->keyBy(fn ($c) => (string) $c->_id);
 
         $users = $query->orderBy('name')
             ->paginate(12)
@@ -81,6 +77,7 @@ class users extends Controller
                 $companiesList = collect($userCompanyIds)
                     ->map(function ($cid) use ($allCompanies) {
                         $c = $allCompanies->get($cid);
+
                         return $c ? $c->name : null;
                     })
                     ->filter()
@@ -88,16 +85,16 @@ class users extends Controller
                     ->toArray();
 
                 return [
-                    'id'              => $userId,
-                    'name'            => $user->name,
-                    'ape_pat'         => $user->ape_pat ?? '',
-                    'ape_mat'         => $user->ape_mat ?? '',
-                    'email'           => $user->email,
-                    'role'            => $globalRole ? $globalRole->role : '—',
-                    'role_id'         => $globalRole ? (string) $globalRole->getKey() : '',
-                    'status'          => $user->status ?? 1,
+                    'id' => $userId,
+                    'name' => $user->name,
+                    'ape_pat' => $user->ape_pat ?? '',
+                    'ape_mat' => $user->ape_mat ?? '',
+                    'email' => $user->email,
+                    'role' => $globalRole ? $globalRole->role : '—',
+                    'role_id' => $globalRole ? (string) $globalRole->getKey() : '',
+                    'status' => $user->status ?? 1,
                     'companies_count' => count($companiesList),
-                    'companies_list'  => $companiesList,
+                    'companies_list' => $companiesList,
                 ];
             });
 
@@ -108,17 +105,17 @@ class users extends Controller
             })
             ->get(['id', 'name', 'role'])
             ->map(fn ($r) => [
-                'id'   => (string) $r->id,
+                'id' => (string) $r->id,
                 'name' => $r->role,
             ]);
 
         return Inertia::render('Users/Index', [
-            'users'   => $users,
-            'roles'   => $roles,
+            'users' => $users,
+            'roles' => $roles,
             'filters' => [
-                'search'  => $search,
+                'search' => $search,
                 'role_id' => $filters['role_id'] ?? '',
-                'status'  => array_key_exists('status', $filters) && $filters['status'] !== null && $filters['status'] !== ''
+                'status' => array_key_exists('status', $filters) && $filters['status'] !== null && $filters['status'] !== ''
                     ? (string) $filters['status']
                     : '',
             ],
@@ -128,33 +125,33 @@ class users extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'name'     => 'required|string|max:255',
-            'ape_pat'  => 'required|string|max:255',
-            'ape_mat'  => 'required|string|max:255',
-            'email'    => 'required|string|lowercase|email|max:255|unique:'.User::class,
+            'name' => 'required|string|max:255',
+            'ape_pat' => 'required|string|max:255',
+            'ape_mat' => 'required|string|max:255',
+            'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'role_id'  => 'required|string',
-            'status'   => 'required|in:0,1',
+            'role_id' => 'required|string',
+            'status' => 'required|in:0,1',
         ]);
 
         $role = RoleModel::findOrFail($request->role_id);
 
         $user = User::create([
-            'name'      => $request->name,
-            'ape_pat'   => $request->ape_pat,
-            'ape_mat'   => $request->ape_mat,
-            'email'     => $request->email,
-            'password'  => Hash::make($request->password),
-            'role_id'   => new ObjectId($role->getKey()),
+            'name' => $request->name,
+            'ape_pat' => $request->ape_pat,
+            'ape_mat' => $request->ape_mat,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+            'role_id' => new ObjectId($role->getKey()),
             'user_type' => 'client',
-            'status'    => (int) $request->status,
-            'active'    => false,
+            'status' => (int) $request->status,
+            'active' => false,
         ]);
 
         app(PermissionCacheService::class)->invalidateUser((string) $user->_id);
 
         return redirect()->route('users')->with('flash', [
-            'type'    => 'success',
+            'type' => 'success',
             'message' => 'Usuario del sistema registrado correctamente.',
         ]);
     }
@@ -164,10 +161,10 @@ class users extends Controller
         $user = User::findOrFail(new ObjectId($userId));
 
         $request->validate([
-            'name'     => 'required|string|max:255',
-            'ape_pat'  => 'required|string|max:255',
-            'ape_mat'  => 'required|string|max:255',
-            'email'    => [
+            'name' => 'required|string|max:255',
+            'ape_pat' => 'required|string|max:255',
+            'ape_mat' => 'required|string|max:255',
+            'email' => [
                 'required',
                 'string',
                 'lowercase',
@@ -176,19 +173,19 @@ class users extends Controller
                 Rule::unique(User::class, 'email')->ignore($userId),
             ],
             'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
-            'role_id'  => 'required|string',
-            'status'   => 'required|in:0,1',
+            'role_id' => 'required|string',
+            'status' => 'required|in:0,1',
         ]);
 
         $role = RoleModel::findOrFail($request->role_id);
 
         $data = [
-            'name'    => $request->name,
+            'name' => $request->name,
             'ape_pat' => $request->ape_pat,
             'ape_mat' => $request->ape_mat,
-            'email'   => $request->email,
+            'email' => $request->email,
             'role_id' => new ObjectId($role->getKey()),
-            'status'  => (int) $request->status,
+            'status' => (int) $request->status,
         ];
 
         if ($request->filled('password')) {
@@ -201,7 +198,7 @@ class users extends Controller
         app(PermissionCacheService::class)->invalidateUser((string) $user->_id);
 
         return redirect()->route('users')->with('flash', [
-            'type'    => 'success',
+            'type' => 'success',
             'message' => 'Usuario del sistema actualizado correctamente.',
         ]);
     }
@@ -217,7 +214,7 @@ class users extends Controller
         app(PermissionCacheService::class)->invalidateUser((string) $user->_id);
 
         return redirect()->route('users')->with('flash', [
-            'type'    => 'success',
+            'type' => 'success',
             'message' => 'Usuario eliminado del sistema.',
         ]);
     }

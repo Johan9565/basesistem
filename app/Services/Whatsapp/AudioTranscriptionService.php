@@ -6,7 +6,6 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
-use Throwable;
 
 class AudioTranscriptionService
 {
@@ -31,7 +30,7 @@ class AudioTranscriptionService
             throw new RuntimeException('El contenido de audio recibido está vacío o es inválido.');
         }
 
-        $tempFile = tempnam(sys_get_temp_dir(), 'wh_audio_') . '.' . $format;
+        $tempFile = tempnam(sys_get_temp_dir(), 'wh_audio_').'.'.$format;
         file_put_contents($tempFile, $binary);
 
         try {
@@ -87,7 +86,7 @@ class AudioTranscriptionService
         }
 
         try {
-            $url = "{$baseUrl}/listen?" . http_build_query([
+            $url = "{$baseUrl}/listen?".http_build_query([
                 'model' => $model,
                 'language' => $language,
                 'smart_format' => 'true',
@@ -98,11 +97,11 @@ class AudioTranscriptionService
                 'Authorization' => "Token {$apiKey}",
                 'Content-Type' => $mimeType,
             ])
-            ->timeout(30)
-            ->withBody($audioContent, $mimeType)
-            ->post($url)
-            ->throw()
-            ->json();
+                ->timeout(30)
+                ->withBody($audioContent, $mimeType)
+                ->post($url)
+                ->throw()
+                ->json();
 
             $transcript = (string) data_get(
                 $response,
@@ -116,7 +115,7 @@ class AudioTranscriptionService
                 'error' => $e->getMessage(),
                 'response' => $e->response ? $e->response->body() : null,
             ]);
-            throw new RuntimeException('Error al transcribir audio con Deepgram: ' . $e->getMessage(), 0, $e);
+            throw new RuntimeException('Error al transcribir audio con Deepgram: '.$e->getMessage(), 0, $e);
         }
     }
 
@@ -157,7 +156,7 @@ class AudioTranscriptionService
                 'error' => $e->getMessage(),
                 'response' => $e->response ? $e->response->body() : null,
             ]);
-            throw new RuntimeException('Error al transcribir audio con Groq: ' . $e->getMessage(), 0, $e);
+            throw new RuntimeException('Error al transcribir audio con Groq: '.$e->getMessage(), 0, $e);
         }
     }
 
@@ -192,7 +191,7 @@ class AudioTranscriptionService
                 'error' => $e->getMessage(),
                 'response' => $e->response ? $e->response->body() : null,
             ]);
-            throw new RuntimeException('Error al transcribir audio con OpenAI: ' . $e->getMessage(), 0, $e);
+            throw new RuntimeException('Error al transcribir audio con OpenAI: '.$e->getMessage(), 0, $e);
         }
     }
 }

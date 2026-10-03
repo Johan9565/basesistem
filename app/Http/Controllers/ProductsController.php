@@ -22,8 +22,8 @@ class ProductsController extends Controller
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('sku', 'like', "%{$search}%")
-                  ->orWhere('category', 'like', "%{$search}%");
+                    ->orWhere('sku', 'like', "%{$search}%")
+                    ->orWhere('category', 'like', "%{$search}%");
             });
         }
 
@@ -31,7 +31,7 @@ class ProductsController extends Controller
 
         return Inertia::render('Products/Index', [
             'products' => $products,
-            'filters'  => [
+            'filters' => [
                 'search' => $search,
             ],
         ]);
@@ -43,21 +43,21 @@ class ProductsController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'sku'         => 'required|string|max:50',
-            'name'        => 'required|string|max:255',
+            'sku' => 'required|string|max:50',
+            'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'category'    => 'nullable|string|max:100',
-            'price'       => 'required|numeric|min:0',
-            'cost'        => 'nullable|numeric|min:0',
-            'stock'       => 'required|integer|min:0',
-            'min_stock'   => 'nullable|integer|min:0',
-            'is_active'   => 'boolean',
+            'category' => 'nullable|string|max:100',
+            'price' => 'required|numeric|min:0',
+            'cost' => 'nullable|numeric|min:0',
+            'stock' => 'required|integer|min:0',
+            'min_stock' => 'nullable|integer|min:0',
+            'is_active' => 'boolean',
         ]);
 
         Product::create($validated);
 
         return back()->with('flash', [
-            'type'    => 'success',
+            'type' => 'success',
             'message' => 'Producto creado exitosamente en el inventario.',
         ]);
     }
@@ -68,21 +68,21 @@ class ProductsController extends Controller
     public function update(Request $request, Product $product): RedirectResponse
     {
         $validated = $request->validate([
-            'sku'         => 'required|string|max:50',
-            'name'        => 'required|string|max:255',
+            'sku' => 'required|string|max:50',
+            'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'category'    => 'nullable|string|max:100',
-            'price'       => 'required|numeric|min:0',
-            'cost'        => 'nullable|numeric|min:0',
-            'stock'       => 'required|integer|min:0',
-            'min_stock'   => 'nullable|integer|min:0',
-            'is_active'   => 'boolean',
+            'category' => 'nullable|string|max:100',
+            'price' => 'required|numeric|min:0',
+            'cost' => 'nullable|numeric|min:0',
+            'stock' => 'required|integer|min:0',
+            'min_stock' => 'nullable|integer|min:0',
+            'is_active' => 'boolean',
         ]);
 
         $product->update($validated);
 
         return back()->with('flash', [
-            'type'    => 'success',
+            'type' => 'success',
             'message' => 'Producto actualizado correctamente.',
         ]);
     }
@@ -95,7 +95,7 @@ class ProductsController extends Controller
         $product->delete();
 
         return back()->with('flash', [
-            'type'    => 'success',
+            'type' => 'success',
             'message' => 'Producto eliminado del inventario.',
         ]);
     }

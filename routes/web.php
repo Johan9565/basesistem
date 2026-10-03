@@ -1,17 +1,17 @@
 <?php
 
+use App\Http\Controllers\ComponentsController;
+use App\Http\Controllers\NotificationsController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\RolesController;
+use App\Http\Controllers\users as UsersController;
+use App\Http\Controllers\Whatsapp\CalendarController as WhatsappCalendarController;
+use App\Http\Controllers\Whatsapp\ConversationsController as WhatsappConversationsController;
+use App\Http\Controllers\Whatsapp\InstancesController as WhatsappInstancesController;
+use App\Http\Controllers\Whatsapp\MessagesController as WhatsappMessagesController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use App\Http\Controllers\users as UsersController;
-use App\Http\Controllers\RolesController;
-use App\Http\Controllers\ComponentsController;
-use App\Http\Controllers\NotificationsController;
-use App\Http\Controllers\Whatsapp\InstancesController as WhatsappInstancesController;
-use App\Http\Controllers\Whatsapp\ConversationsController as WhatsappConversationsController;
-use App\Http\Controllers\Whatsapp\MessagesController as WhatsappMessagesController;
-use App\Http\Controllers\Whatsapp\CalendarController as WhatsappCalendarController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -133,5 +133,4 @@ Route::middleware(['auth'])->group(function () {
     });
 });
 
-
-require __DIR__ . '/auth.php';
+require __DIR__.'/auth.php';
