@@ -332,12 +332,25 @@ class InstancesController extends Controller
         $row = $this->findInstance($instance);
         $name = $row->evolutionName();
 
+        // Si la instancia no existe en Evolution (p.ej. BD reiniciada), la creamos automáticamente.
+        if (! $evolution->instanceExists($name)) {
+            try {
+                $webhookUrl = (string) config('services.evolution.webhook_url', '');
+                $evolution->createInstance($name, $webhookUrl !== '' ? $webhookUrl : null);
+            } catch (RuntimeException $e) {
+                return redirect()->route('whatsapp.instances')->with('flash', [
+                    'type'    => 'error',
+                    'message' => 'La instancia no existía en Evolution y no se pudo crear: '.$e->getMessage(),
+                ]);
+            }
+        }
+
         try {
-            $state = $evolution->connectionState($name);
+            $state   = $evolution->connectionState($name);
             $connect = $evolution->connect($name);
         } catch (RuntimeException $e) {
             return redirect()->route('whatsapp.instances')->with('flash', [
-                'type' => 'error',
+                'type'    => 'error',
                 'message' => $e->getMessage(),
             ]);
         }
@@ -346,15 +359,16 @@ class InstancesController extends Controller
 
         return redirect()->route('whatsapp.instances')->with('whatsapp_connect', [
             'instance_name' => $name,
-            'profile_name' => (string) $row->instance_name,
-            'state' => $state,
-            'connect' => $connect,
-            'qr_base64' => $qrBase64,
+            'profile_name'  => (string) $row->instance_name,
+            'state'         => $state,
+            'connect'       => $connect,
+            'qr_base64'     => $qrBase64,
         ])->with('flash', [
-            'type' => 'success',
+            'type'    => 'success',
             'message' => "Estado / QR de sesión {$name} actualizado.",
         ]);
     }
+
 
     /**
      * Solo un perfil activo por sesión Evolution.

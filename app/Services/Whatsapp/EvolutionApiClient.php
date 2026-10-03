@@ -186,6 +186,21 @@ class EvolutionApiClient implements MessengerGatewayInterface
         return is_array($response) ? $response : [];
     }
 
+    /**
+     * Comprueba si la instancia existe en Evolution API sin lanzar excepción.
+     */
+    public function instanceExists(string $name): bool
+    {
+        try {
+            $http = $this->http(15);
+            $response = $http->get("/instance/connectionState/{$name}");
+
+            return $response->successful();
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
     public function sendPresence(string $instance, string $phone, string $presence = 'composing', int $delay = 1500): void
     {
         $number = $this->normalizePhone($phone);
