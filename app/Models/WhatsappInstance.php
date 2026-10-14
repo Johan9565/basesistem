@@ -17,6 +17,7 @@ class WhatsappInstance extends Model
 
     protected $fillable = [
         'company_id',
+        'branch_id',
         'instance_name',
         'evolution_instance_name',
         'google_calendar_id',
@@ -39,6 +40,11 @@ class WhatsappInstance extends Model
         'telegram_allowed_user_ids',
         'slot_busy_policy',
     ];
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
+    }
 
     protected $hidden = [
         'telegram_bot_token',

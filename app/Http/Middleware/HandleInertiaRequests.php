@@ -56,15 +56,12 @@ class HandleInertiaRequests extends Middleware
             $permissionCache = app(\App\Services\Tenancy\PermissionCacheService::class);
             $userPermissions = $permissionCache->getUserPermissions($user, $companyContext->getCompanyId());
 
-            // Obtener lista de empresas del usuario
-            $memberships = $user->companyMemberships()
-                ->where('status', 'active')
-                ->get();
-
-            $companyIds = $memberships->pluck('company_id')->filter()->toArray();
+            // Obtener lista de empresas accesibles del usuario
+            $companyIds = $user->getAccessibleCompanyIds();
             if (! empty($companyIds)) {
-                $userCompanies = \App\Models\Company::whereIn('_id', $companyIds)
+                $userCompanies = \App\Models\Company::whereInMongoIds($companyIds)
                     ->where('status', 'active')
+                    ->orderBy('name', 'asc')
                     ->get()
                     ->map(function ($comp) use ($companyContext) {
                         return [
@@ -81,16 +78,41 @@ class HandleInertiaRequests extends Middleware
 
             if (! empty($userPermissions)) {
                 $allModules = ModulesModel::where('status', 1)
-                    ->whereIn('route', $userPermissions)
                     ->orderBy('order_index', 'asc')
                     ->get()
-                    // Filtrar según módulos habilitados en la empresa activa
-                    ->filter(function ($module) use ($activeCompany) {
-                        if (! $activeCompany) {
-                            return true;
+                    // Filtrar según permisos de usuario y módulos habilitados en la empresa activa
+                    ->filter(function ($module) use ($user, $userPermissions, $activeCompany) {
+                        $route = (string) $module->route;
+
+                        // El módulo de roles es EXCLUSIVO para el Super Administrador
+                        if ($route === 'roles' && ! $user->isSuperAdmin()) {
+                            return false;
                         }
 
-                        $route = (string) $module->route;
+                        if (! $user->isSuperAdmin()) {
+                            // Dropdowns contenedores se filtrarán por sus hijos
+                            if ($module->relation !== 0 && (string) $module->relation !== '0') {
+                                $hasAccess = in_array($route, $userPermissions, true)
+                                    || in_array("{$route}.view", $userPermissions, true);
+
+                                if (! $hasAccess) {
+                                    $hasAccess = collect($userPermissions)->contains(fn ($p) => str_starts_with($p, "{$route}."));
+                                }
+
+                                if (! $hasAccess) {
+                                    return false;
+                                }
+                            }
+                        }
+
+                        if (! $activeCompany) {
+                            if ((string) $module->relation === '0' || $module->relation === 0) {
+                                return true;
+                            }
+
+                            return is_string($module->route) && $module->route !== '' && Route::has($module->route);
+                        }
+
                         if (str_starts_with($route, 'products') && ! $activeCompany->isModuleEnabled('inventory')) {
                             return false;
                         }
@@ -114,33 +136,133 @@ class HandleInertiaRequests extends Middleware
                     })
                     ->values();
 
-                // Rutas de módulos dropdown (relation == 0)
-                $dropdownRoutes = $allModules
+                // Clasificación: Módulos propios de la empresa vs Módulos globales de plataforma
+                $isCompanyRoute = function (string $route, mixed $relation = null): bool {
+                    $companyKeys = [
+                        'products',
+                        'services',
+                        'whatsapp.calendar',
+                        'whatsapp',
+                        'whatsapp.instances',
+                        'whatsapp.conversations',
+                        'whatsapp.send',
+                        'employees',
+                    ];
+
+                    if (in_array($route, $companyKeys, true)) {
+                        return true;
+                    }
+
+                    if ($relation === 'whatsapp' || (string) $relation === 'whatsapp') {
+                        return true;
+                    }
+
+                    return str_starts_with($route, 'whatsapp.')
+                        || str_starts_with($route, 'products.')
+                        || str_starts_with($route, 'services.');
+                };
+
+                // 1. Menú Superior (Global / Plataforma / SaaS)
+                $topModulesList = $allModules
+                    ->filter(fn ($m) => ! $isCompanyRoute((string) $m->route, $m->relation))
+                    ->values();
+
+                $topDropdownRoutes = $topModulesList
                     ->where('relation', 0)
                     ->pluck('route')
                     ->toArray();
 
-                // Hijos agrupados por su relation (que apunta al route del padre)
-                $childrenMap = $allModules
-                    ->filter(fn ($m) => in_array($m->relation, $dropdownRoutes))
+                $topChildrenMap = $topModulesList
+                    ->filter(fn ($m) => in_array($m->relation, $topDropdownRoutes))
                     ->groupBy('relation');
 
-                // Menú top-level: los que NO son hijos de un dropdown
-                $userMenu = $allModules
-                    ->filter(fn ($m) => ! in_array($m->relation, $dropdownRoutes))
-                    ->map(function ($module) use ($childrenMap) {
+                $userMenu = $topModulesList
+                    ->filter(fn ($m) => ! in_array($m->relation, $topDropdownRoutes))
+                    ->map(function ($module) use ($topChildrenMap) {
                         $data = $module->toArray();
                         $data['is_dropdown'] = $module->relation == 0;
-                        $data['children'] = $childrenMap
+                        $data['children'] = $topChildrenMap
                             ->get($module->route, collect())
                             ->values()
                             ->toArray();
 
                         return $data;
                     })
-                    // Ocultar dropdowns vacíos (sin hijos visibles)
                     ->filter(fn ($module) => ! ($module['is_dropdown'] ?? false) || ! empty($module['children']))
-                    ->values();
+                    ->values()
+                    ->toArray();
+
+                // 2. Menú Lateral (Operativo de la Empresa Activa)
+                $companyMenu = [];
+                if ($activeCompany) {
+                    $compModules = $allModules
+                        ->filter(fn ($m) => $isCompanyRoute((string) $m->route, $m->relation))
+                        ->values();
+
+                    $sections = [
+                        'whatsapp' => [
+                            'key' => 'whatsapp',
+                            'title' => 'WhatsApp CRM',
+                            'icon' => 'chat',
+                            'items' => [],
+                        ],
+                        'appointments' => [
+                            'key' => 'appointments',
+                            'title' => 'Agenda & Citas',
+                            'icon' => 'calendar',
+                            'items' => [],
+                        ],
+                        'operations' => [
+                            'key' => 'operations',
+                            'title' => 'Operaciones',
+                            'icon' => 'box',
+                            'items' => [],
+                        ],
+                        'team' => [
+                            'key' => 'team',
+                            'title' => 'Equipo & Roles',
+                            'icon' => 'users',
+                            'items' => [],
+                        ],
+                        'other' => [
+                            'key' => 'other',
+                            'title' => 'Módulos',
+                            'icon' => 'grid',
+                            'items' => [],
+                        ],
+                    ];
+
+                    foreach ($compModules as $mod) {
+                        if ($mod->relation === 0 || (string) $mod->relation === '0') {
+                            continue;
+                        }
+
+                        $r = (string) $mod->route;
+                        $item = [
+                            'id' => (string) $mod->_id,
+                            'name' => $mod->name,
+                            'route' => $mod->route,
+                            'icon' => $mod->icon ?? null,
+                        ];
+
+                        if (str_starts_with($r, 'whatsapp.') && $r !== 'whatsapp.calendar') {
+                            $sections['whatsapp']['items'][] = $item;
+                        } elseif ($r === 'whatsapp.calendar') {
+                            $sections['appointments']['items'][] = $item;
+                        } elseif (in_array($r, ['products', 'services'], true) || str_starts_with($r, 'products.') || str_starts_with($r, 'services.')) {
+                            $sections['operations']['items'][] = $item;
+                        } elseif (in_array($r, ['employees', 'roles'], true)) {
+                            $sections['team']['items'][] = $item;
+                        } else {
+                            $sections['other']['items'][] = $item;
+                        }
+                    }
+
+                    $companyMenu = collect($sections)
+                        ->filter(fn ($sec) => ! empty($sec['items']))
+                        ->values()
+                        ->toArray();
+                }
             }
         }
 
@@ -162,7 +284,9 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $user,
                 'role' => $role?->role ?? null,
-                'menu' => $userMenu,
+                'menu' => $userMenu ?? [],
+                'top_menu' => $userMenu ?? [],
+                'company_menu' => $companyMenu ?? [],
                 'notification_unread_count' => $notificationUnreadCount,
                 'can' => $userPermissions,
                 'active_company' => $activeCompany ? [

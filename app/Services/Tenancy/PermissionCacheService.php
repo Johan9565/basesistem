@@ -34,6 +34,12 @@ class PermissionCacheService
         $key = $this->getCacheKey($userId, $companyId);
 
         return Cache::remember($key, self::TTL, function () use ($user, $companyId) {
+            // Si el usuario es Super Administrador, tiene acceso total a todos los permisos atómicos
+            if ($user->isSuperAdmin()) {
+                $allPerms = PermissionsModel::where('status', 1)->pluck('name')->toArray();
+                return array_values(array_unique($allPerms));
+            }
+
             $role = null;
             $customPermissions = [];
 
@@ -66,13 +72,45 @@ class PermissionCacheService
 
             $permissionsFromRole = [];
             if (! empty($permissionIds)) {
-                $permissionsFromRole = PermissionsModel::whereIn('_id', $permissionIds)
+                $objectIds = [];
+                foreach ($permissionIds as $id) {
+                    try {
+                        $objectIds[] = new \MongoDB\BSON\ObjectId($id);
+                    } catch (\Throwable) {
+                    }
+                }
+                $allSearchIds = array_values(array_unique(array_merge($permissionIds, $objectIds)));
+
+                $permModels = PermissionsModel::whereIn('_id', $allSearchIds)
                     ->where('status', 1)
-                    ->pluck('module')
-                    ->toArray();
+                    ->get();
+
+                foreach ($permModels as $pm) {
+                    if (! empty($pm->name)) {
+                        $permissionsFromRole[] = $pm->name;
+                    }
+                    // Si no es un permiso atómico (no contiene punto), incluir también su module
+                    if (! empty($pm->module) && ! str_contains((string) $pm->name, '.')) {
+                        $permissionsFromRole[] = $pm->module;
+                    }
+                }
+            }
+
+            // También incluir nombres desde role->permissions array directo si existen
+            if ($role && is_array($role->permissions)) {
+                foreach ($role->permissions as $p) {
+                    if (is_array($p) && ! empty($p['name'])) {
+                        $permissionsFromRole[] = $p['name'];
+                    }
+                }
             }
 
             $allPerms = array_unique(array_merge($permissionsFromRole, $customPermissions));
+
+            // Si el usuario NO es superadmin, nos aseguramos de que NUNCA tenga permisos de 'roles'
+            if (! $user->isSuperAdmin()) {
+                $allPerms = array_filter($allPerms, fn ($p) => $p !== 'roles' && ! str_starts_with($p, 'roles.'));
+            }
 
             return array_values($allPerms);
         });
@@ -83,9 +121,114 @@ class PermissionCacheService
      */
     public function hasPermission(User $user, string $permission, ?string $companyId = null): bool
     {
+        // El módulo de roles es EXCLUSIVO para superadmin
+        if ($permission === 'roles' || str_starts_with($permission, 'roles.')) {
+            return $user->isSuperAdmin();
+        }
+
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
         $permissions = $this->getUserPermissions($user, $companyId);
 
-        return in_array($permission, $permissions, true);
+        // Normalizaciones de nombres comunes en español/inglés
+        $aliases = [
+            'administration' => ['administracion', 'administración', 'Administración'],
+            'companies' => ['empresas'],
+            'users' => ['usuarios'],
+            'employees' => ['empleados'],
+            'components' => ['componentes'],
+            'products' => ['inventario'],
+            'services' => ['servicios'],
+            'whatsapp.calendar' => ['calendario'],
+        ];
+
+        // 1. Coincidencia exacta con permiso (ej: 'products.create' o 'products')
+        if (in_array($permission, $permissions, true)) {
+            return true;
+        }
+
+        // Revisar aliases directos
+        if (isset($aliases[$permission])) {
+            foreach ($aliases[$permission] as $alias) {
+                if (in_array($alias, $permissions, true)) {
+                    return true;
+                }
+            }
+        }
+
+        // 2. Si la ruta solicita un módulo general (ej: 'administration', 'products', 'services')
+        if (! str_contains($permission, '.')) {
+            // Si tiene algún permiso atómico de este módulo (ej: 'products.view' para 'products')
+            foreach ($permissions as $p) {
+                if (str_starts_with($p, "{$permission}.")) {
+                    return true;
+                }
+            }
+
+            // Caso especial: 'administration' engloba 'companies', 'users', 'employees', 'components'
+            if ($permission === 'administration' || in_array($permission, ['administracion', 'administración', 'Administración'], true)) {
+                $adminSubmodules = ['companies', 'users', 'employees', 'components'];
+                foreach ($adminSubmodules as $sub) {
+                    if (in_array($sub, $permissions, true)) {
+                        return true;
+                    }
+                    if (isset($aliases[$sub])) {
+                        foreach ($aliases[$sub] as $alias) {
+                            if (in_array($alias, $permissions, true)) {
+                                return true;
+                            }
+                        }
+                    }
+                    foreach ($permissions as $p) {
+                        if (str_starts_with($p, "{$sub}.")) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        } else {
+            // 3. Si la ruta solicita un permiso atómico (ej: 'companies.view', 'products.create')
+            $parts = explode('.', $permission);
+            $baseModule = $parts[0];
+
+            // Si el rol tiene el módulo general heredado completo (ej: 'products' o 'inventario')
+            if (in_array($baseModule, $permissions, true)) {
+                return true;
+            }
+            if (isset($aliases[$baseModule])) {
+                foreach ($aliases[$baseModule] as $alias) {
+                    if (in_array($alias, $permissions, true)) {
+                        return true;
+                    }
+                }
+            }
+
+            // Si pertenece a administración y el usuario tiene el permiso general de administración
+            $adminSubmodules = ['companies', 'users', 'employees', 'components'];
+            if (in_array($baseModule, $adminSubmodules, true)) {
+                if (in_array('administration', $permissions, true) || in_array('administracion', $permissions, true) || in_array('administración', $permissions, true) || in_array('Administración', $permissions, true)) {
+                    return true;
+                }
+            }
+
+            if (count($parts) > 2) {
+                $subModule = $parts[0] . '.' . $parts[1];
+                if (in_array($subModule, $permissions, true)) {
+                    return true;
+                }
+                if (isset($aliases[$subModule])) {
+                    foreach ($aliases[$subModule] as $alias) {
+                        if (in_array($alias, $permissions, true)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -100,13 +243,11 @@ class PermissionCacheService
             Cache::forget("user_perms:{$userId}:global");
 
             try {
-                $companyIds = \App\Models\CompanyUser::where('user_id', (string) $userId)
-                    ->pluck('company_id')
-                    ->filter()
-                    ->toArray();
-
-                foreach ($companyIds as $cid) {
-                    Cache::forget($this->getCacheKey($userId, (string) $cid));
+                $memberships = \App\Models\CompanyUser::where('user_id', (string) $userId)->get(['company_id']);
+                foreach ($memberships as $m) {
+                    if (! empty($m->company_id)) {
+                        Cache::forget($this->getCacheKey($userId, (string) $m->company_id));
+                    }
                 }
             } catch (\Throwable $e) {
                 // Fallback silencioso
@@ -135,7 +276,7 @@ class PermissionCacheService
     {
         $this->invalidateAll();
 
-        $uniqueIds = array_unique(array_filter($userIds));
+        $uniqueIds = array_unique(array_filter(array_map('strval', $userIds)));
         foreach ($uniqueIds as $uid) {
             $this->invalidateUser((string) $uid);
             try {
@@ -150,7 +291,7 @@ class PermissionCacheService
                     null,
                     [
                         'inertiaGlobal' => [
-                            'only' => ['auth', 'company_modules'],
+                            'only' => ['auth'],
                             'preserveScroll' => true,
                         ],
                     ]
@@ -170,33 +311,44 @@ class PermissionCacheService
 
         $fromUsers = [];
         try {
-            $fromUsers = User::where('role_id', new \MongoDB\BSON\ObjectId($roleId))
-                ->orWhere('role_id', $roleId)
-                ->pluck('_id')
-                ->map(fn ($id) => (string) $id)
-                ->toArray();
+            $fromUsers = User::where(function ($q) use ($roleId) {
+                $q->where('role_id', (string) $roleId);
+                try {
+                    $q->orWhere('role_id', new \MongoDB\BSON\ObjectId($roleId));
+                } catch (\Throwable) {
+                    // ignorar si no es un ObjectId válido
+                }
+            })
+            ->get(['_id'])
+            ->map(fn ($u) => (string) $u->getKey())
+            ->filter()
+            ->values()
+            ->toArray();
         } catch (\Throwable $e) {
-            $fromUsers = User::where('role_id', $roleId)
-                ->pluck('_id')
-                ->map(fn ($id) => (string) $id)
-                ->toArray();
+            $fromUsers = [];
         }
 
         $fromMemberships = [];
         try {
-            $fromMemberships = \App\Models\CompanyUser::where('role_id', new \MongoDB\BSON\ObjectId($roleId))
-                ->orWhere('role_id', $roleId)
-                ->pluck('user_id')
-                ->map(fn ($id) => (string) $id)
-                ->toArray();
+            $fromMemberships = \App\Models\CompanyUser::where(function ($q) use ($roleId) {
+                $q->where('role_id', (string) $roleId);
+                try {
+                    $q->orWhere('role_id', new \MongoDB\BSON\ObjectId($roleId));
+                } catch (\Throwable) {
+                    // ignorar
+                }
+            })
+            ->get(['user_id'])
+            ->map(fn ($cu) => (string) ($cu->user_id ?? ''))
+            ->filter()
+            ->values()
+            ->toArray();
         } catch (\Throwable $e) {
-            $fromMemberships = \App\Models\CompanyUser::where('role_id', $roleId)
-                ->pluck('user_id')
-                ->map(fn ($id) => (string) $id)
-                ->toArray();
+            $fromMemberships = [];
         }
 
-        $allUserIds = array_unique(array_merge($fromUsers, $fromMemberships));
+        $currentUserId = auth()->id() ? (string) auth()->id() : null;
+        $allUserIds = array_unique(array_filter(array_merge($fromUsers, $fromMemberships, $currentUserId ? [$currentUserId] : [])));
         $this->broadcastPermissionUpdate($allUserIds, $message);
     }
 
@@ -208,10 +360,15 @@ class PermissionCacheService
         $this->invalidateAll();
 
         $companyUserIds = \App\Models\CompanyUser::where('company_id', (string) $companyId)
-            ->pluck('user_id')
-            ->map(fn ($id) => (string) $id)
+            ->get(['user_id'])
+            ->map(fn ($cu) => (string) ($cu->user_id ?? ''))
+            ->filter()
+            ->values()
             ->toArray();
 
-        $this->broadcastPermissionUpdate($companyUserIds, $message);
+        $currentUserId = auth()->id() ? (string) auth()->id() : null;
+        $allUserIds = array_unique(array_filter(array_merge($companyUserIds, $currentUserId ? [$currentUserId] : [])));
+
+        $this->broadcastPermissionUpdate($allUserIds, $message);
     }
 }

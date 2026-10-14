@@ -25,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
             'module' => \App\Http\Middleware\CheckCompanyModule::class,
+            'superadmin' => \App\Http\Middleware\EnsureSuperAdmin::class,
             'evolution.webhook' => \App\Http\Middleware\VerifyEvolutionWebhookSecret::class,
             'telegram.webhook' => \App\Http\Middleware\VerifyTelegramWebhookSecret::class,
         ]);

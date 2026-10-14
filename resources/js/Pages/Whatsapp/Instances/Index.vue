@@ -21,6 +21,10 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    branches: {
+        type: Array,
+        default: () => [],
+    },
     defaults: {
         type: Object,
         default: () => ({
@@ -54,8 +58,7 @@ const duplicateForm = useForm({
 });
 
 const formTabs = [
-    { id: 'negocio', label: 'Negocio', icon: 'pi pi-building', hint: 'Nombre y tono del bot' },
-    { id: 'catalogo', label: 'Catálogo', icon: 'pi pi-list', hint: 'Lo que el bot puede ofrecer' },
+    { id: 'negocio', label: 'Negocio', icon: 'pi pi-building', hint: 'Nombre, sucursal y tono del bot' },
     { id: 'tecnico', label: 'Conexión', icon: 'pi pi-cog', hint: 'Calendar, IA y estado' },
     { id: 'telegram', label: 'Telegram', icon: 'pi pi-send', hint: 'Bot admin por instancia' },
 ];
@@ -82,28 +85,21 @@ const selected = computed(
     () => props.instances.find((i) => i.id === selectedId.value) ?? null,
 );
 
-const catalogFilledCount = computed(() => {
-    const fields = [
-        form.services,
-        form.business_hours,
-        form.prices,
-        form.promotions,
-        form.locations,
-    ];
-    return fields.filter((v) => String(v || '').trim() !== '').length;
-});
+const branchOptions = computed(() => [
+    { label: 'Toda la empresa (sin sucursal fija)', value: '' },
+    ...(props.branches || []).map((b) => ({
+        label: `${b.name}${b.is_main ? ' (Principal)' : ''}${b.address ? ' — ' + b.address : ''}`,
+        value: b.id,
+    })),
+]);
 
 const form = useForm({
     instance_name: '',
+    branch_id: '',
     google_calendar_id: '',
     timezone: '',
     system_prompt: '',
     business_name: '',
-    services: '',
-    business_hours: '',
-    prices: '',
-    promotions: '',
-    locations: '',
     ai_provider: 'deepseek',
     status: 'active',
     create_in_evolution: true,
@@ -163,15 +159,11 @@ function openCreateDialog() {
     createTab.value = 'negocio';
     form.reset();
     form.instance_name = '';
+    form.branch_id = '';
     form.google_calendar_id = props.defaults.calendar_id ?? '';
     form.timezone = props.defaults.timezone ?? 'America/Merida';
     form.system_prompt = '';
     form.business_name = '';
-    form.services = '';
-    form.business_hours = '';
-    form.prices = '';
-    form.promotions = '';
-    form.locations = '';
     form.ai_provider = 'deepseek';
     form.status = 'active';
     form.create_in_evolution = true;
@@ -210,15 +202,11 @@ function openEditDialog(id) {
     editTab.value = 'negocio';
     form.clearErrors();
     form.instance_name = row.instance_name;
+    form.branch_id = row.branch_id || '';
     form.google_calendar_id = row.google_calendar_id;
     form.timezone = row.timezone;
     form.system_prompt = row.system_prompt ?? '';
     form.business_name = row.business_name ?? '';
-    form.services = row.services ?? '';
-    form.business_hours = row.business_hours ?? '';
-    form.prices = row.prices ?? '';
-    form.promotions = row.promotions ?? '';
-    form.locations = row.locations ?? '';
     form.ai_provider = row.ai_provider || 'deepseek';
     form.status = row.status || 'active';
     form.credentials_file = null;
@@ -240,11 +228,51 @@ function closeEditDialog() {
 
 function submitEdit() {
     if (!selectedId.value) return;
-    form.post(route('whatsapp.instances.update', selectedId.value), {
-        forceFormData: true,
-        preserveScroll: true,
-        onSuccess: () => closeEditDialog(),
-    });
+    const hasFile = form.credentials_file instanceof File;
+    form
+        .transform((data) => ({
+            ...data,
+            // Garantizar que los valores de Select lleguen como strings escalares
+            status: String(
+                typeof data.status === 'object' && data.status !== null
+                    ? (data.status.value ?? data.status)
+                    : (data.status ?? 'active'),
+            ),
+            ai_provider: String(
+                typeof data.ai_provider === 'object' && data.ai_provider !== null
+                    ? (data.ai_provider.value ?? data.ai_provider)
+                    : (data.ai_provider ?? 'deepseek'),
+            ),
+            timezone: String(
+                typeof data.timezone === 'object' && data.timezone !== null
+                    ? (data.timezone.value ?? data.timezone)
+                    : (data.timezone ?? ''),
+            ),
+            branch_id: String(
+                typeof data.branch_id === 'object' && data.branch_id !== null
+                    ? (data.branch_id.value ?? data.branch_id)
+                    : (data.branch_id ?? ''),
+            ),
+        }))
+        .post(route('whatsapp.instances.update', selectedId.value), {
+            forceFormData: hasFile,
+            preserveScroll: true,
+            onSuccess: () => closeEditDialog(),
+            onError: (errors) => {
+                // Navegar a la pestaña que contiene el primer error
+                const tabFieldMap = {
+                    negocio: ['business_name', 'branch_id', 'system_prompt', 'status'],
+                    tecnico: ['google_calendar_id', 'credentials_file', 'timezone', 'ai_provider'],
+                    telegram: ['telegram_bot_token', 'telegram_allowed_user_ids'],
+                };
+                for (const [tab, fields] of Object.entries(tabFieldMap)) {
+                    if (fields.some((f) => errors[f])) {
+                        editTab.value = tab;
+                        break;
+                    }
+                }
+            },
+        });
 }
 
 function openDeleteDialog(id) {
@@ -376,6 +404,13 @@ function closeConnectDialog() {
                                             class="mt-0.5 text-xs font-normal text-base-content/50"
                                         >
                                             {{ row.business_name }}
+                                        </div>
+                                        <div
+                                            v-if="row.branch_name"
+                                            class="mt-0.5 flex items-center gap-1 text-xs font-normal text-primary"
+                                        >
+                                            <i class="pi pi-map-marker text-[10px]" />
+                                            Sucursal: {{ row.branch_name }}
                                         </div>
                                         <div
                                             v-if="row.shares_session"
@@ -533,32 +568,61 @@ function closeConnectDialog() {
 
                 <div v-show="createTab === 'negocio'" class="space-y-4">
                     <p class="text-sm text-base-content/60">
-                        Cómo se identifica el negocio y cómo habla el asistente.
+                        Cómo se identifica el negocio, sucursal a la que pertenece y cómo habla el asistente.
                     </p>
-                    <div>
-                        <InputLabel value="Nombre técnico (Evolution)" />
-                        <InputText
-                            v-model="form.instance_name"
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <InputLabel value="Nombre técnico (Evolution)" />
+                            <InputText
+                                v-model="form.instance_name"
+                                class="mt-1 block w-full"
+                                placeholder="mi_negocio_wa"
+                            />
+                            <p class="mt-1 text-xs text-base-content/45">
+                                Solo letras, números, guion y guion bajo. No se puede cambiar después.
+                            </p>
+                            <InputError :message="form.errors.instance_name" class="mt-2" />
+                        </div>
+                        <div>
+                            <InputLabel value="Nombre comercial" />
+                            <InputText
+                                v-model="form.business_name"
+                                class="mt-1 block w-full"
+                                placeholder="Flying Dress Cancún"
+                            />
+                            <p class="mt-1 text-xs text-base-content/45">
+                                Así se presenta el bot ante el cliente.
+                            </p>
+                            <InputError :message="form.errors.business_name" class="mt-2" />
+                        </div>
+                    </div>
+
+                    <div v-if="props.branches && props.branches.length > 0">
+                        <InputLabel value="Sucursal asignada" />
+                        <Select
+                            v-model="form.branch_id"
+                            :options="branchOptions"
+                            optionLabel="label"
+                            optionValue="value"
                             class="mt-1 block w-full"
-                            placeholder="mi_negocio_wa"
+                            placeholder="Seleccionar sucursal"
                         />
                         <p class="mt-1 text-xs text-base-content/45">
-                            Solo letras, números, guion y guion bajo. No se puede cambiar después.
+                            Asocia este número a una sucursal específica o déjalo general para toda la empresa.
                         </p>
-                        <InputError :message="form.errors.instance_name" class="mt-2" />
+                        <InputError :message="form.errors.branch_id" class="mt-2" />
                     </div>
-                    <div>
-                        <InputLabel value="Nombre comercial" />
-                        <InputText
-                            v-model="form.business_name"
-                            class="mt-1 block w-full"
-                            placeholder="Flying Dress Cancún"
-                        />
-                        <p class="mt-1 text-xs text-base-content/45">
-                            Así se presenta el bot: “asistente oficial de…”.
-                        </p>
-                        <InputError :message="form.errors.business_name" class="mt-2" />
+
+                    <div class="rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-xs text-base-content/75 flex items-start gap-2.5">
+                        <i class="pi pi-info-circle text-primary text-base mt-0.5 shrink-0" />
+                        <div>
+                            <p class="font-medium text-base-content">Catálogo y horarios unificados</p>
+                            <p class="mt-0.5 text-base-content/65 leading-relaxed">
+                                Los servicios, productos del inventario y horarios de atención ahora provienen directamente de los módulos de la empresa y sucursal. El bot responderá utilizando los datos oficiales cargados en el sistema sin necesidad de duplicar texto.
+                            </p>
+                        </div>
                     </div>
+
                     <div>
                         <InputLabel value="Instrucciones extra (opcional)" />
                         <Textarea
@@ -569,74 +633,6 @@ function closeConnectDialog() {
                             placeholder="Tono, políticas de anticipación, excepciones, qué no debe prometer…"
                         />
                         <InputError :message="form.errors.system_prompt" class="mt-2" />
-                    </div>
-                </div>
-
-                <div v-show="createTab === 'catalogo'" class="space-y-4">
-                    <p class="text-sm text-base-content/60">
-                        Catálogo que el bot usa para responder dudas y agendar. Sé concreto.
-                    </p>
-                    <div class="grid gap-4 lg:grid-cols-2">
-                        <div>
-                            <InputLabel value="Paquetes / servicios" />
-                            <Textarea
-                                v-model="form.services"
-                                class="mt-1 block w-full"
-                                rows="7"
-                                autoResize
-                                placeholder="Flying Dress — sesión en playa&#10;Flying Dron — sesión con dron&#10;SILVER PACKAGE — incluye vestido + 20 fotos"
-                            />
-                            <InputError :message="form.errors.services" class="mt-2" />
-                        </div>
-                        <div>
-                            <InputLabel value="Ubicaciones / zonas" />
-                            <Textarea
-                                v-model="form.locations"
-                                class="mt-1 block w-full"
-                                rows="7"
-                                autoResize
-                                placeholder="Playa pública — Cancún&#10;Playa pública — Puerto Morelos&#10;Playa pública — Playa del Carmen"
-                            />
-                            <p class="mt-1 text-xs text-base-content/45">
-                                Incluye ciudad o localidad; el bot la usará en el resumen de la cita.
-                            </p>
-                            <InputError :message="form.errors.locations" class="mt-2" />
-                        </div>
-                    </div>
-                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <div>
-                            <InputLabel value="Horarios de atención" />
-                            <Textarea
-                                v-model="form.business_hours"
-                                class="mt-1 block w-full"
-                                rows="4"
-                                autoResize
-                                placeholder="Lun–Vie 9:00–18:00&#10;Sáb 9:00–14:00"
-                            />
-                            <InputError :message="form.errors.business_hours" class="mt-2" />
-                        </div>
-                        <div>
-                            <InputLabel value="Precios / tarifas" />
-                            <Textarea
-                                v-model="form.prices"
-                                class="mt-1 block w-full"
-                                rows="4"
-                                autoResize
-                                placeholder="Flying Dress desde $2,500&#10;Flying Dron desde $3,200"
-                            />
-                            <InputError :message="form.errors.prices" class="mt-2" />
-                        </div>
-                        <div class="sm:col-span-2 lg:col-span-1">
-                            <InputLabel value="Promociones" />
-                            <Textarea
-                                v-model="form.promotions"
-                                class="mt-1 block w-full"
-                                rows="4"
-                                autoResize
-                                placeholder="10% en reserva anticipada de 7 días…"
-                            />
-                            <InputError :message="form.errors.promotions" class="mt-2" />
-                        </div>
                     </div>
                 </div>
 
@@ -776,7 +772,7 @@ function closeConnectDialog() {
 
                 <div class="flex flex-wrap items-center justify-between gap-3 border-t border-base-300 pt-4">
                     <p class="text-xs text-base-content/45">
-                        Catálogo: {{ catalogFilledCount }}/5 secciones con contenido
+                        Paso: {{ createTab === 'negocio' ? 'Negocio' : createTab === 'telegram' ? 'Telegram' : 'Conexión' }}
                     </p>
                     <div class="flex gap-2">
                         <Button
@@ -871,6 +867,33 @@ function closeConnectDialog() {
                             <InputError :message="form.errors.business_name" class="mt-2" />
                         </div>
                     </div>
+
+                    <div v-if="props.branches && props.branches.length > 0">
+                        <InputLabel value="Sucursal asignada" />
+                        <Select
+                            v-model="form.branch_id"
+                            :options="branchOptions"
+                            optionLabel="label"
+                            optionValue="value"
+                            class="mt-1 block w-full"
+                            placeholder="Seleccionar sucursal"
+                        />
+                        <p class="mt-1 text-xs text-base-content/45">
+                            Asocia este número a una sucursal específica o déjalo general para toda la empresa.
+                        </p>
+                        <InputError :message="form.errors.branch_id" class="mt-2" />
+                    </div>
+
+                    <div class="rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-xs text-base-content/75 flex items-start gap-2.5">
+                        <i class="pi pi-info-circle text-primary text-base mt-0.5 shrink-0" />
+                        <div>
+                            <p class="font-medium text-base-content">Catálogo y horarios unificados</p>
+                            <p class="mt-0.5 text-base-content/65 leading-relaxed">
+                                Los servicios, productos del inventario y horarios de atención se configuran directamente en los módulos de la empresa y sucursal. No necesitas introducirlos manualmente aquí.
+                            </p>
+                        </div>
+                    </div>
+
                     <div class="grid gap-4 lg:grid-cols-[1fr_minmax(0,18rem)]">
                         <div>
                             <InputLabel value="Instrucciones extra" />
@@ -899,79 +922,6 @@ function closeConnectDialog() {
                                 class="mt-1 block w-full"
                             />
                             <InputError :message="form.errors.status" class="mt-2" />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Catálogo -->
-                <div v-show="editTab === 'catalogo'" class="space-y-4">
-                    <div class="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-base-content/70">
-                        Esto es lo que el bot puede citar al cliente. Si está vacío o genérico,
-                        inventará menos y preguntará más.
-                    </div>
-                    <div class="grid gap-4 lg:grid-cols-2">
-                        <div>
-                            <InputLabel value="Paquetes / servicios" />
-                            <Textarea
-                                v-model="form.services"
-                                class="mt-1 block w-full"
-                                rows="8"
-                                autoResize
-                                placeholder="Flying Dress&#10;Flying Dron&#10;SILVER PACKAGE — vestido + 20 fotos editadas"
-                            />
-                            <p class="mt-1 text-xs text-base-content/45">
-                                Un renglón por paquete. El bot no volverá a preguntar el tipo si ya lo eligió el cliente.
-                            </p>
-                            <InputError :message="form.errors.services" class="mt-2" />
-                        </div>
-                        <div>
-                            <InputLabel value="Ubicaciones / zonas" />
-                            <Textarea
-                                v-model="form.locations"
-                                class="mt-1 block w-full"
-                                rows="8"
-                                autoResize
-                                placeholder="Playa pública — Cancún&#10;Playa pública — Puerto Morelos&#10;Playa pública — Playa del Carmen&#10;Hotel (bajo solicitud)"
-                            />
-                            <p class="mt-1 text-xs text-base-content/45">
-                                Escribe tipo de lugar <strong>y</strong> ciudad. Así el resumen no queda solo en “Playa pública”.
-                            </p>
-                            <InputError :message="form.errors.locations" class="mt-2" />
-                        </div>
-                    </div>
-                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <div>
-                            <InputLabel value="Horarios de atención" />
-                            <Textarea
-                                v-model="form.business_hours"
-                                class="mt-1 block w-full"
-                                rows="5"
-                                autoResize
-                                placeholder="Lun–Vie 8:00–18:00&#10;Sáb 8:00–14:00&#10;Domingo cerrado"
-                            />
-                            <InputError :message="form.errors.business_hours" class="mt-2" />
-                        </div>
-                        <div>
-                            <InputLabel value="Precios / tarifas" />
-                            <Textarea
-                                v-model="form.prices"
-                                class="mt-1 block w-full"
-                                rows="5"
-                                autoResize
-                                placeholder="Flying Dress $2,500&#10;Flying Dron $3,200&#10;Traslado fuera de zona +$400"
-                            />
-                            <InputError :message="form.errors.prices" class="mt-2" />
-                        </div>
-                        <div class="sm:col-span-2 lg:col-span-1">
-                            <InputLabel value="Promociones" />
-                            <Textarea
-                                v-model="form.promotions"
-                                class="mt-1 block w-full"
-                                rows="5"
-                                autoResize
-                                placeholder="Combo vestido + dron con 10% de descuento…"
-                            />
-                            <InputError :message="form.errors.promotions" class="mt-2" />
                         </div>
                     </div>
                 </div>
@@ -1160,15 +1110,13 @@ function closeConnectDialog() {
 
                 <div class="flex flex-wrap items-center justify-between gap-3 border-t border-base-300 pt-4">
                     <p class="text-xs text-base-content/45">
-                        Catálogo: {{ catalogFilledCount }}/5 ·
+                        Pestaña:
                         {{
                             editTab === 'negocio'
                                 ? 'Negocio'
-                                : editTab === 'catalogo'
-                                  ? 'Catálogo'
-                                  : editTab === 'telegram'
-                                    ? 'Telegram'
-                                    : 'Conexión'
+                                : editTab === 'telegram'
+                                  ? 'Telegram'
+                                  : 'Conexión'
                         }}
                     </p>
                     <div class="flex gap-2">

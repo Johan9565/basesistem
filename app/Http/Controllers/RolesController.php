@@ -10,41 +10,39 @@ use Inertia\Inertia;
 
 class RolesController extends Controller
 {
+    private function ensureSuperAdmin(): void
+    {
+        if (! request()->user()?->isSuperAdmin()) {
+            abort(403, 'Acceso restringido: El módulo de roles es exclusivo para el superadministrador.');
+        }
+    }
+
     private function resolvePermissionGroup(string $module, string $name, $modulesMap): array
     {
         $modSlug = strtolower(trim($module));
         $permSlug = strtolower(trim($name));
 
-        // 1. WhatsApp CRM
+        // 1. WhatsApp CRM (instancias, conversaciones, envíos, calendario)
         if (
             str_starts_with($modSlug, 'whatsapp') ||
             str_starts_with($permSlug, 'whatsapp') ||
             $modSlug === 'calendar' ||
-            $permSlug === 'calendario'
+            str_contains($permSlug, 'calendar')
         ) {
             return [
                 'group_key' => 'whatsapp',
-                'group_name' => 'WhatsApp CRM',
+                'group_name' => 'WhatsApp CRM & Citas',
                 'group_order' => 2,
             ];
         }
 
-        // 2. Administración
+        // 2. Inventario y Servicios
         if (
-            in_array($modSlug, ['administration', 'administracion', 'users', 'usuarios', 'employees', 'empleados', 'roles', 'companies', 'empresas', 'components', 'componentes']) ||
-            in_array($permSlug, ['administracion', 'users', 'usuarios', 'employees', 'empleados', 'roles', 'companies', 'empresas', 'components', 'componentes'])
-        ) {
-            return [
-                'group_key' => 'administration',
-                'group_name' => 'Administración',
-                'group_order' => 1,
-            ];
-        }
-
-        // 3. Inventario y Servicios
-        if (
-            in_array($modSlug, ['products', 'inventario', 'inventory', 'services', 'servicios']) ||
-            in_array($permSlug, ['products', 'inventario', 'inventory', 'services', 'servicios'])
+            str_starts_with($modSlug, 'product') ||
+            str_starts_with($permSlug, 'product') ||
+            str_starts_with($modSlug, 'service') ||
+            str_starts_with($permSlug, 'service') ||
+            in_array($modSlug, ['inventario', 'inventory', 'servicios'])
         ) {
             return [
                 'group_key' => 'operations',
@@ -53,15 +51,36 @@ class RolesController extends Controller
             ];
         }
 
-        // 4. Chequear relación en ModulesModel
-        if (isset($modulesMap[$modSlug])) {
-            $relation = $modulesMap[$modSlug]->relation;
-            if ($relation === 'administration') {
-                return ['group_key' => 'administration', 'group_name' => 'Administración', 'group_order' => 1];
-            }
-            if ($relation === 'whatsapp') {
-                return ['group_key' => 'whatsapp', 'group_name' => 'WhatsApp CRM', 'group_order' => 2];
-            }
+        // 3. Empleados y Equipo
+        if (
+            str_starts_with($modSlug, 'employee') ||
+            str_starts_with($permSlug, 'employee') ||
+            in_array($modSlug, ['empleados', 'team'])
+        ) {
+            return [
+                'group_key' => 'team',
+                'group_name' => 'Equipo y Empleados',
+                'group_order' => 4,
+            ];
+        }
+
+        // 4. Administración Global SaaS (Empresas, Usuarios, Componentes, Roles)
+        if (
+            str_starts_with($modSlug, 'compan') ||
+            str_starts_with($permSlug, 'compan') ||
+            str_starts_with($modSlug, 'user') ||
+            str_starts_with($permSlug, 'user') ||
+            str_starts_with($modSlug, 'role') ||
+            str_starts_with($permSlug, 'role') ||
+            str_starts_with($modSlug, 'component') ||
+            str_starts_with($permSlug, 'component') ||
+            in_array($modSlug, ['administration', 'administracion'])
+        ) {
+            return [
+                'group_key' => 'administration',
+                'group_name' => 'Administración SaaS',
+                'group_order' => 1,
+            ];
         }
 
         return [
@@ -73,6 +92,8 @@ class RolesController extends Controller
 
     public function index()
     {
+        $this->ensureSuperAdmin();
+
         $allModules = ModulesModel::where('status', 1)->get()->keyBy(fn ($m) => strtolower(trim($m->route ?? '')));
 
         $allPermissions = PermissionsModel::where('status', 1)
@@ -153,6 +174,8 @@ class RolesController extends Controller
 
     public function store(Request $request)
     {
+        $this->ensureSuperAdmin();
+
         $request->validate([
             'role' => 'required|string|max:100',
             'name' => 'nullable|string|max:100',
@@ -193,6 +216,8 @@ class RolesController extends Controller
 
     public function update(Request $request, string $roleId)
     {
+        $this->ensureSuperAdmin();
+
         $role = RoleModel::findOrFail($roleId);
 
         $request->validate([
@@ -222,6 +247,8 @@ class RolesController extends Controller
 
     public function destroy(string $roleId)
     {
+        $this->ensureSuperAdmin();
+
         $role = RoleModel::findOrFail($roleId);
 
         if ($role->is_system) {
@@ -237,17 +264,28 @@ class RolesController extends Controller
 
     public function updatePermissions(Request $request, string $roleId)
     {
+        $this->ensureSuperAdmin();
+
         $request->validate([
             'permission_ids' => 'present|array',
             'permission_ids.*' => 'string',
         ]);
 
-        RoleModel::findOrFail($roleId);
+        $role = RoleModel::findOrFail($roleId);
 
         $permissionIds = $request->input('permission_ids', []);
 
         if (! empty($permissionIds)) {
-            $permissions = PermissionsModel::whereIn('_id', $permissionIds)
+            $objectIds = [];
+            foreach ($permissionIds as $id) {
+                try {
+                    $objectIds[] = new \MongoDB\BSON\ObjectId($id);
+                } catch (\Throwable) {
+                }
+            }
+            $allSearchIds = array_values(array_unique(array_merge($permissionIds, $objectIds)));
+
+            $permissions = PermissionsModel::whereIn('_id', $allSearchIds)
                 ->where('status', 1)
                 ->get();
 
@@ -259,7 +297,10 @@ class RolesController extends Controller
             $newPermissions = [];
         }
 
-        RoleModel::where('_id', $roleId)->update(['permissions' => $newPermissions]);
+        $rawAttrs = $role->getAttributes();
+        $rawAttrs['permissions'] = $newPermissions;
+        $role->setRawAttributes($rawAttrs);
+        $role->save();
 
         app(\App\Services\Tenancy\PermissionCacheService::class)->broadcastRoleUpdate($roleId, 'Los permisos de tu rol han sido actualizados.');
 

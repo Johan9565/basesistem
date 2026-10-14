@@ -11,6 +11,7 @@ import Select from 'primevue/select';
 const props = defineProps({
     companies: Array,
     clients: Array,
+    users: Array,
 });
 
 const dialogVisible = ref(false);
@@ -18,6 +19,7 @@ const isEditing = ref(false);
 const editingCompanyId = ref(null);
 
 const form = useForm({
+    user_id: null,
     client_id: null,
     name: '',
     document_number: '',
@@ -47,6 +49,9 @@ function openCreateDialog() {
     if (props.clients && props.clients.length) {
         form.client_id = props.clients[0].id;
     }
+    if (props.users && props.users.length) {
+        form.user_id = props.users[0].id;
+    }
     dialogVisible.value = true;
 }
 
@@ -55,6 +60,7 @@ function openEditDialog(company) {
     editingCompanyId.value = company.id;
     form.reset();
     form.clearErrors();
+    form.user_id = company.user_id || (props.users?.[0]?.id ?? null);
     form.name = company.name ?? '';
     form.document_number = company.document_number ?? '';
     form.email = company.email ?? '';
@@ -134,8 +140,15 @@ function toggleCompanyModule(company, moduleKey, event) {
                                 </span>
                             </div>
 
-                            <div class="text-xs text-base-content/70 space-y-1 mb-6 border-b border-base-300 pb-4">
-                                <div v-if="company.email" class="flex items-center gap-1.5">
+                            <div class="text-xs text-base-content/70 space-y-1.5 mb-6 border-b border-base-300 pb-4">
+                                <div class="flex items-center gap-1.5 text-primary font-semibold text-xs">
+                                    <i class="pi pi-user text-[11px]"></i>
+                                    <span>Dueño: {{ company.owner_name }}</span>
+                                </div>
+                                <div v-if="company.owner_email" class="text-[11px] text-base-content/50 ml-4 font-mono">
+                                    {{ company.owner_email }}
+                                </div>
+                                <div v-if="company.email" class="flex items-center gap-1.5 pt-1">
                                     <i class="pi pi-envelope text-[11px]"></i>
                                     {{ company.email }}
                                 </div>
@@ -225,6 +238,26 @@ function toggleCompanyModule(company, moduleKey, event) {
             class="p-fluid"
         >
             <form @submit.prevent="submitForm" class="space-y-4 pt-2">
+                <div>
+                    <label class="text-xs font-semibold text-base-content/80">Usuario Propietario (Dueño de la Empresa) *</label>
+                    <Select
+                        v-model="form.user_id"
+                        :options="users"
+                        optionLabel="name"
+                        optionValue="id"
+                        placeholder="Selecciona el usuario propietario"
+                        class="w-full text-sm mt-1"
+                        required
+                    >
+                        <template #option="slotProps">
+                            <div class="flex flex-col text-xs py-0.5">
+                                <span class="font-bold text-base-content">{{ slotProps.option.name }}</span>
+                                <span class="text-base-content/50 font-mono text-[11px]">{{ slotProps.option.email }}</span>
+                            </div>
+                        </template>
+                    </Select>
+                </div>
+
                 <div v-if="!isEditing && clients && clients.length">
                     <label class="text-xs font-semibold text-base-content/80">Cuenta Principal (Cliente) *</label>
                     <Select
@@ -256,6 +289,21 @@ function toggleCompanyModule(company, moduleKey, event) {
                 <div>
                     <label class="text-xs font-semibold text-base-content/80">Email de Contacto</label>
                     <InputText v-model="form.email" type="email" class="w-full text-sm mt-1" placeholder="contacto@empresa.com" />
+                </div>
+
+                <div v-if="isEditing">
+                    <label class="text-xs font-semibold text-base-content/80">Estado de la Empresa *</label>
+                    <Select
+                        v-model="form.status"
+                        :options="[
+                            { label: 'Activa', value: 'active' },
+                            { label: 'Inactiva', value: 'inactive' }
+                        ]"
+                        optionLabel="label"
+                        optionValue="value"
+                        class="w-full text-sm mt-1"
+                        required
+                    />
                 </div>
 
                 <div class="flex justify-end gap-2 pt-4 border-t border-base-300">

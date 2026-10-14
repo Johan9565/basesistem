@@ -155,7 +155,7 @@ function savePermissions(roleId, newIdsArray, successMsg = 'Permisos actualizado
         {
             preserveScroll: true,
             preserveState: true,
-            only: ['roles'],
+            only: ['roles', 'auth'],
             onSuccess: () => {
                 isSaving.value[roleId] = false;
                 toast.add({

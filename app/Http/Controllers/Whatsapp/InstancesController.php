@@ -24,8 +24,19 @@ class InstancesController extends Controller
             ->map(fn (WhatsappInstance $row) => $this->serialize($row))
             ->values();
 
+        $branches = \App\Models\Branch::where('is_active', true)
+            ->orderBy('name')
+            ->get(['_id', 'name', 'is_main', 'address'])
+            ->map(fn ($b) => [
+                'id' => (string) $b->_id,
+                'name' => $b->name,
+                'is_main' => (bool) $b->is_main,
+                'address' => (string) ($b->address ?? ''),
+            ]);
+
         return Inertia::render('Whatsapp/Instances/Index', [
             'instances' => $instances,
+            'branches' => $branches,
             'defaults' => [
                 'timezone' => (string) config('services.google_calendar.timezone', 'America/Merida'),
                 'calendar_id' => (string) config('services.google_calendar.calendar_id', ''),
@@ -45,15 +56,11 @@ class InstancesController extends Controller
                 'max:100',
                 'regex:/^[a-zA-Z0-9_-]+$/',
             ],
+            'branch_id' => 'nullable|string',
             'google_calendar_id' => 'required|string|max:255',
             'timezone' => 'nullable|string|max:64',
             'system_prompt' => 'nullable|string|max:5000',
             'business_name' => 'nullable|string|max:255',
-            'services' => 'nullable|string|max:5000',
-            'business_hours' => 'nullable|string|max:2000',
-            'prices' => 'nullable|string|max:3000',
-            'promotions' => 'nullable|string|max:3000',
-            'locations' => 'nullable|string|max:3000',
             'ai_provider' => 'nullable|string|in:deepseek,mimo',
             'status' => 'nullable|string|in:active,inactive',
             'create_in_evolution' => 'sometimes|boolean',
@@ -104,17 +111,13 @@ class InstancesController extends Controller
 
         WhatsappInstance::query()->create([
             'instance_name' => $validated['instance_name'],
+            'branch_id' => ! empty($validated['branch_id']) ? $validated['branch_id'] : null,
             'google_calendar_id' => $validated['google_calendar_id'],
             'google_credentials_path' => $credentials['path'],
             'google_service_email' => $credentials['email'],
             'timezone' => $validated['timezone'] ?: config('services.google_calendar.timezone'),
             'system_prompt' => $validated['system_prompt'] ?? null,
             'business_name' => $validated['business_name'] ?? null,
-            'services' => $validated['services'] ?? null,
-            'business_hours' => $validated['business_hours'] ?? null,
-            'prices' => $validated['prices'] ?? null,
-            'promotions' => $validated['promotions'] ?? null,
-            'locations' => $validated['locations'] ?? null,
             'ai_provider' => $validated['ai_provider'] ?? 'deepseek',
             'status' => $validated['status'] ?? 'active',
             'evolution_instance_name' => $validated['instance_name'],
@@ -154,15 +157,11 @@ class InstancesController extends Controller
         $row = $this->findInstance($instance);
 
         $validated = $request->validate([
+            'branch_id' => 'nullable|string',
             'google_calendar_id' => 'required|string|max:255',
             'timezone' => 'nullable|string|max:64',
             'system_prompt' => 'nullable|string|max:5000',
             'business_name' => 'nullable|string|max:255',
-            'services' => 'nullable|string|max:5000',
-            'business_hours' => 'nullable|string|max:2000',
-            'prices' => 'nullable|string|max:3000',
-            'promotions' => 'nullable|string|max:3000',
-            'locations' => 'nullable|string|max:3000',
             'ai_provider' => 'required|string|in:deepseek,mimo',
             'status' => 'required|string|in:active,inactive',
             'credentials_file' => 'nullable|file|max:512|mimes:json,txt',
@@ -174,15 +173,11 @@ class InstancesController extends Controller
         ]);
 
         $payload = [
+            'branch_id' => ! empty($validated['branch_id']) ? $validated['branch_id'] : null,
             'google_calendar_id' => $validated['google_calendar_id'],
             'timezone' => $validated['timezone'] ?: config('services.google_calendar.timezone'),
             'system_prompt' => $validated['system_prompt'] ?? null,
             'business_name' => $validated['business_name'] ?? null,
-            'services' => $validated['services'] ?? null,
-            'business_hours' => $validated['business_hours'] ?? null,
-            'prices' => $validated['prices'] ?? null,
-            'promotions' => $validated['promotions'] ?? null,
-            'locations' => $validated['locations'] ?? null,
             'ai_provider' => $validated['ai_provider'],
             'status' => $validated['status'],
             ...$this->telegramPayloadFromValidated($validated, $row),
@@ -265,6 +260,8 @@ class InstancesController extends Controller
         $copyTelegram = filter_var($request->input('copy_telegram', false), FILTER_VALIDATE_BOOLEAN);
 
         $payload = [
+            'company_id' => $source->company_id,
+            'branch_id' => $source->branch_id,
             'instance_name' => $validated['instance_name'],
             'evolution_instance_name' => $source->evolutionName(),
             'google_calendar_id' => $source->google_calendar_id,
@@ -275,11 +272,6 @@ class InstancesController extends Controller
             'system_prompt' => $source->system_prompt,
             'business_name' => $validated['business_name']
                 ?? (($source->business_name ? $source->business_name.' (copia)' : null)),
-            'services' => $source->services,
-            'business_hours' => $source->business_hours,
-            'prices' => $source->prices,
-            'promotions' => $source->promotions,
-            'locations' => $source->locations,
             // Inactiva: al activarla se desactivan los otros perfiles de la misma sesión.
             'status' => 'inactive',
         ];
@@ -488,17 +480,14 @@ class InstancesController extends Controller
             'instance_name' => (string) ($row->instance_name ?? ''),
             'evolution_instance_name' => $row->evolutionName(),
             'shares_session' => $row->evolutionName() !== (string) ($row->instance_name ?? ''),
+            'branch_id' => (string) ($row->branch_id ?? ''),
+            'branch_name' => (string) ($row->branch?->name ?? ''),
             'google_calendar_id' => (string) ($row->google_calendar_id ?? ''),
             'google_service_email' => (string) ($row->google_service_email ?? ''),
             'has_credentials' => $hasCredentials,
             'timezone' => (string) ($row->timezone ?? ''),
             'system_prompt' => (string) ($row->system_prompt ?? ''),
             'business_name' => (string) ($row->business_name ?? ''),
-            'services' => (string) ($row->services ?? ''),
-            'business_hours' => (string) ($row->business_hours ?? ''),
-            'prices' => (string) ($row->prices ?? ''),
-            'promotions' => (string) ($row->promotions ?? ''),
-            'locations' => (string) ($row->locations ?? ''),
             'ai_provider' => (string) ($row->ai_provider ?? 'deepseek'),
             'status' => (string) ($row->status ?? 'active'),
             'has_telegram_bot' => trim((string) ($row->telegram_bot_token ?? '')) !== '',

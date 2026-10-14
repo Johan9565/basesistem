@@ -31,16 +31,11 @@ class RoleModel extends Model
         return $this->belongsTo(Company::class, 'company_id');
     }
 
-    // getAttribute('permissions') de Eloquent devuelve [] en MongoDB
-    // por conflicto interno — leemos directo de los atributos raw
     public function getPermissionsList(): array
     {
-        return $this->getAttributes()['permissions'] ?? [];
-    }
+        $raw = $this->getAttributes()['permissions'] ?? [];
 
-    public function permissions()
-    {
-        return $this->hasMany(PermissionsModel::class, 'role_id');
+        return is_array($raw) ? $raw : [];
     }
 
     /**

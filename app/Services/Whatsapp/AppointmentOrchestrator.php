@@ -1347,9 +1347,29 @@ class AppointmentOrchestrator
             ->all();
     }
 
+    protected function resolveBusinessName(WhatsappInstance $instance): string
+    {
+        $businessName = trim((string) ($instance->business_name ?? ''));
+        if ($businessName !== '') {
+            return $businessName;
+        }
+
+        $company = $instance->company ?: (! empty($instance->company_id) ? \App\Models\Company::find($instance->company_id) : null);
+        $branch = $instance->branch ?: (! empty($instance->branch_id) ? \App\Models\Branch::find($instance->branch_id) : null);
+
+        if ($company && $branch) {
+            return "{$company->name} ({$branch->name})";
+        }
+        if ($company) {
+            return (string) $company->name;
+        }
+
+        return (string) $instance->instance_name;
+    }
+
     protected function buildStaticSystemPrompt(WhatsappInstance $instance, string $timezone): string
     {
-        $businessName = trim((string) ($instance->business_name ?? '')) ?: (string) $instance->instance_name;
+        $businessName = $this->resolveBusinessName($instance);
         $parts = [$this->transversalRules($businessName, $timezone)];
 
         $catalog = $this->formatBusinessCatalog($instance);
@@ -1370,7 +1390,7 @@ class AppointmentOrchestrator
         $now = Carbon::now($timezone)->locale('es');
         $todayLabel = $now->isoFormat('dddd D [de] MMMM [de] YYYY');
         $timeLabel = $now->format('H:i');
-        $businessName = trim((string) ($instance->business_name ?? '')) ?: (string) $instance->instance_name;
+        $businessName = $this->resolveBusinessName($instance);
         $stage = $this->bookingStates->normalizeStage((string) ($booking->step ?? ''));
         $stateJson = $this->bookingStates->toPromptJson($booking);
         $stagePrompt = $this->stagePrompt($stage, $businessName, $todayLabel, $timezone, $booking);
@@ -1696,38 +1716,70 @@ PROMPT;
 
     protected function formatBusinessCatalog(WhatsappInstance $instance): string
     {
-        $sections = [
-            'Servicios / productos' => trim((string) ($instance->services ?? '')),
-            'Horarios de atención' => trim((string) ($instance->business_hours ?? '')),
-            'Precios' => trim((string) ($instance->prices ?? '')),
-            'Promociones' => trim((string) ($instance->promotions ?? '')),
-            'Ubicaciones' => trim((string) ($instance->locations ?? '')),
-        ];
+        $sections = [];
 
-        // Inyección dinámica de servicios y productos según módulos activos de la empresa
-        if (! empty($instance->company_id)) {
-            $company = $instance->company ?: \App\Models\Company::find($instance->company_id);
+        $company = $instance->company ?: (! empty($instance->company_id) ? \App\Models\Company::find($instance->company_id) : null);
+        $branch = $instance->branch ?: (! empty($instance->branch_id) ? \App\Models\Branch::find($instance->branch_id) : null);
 
-            if ($company && $company->isModuleEnabled('services')) {
-                $dbServices = \App\Models\Service::where('company_id', (string) $instance->company_id)
-                    ->where('is_active', true)
-                    ->get();
-                if ($dbServices->isNotEmpty()) {
-                    $servicesText = $dbServices->map(fn ($s) => "- {$s->name}: \${$s->price} ({$s->duration_minutes} min)".($s->description ? " - {$s->description}" : ''))->implode("\n");
-                    $sections['Catálogo oficial de Servicios'] = $servicesText;
-                }
+        // 1. Ubicaciones y sucursales del negocio
+        if ($branch) {
+            $branchInfo = "- Sucursal {$branch->name}";
+            if (! empty($branch->address)) {
+                $branchInfo .= " | Dirección: {$branch->address}";
             }
+            if (! empty($branch->phone)) {
+                $branchInfo .= " | Tel: {$branch->phone}";
+            }
+            $sections['Ubicación de atención'] = $branchInfo;
+        } elseif ($company) {
+            $branches = \App\Models\Branch::where('company_id', (string) $company->_id)
+                ->where('is_active', true)
+                ->get();
+            if ($branches->isNotEmpty()) {
+                $branchesText = $branches->map(function ($b) {
+                    $line = "- {$b->name}";
+                    if (! empty($b->address)) {
+                        $line .= ": {$b->address}";
+                    }
+                    if (! empty($b->phone)) {
+                        $line .= " (Tel: {$b->phone})";
+                    }
 
-            if ($company && $company->isModuleEnabled('inventory')) {
-                $dbProducts = \App\Models\Product::where('company_id', (string) $instance->company_id)
-                    ->where('is_active', true)
-                    ->where('stock', '>', 0)
-                    ->limit(20)
-                    ->get();
-                if ($dbProducts->isNotEmpty()) {
-                    $productsText = $dbProducts->map(fn ($p) => "- [{$p->sku}] {$p->name}: \${$p->price} (Stock: {$p->stock})".($p->description ? " - {$p->description}" : ''))->implode("\n");
-                    $sections['Catálogo de Productos disponibles en Inventario'] = $productsText;
-                }
+                    return $line;
+                })->implode("\n");
+                $sections['Sucursales disponibles'] = $branchesText;
+            }
+        }
+
+        // 2. Horarios de atención (de la sucursal o de la empresa)
+        if ($branch && ! empty($branch->business_hours)) {
+            $sections['Horarios de atención'] = trim((string) $branch->business_hours);
+        } elseif ($company && ! empty($company->settings['business_hours'])) {
+            $sections['Horarios de atención'] = trim((string) $company->settings['business_hours']);
+        }
+
+        // 3. Catálogo oficial de Servicios (módulo 'services' de la empresa)
+        if ($company && $company->isModuleEnabled('services')) {
+            $servicesQuery = \App\Models\Service::where('company_id', (string) $company->_id)
+                ->where('is_active', true);
+
+            $dbServices = $servicesQuery->get();
+            if ($dbServices->isNotEmpty()) {
+                $servicesText = $dbServices->map(fn ($s) => "- {$s->name}: \${$s->price} ({$s->duration_minutes} min)".($s->description ? " - {$s->description}" : ''))->implode("\n");
+                $sections['Catálogo oficial de Servicios'] = $servicesText;
+            }
+        }
+
+        // 4. Catálogo de Productos disponibles en Inventario (módulo 'inventory' de la empresa)
+        if ($company && $company->isModuleEnabled('inventory')) {
+            $productsQuery = \App\Models\Product::where('company_id', (string) $company->_id)
+                ->where('is_active', true)
+                ->where('stock', '>', 0);
+
+            $dbProducts = $productsQuery->limit(25)->get();
+            if ($dbProducts->isNotEmpty()) {
+                $productsText = $dbProducts->map(fn ($p) => "- [{$p->sku}] {$p->name}: \${$p->price} (Stock: {$p->stock})".($p->description ? " - {$p->description}" : ''))->implode("\n");
+                $sections['Catálogo de Productos disponibles en Inventario'] = $productsText;
             }
         }
 
@@ -1742,6 +1794,6 @@ PROMPT;
             return '';
         }
 
-        return "Catálogo del negocio (usa solo esta información; no inventes):\n\n".implode("\n\n", $lines);
+        return "Catálogo del negocio (información oficial de la empresa/sucursal; no inventes datos):\n\n".implode("\n\n", $lines);
     }
 }

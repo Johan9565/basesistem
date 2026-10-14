@@ -17,11 +17,16 @@ import {
     PROFILE_HIGHLIGHT_FIELDS_EVENT,
 } from '@/composables/useNotificacionToUser';
 
+import CompanySidebar from '@/Components/CompanySidebar.vue';
+
 const showingNavigationDropdown = ref(false);
 
 const page = usePage();
-// En visitas parciales o al volver el foco a la pestaña, `page.props` puede ser undefined un instante.
-const menu = computed(() => page.props?.auth?.menu ?? []);
+// Menú superior global (Dashboard, Administración SaaS)
+const topMenu = computed(() => page.props?.auth?.top_menu ?? page.props?.auth?.menu ?? []);
+// Menú lateral operativo específico de la empresa activa
+const companyMenu = computed(() => page.props?.auth?.company_menu ?? []);
+const activeCompany = computed(() => page.props?.auth?.active_company ?? null);
 const can = computed(() => page.props?.auth?.can ?? []);
 const toast = useToast();
 
@@ -197,11 +202,10 @@ onUnmounted(() => {
                 </div>
             </template>
         </Toast>
-        <div class="min-h-screen bg-base-200">
-            <nav
-                class="border-b border-base-300 bg-base-100"
-            >
-                <!-- Primary Navigation Menu -->
+
+        <div class="min-h-screen bg-base-200 flex flex-col">
+            <!-- Barra Superior Principal (Navegación Global / SaaS) -->
+            <nav class="border-b border-base-300 bg-base-100 sticky top-0 z-30 shadow-xs">
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div class="flex h-16 items-center justify-between">
                         <div class="flex items-center">
@@ -214,57 +218,68 @@ onUnmounted(() => {
                                 </Link>
                             </div>
 
-                            <!-- Navigation Links -->
+                            <!-- Enlaces de Navegación Global (Dashboard, Administración SaaS) -->
                             <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex sm:items-center">
-                                <template v-for="modulo in menu" :key="modulo.id">
-                                    <!-- Dropdown (relation == 0) -->
-                                    <Dropdown
-                                        v-if="modulo.is_dropdown"
-                                        align="left"
-                                        width="48"
-                                    >
-                                        <template #trigger>
-                                            <button
-                                                class="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium leading-5 text-base-content/70 transition duration-150 ease-in-out hover:border-base-300 hover:text-base-content focus:outline-hidden"
-                                            >
-                                                <i v-if="modulo.icon" v-html="modulo.icon" class="mr-2"></i>
-                                                {{ modulo.name }}
-                                                <svg class="ms-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-                                                </svg>
-                                            </button>
-                                        </template>
-                                        <template #content>
-                                            <DropdownLink
-                                                v-for="child in modulo.children ?? []"
-                                                :key="child.id"
-                                                :href="route(child.route)"
-                                            >
-                                                <i v-if="child.icon" v-html="child.icon" class="mr-2"></i>
-                                                {{ child.name }}
-                                            </DropdownLink>
-                                            <span
-                                                v-if="!modulo.children?.length"
-                                                class="block px-4 py-2 text-sm text-base-content/60"
-                                            >
-                                                Sin opciones
-                                            </span>
-                                        </template>
-                                    </Dropdown>
+                                <NavLink
+                                    :href="route('dashboard')"
+                                    :active="route().current('dashboard')"
+                                >
+                                    Dashboard
+                                </NavLink>
 
-                                    <!-- Link normal -->
-                                    <NavLink
-                                        v-else
-                                        :href="route(modulo.route)"
-                                        :active="route().current(modulo.route)"
-                                    >
-                                        <i v-if="modulo.icon" v-html="modulo.icon" class="mr-2"></i>
-                                        {{ modulo.name }}
-                                    </NavLink>
+                                <template v-for="modulo in topMenu" :key="modulo.id">
+                                    <!-- Evitar duplicar dashboard si viniera en la lista -->
+                                    <template v-if="modulo.route !== 'dashboard'">
+                                        <!-- Dropdown (relation == 0, ej: Administración) -->
+                                        <Dropdown
+                                            v-if="modulo.is_dropdown"
+                                            align="left"
+                                            width="48"
+                                        >
+                                            <template #trigger>
+                                                <button
+                                                    class="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium leading-5 text-base-content/70 transition duration-150 ease-in-out hover:border-base-300 hover:text-base-content focus:outline-hidden"
+                                                >
+                                                    <i v-if="modulo.icon" v-html="modulo.icon" class="mr-2"></i>
+                                                    {{ modulo.name }}
+                                                    <svg class="ms-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                                    </svg>
+                                                </button>
+                                            </template>
+                                            <template #content>
+                                                <DropdownLink
+                                                    v-for="child in modulo.children ?? []"
+                                                    :key="child.id"
+                                                    :href="route(child.route)"
+                                                >
+                                                    <i v-if="child.icon" v-html="child.icon" class="mr-2"></i>
+                                                    {{ child.name }}
+                                                </DropdownLink>
+                                                <span
+                                                    v-if="!modulo.children?.length"
+                                                    class="block px-4 py-2 text-sm text-base-content/60"
+                                                >
+                                                    Sin opciones
+                                                </span>
+                                            </template>
+                                        </Dropdown>
+
+                                        <!-- Link normal -->
+                                        <NavLink
+                                            v-else
+                                            :href="route(modulo.route)"
+                                            :active="route().current(modulo.route)"
+                                        >
+                                            <i v-if="modulo.icon" v-html="modulo.icon" class="mr-2"></i>
+                                            {{ modulo.name }}
+                                        </NavLink>
+                                    </template>
                                 </template>
                             </div>
                         </div>
 
+                        <!-- Lado Derecho: Switcher de Empresa, Notificaciones, Tema y Perfil -->
                         <div class="hidden sm:ms-6 sm:flex sm:items-center sm:gap-2">
                             <CompanySwitcher />
                             <NotificationBell />
@@ -314,7 +329,7 @@ onUnmounted(() => {
                             </div>
                         </div>
 
-                        <!-- Hamburger -->
+                        <!-- Hamburger Móvil -->
                         <div class="-me-2 flex items-center gap-1 sm:hidden">
                             <NotificationBell />
                             <button
@@ -358,91 +373,143 @@ onUnmounted(() => {
                     </div>
                 </div>
 
-                <!-- Responsive Navigation Menu -->
+                <!-- Menú Responsive Móvil -->
                 <div
                     :class="{
                         block: showingNavigationDropdown,
                         hidden: !showingNavigationDropdown,
                     }"
-                    class="sm:hidden"
+                    class="sm:hidden border-t border-base-300 bg-base-100"
                 >
-                <div class="pt-2 pb-3 space-y-1">
-                    <template v-for="modulo in menu" :key="modulo.id">
-                        <!-- Dropdown mobile: título no clickeable + hijos indentados -->
-                        <template v-if="modulo.is_dropdown">
-                            <div class="border-t border-base-300 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-base-content/60">
-                                <i v-if="modulo.icon" v-html="modulo.icon" class="mr-1"></i>
-                                {{ modulo.name }}
+                    <!-- Sección de Empresa Activa en Móvil -->
+                    <div v-if="activeCompany && companyMenu.length" class="p-3 border-b border-base-300 bg-base-200/40">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
+                                    {{ activeCompany.name?.charAt(0)?.toUpperCase() ?? 'E' }}
+                                </span>
+                                <span class="text-xs font-bold text-base-content truncate">{{ activeCompany.name }}</span>
                             </div>
-                            <ResponsiveNavLink
-                                v-for="child in modulo.children ?? []"
-                                :key="child.id"
-                                :href="route(child.route)"
-                                :active="route().current(child.route)"
-                                class="pl-8"
-                            >
-                                <i v-if="child.icon" v-html="child.icon" class="mr-2"></i>
-                                {{ child.name }}
-                            </ResponsiveNavLink>
-                        </template>
+                            <span class="text-[10px] font-semibold uppercase tracking-wider text-success">Activa</span>
+                        </div>
 
-                        <!-- Link normal mobile -->
+                        <div class="space-y-3 pt-1">
+                            <div v-for="section in companyMenu" :key="section.key" class="space-y-1">
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-base-content/40 px-2">
+                                    {{ section.title }}
+                                </div>
+                                <ResponsiveNavLink
+                                    v-for="item in section.items"
+                                    :key="item.id || item.route"
+                                    :href="route(item.route)"
+                                    :active="route().current(item.route)"
+                                    class="text-xs py-1.5"
+                                >
+                                    {{ item.name }}
+                                </ResponsiveNavLink>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Enlaces Globales de Navegación Móvil -->
+                    <div class="pt-2 pb-3 space-y-1">
+                        <div class="px-4 py-1 text-[10px] font-bold uppercase tracking-wider text-base-content/40">
+                            Navegación General
+                        </div>
                         <ResponsiveNavLink
-                            v-else
-                            :href="route(modulo.route)"
-                            :active="route().current(modulo.route)"
+                            :href="route('dashboard')"
+                            :active="route().current('dashboard')"
                         >
-                            <i v-if="modulo.icon" v-html="modulo.icon" class="mr-2"></i>
-                            {{ modulo.name }}
+                            Dashboard
                         </ResponsiveNavLink>
-                    </template>
-                </div>
 
-                    <!-- Responsive Settings Options -->
-                    <div
-                        class="border-t border-base-300 pb-1 pt-4"
-                    >
+                        <template v-for="modulo in topMenu" :key="modulo.id">
+                            <template v-if="modulo.route !== 'dashboard'">
+                                <!-- Dropdown móvil -->
+                                <template v-if="modulo.is_dropdown">
+                                    <div class="border-t border-base-300 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-base-content/60">
+                                        <i v-if="modulo.icon" v-html="modulo.icon" class="mr-1"></i>
+                                        {{ modulo.name }}
+                                    </div>
+                                    <ResponsiveNavLink
+                                        v-for="child in modulo.children ?? []"
+                                        :key="child.id"
+                                        :href="route(child.route)"
+                                        :active="route().current(child.route)"
+                                        class="pl-8"
+                                    >
+                                        <i v-if="child.icon" v-html="child.icon" class="mr-2"></i>
+                                        {{ child.name }}
+                                    </ResponsiveNavLink>
+                                </template>
+
+                                <!-- Link normal móvil -->
+                                <ResponsiveNavLink
+                                    v-else
+                                    :href="route(modulo.route)"
+                                    :active="route().current(modulo.route)"
+                                >
+                                    <i v-if="modulo.icon" v-html="modulo.icon" class="mr-2"></i>
+                                    {{ modulo.name }}
+                                </ResponsiveNavLink>
+                            </template>
+                        </template>
+                    </div>
+
+                    <!-- Opciones de Cuenta Móvil -->
+                    <div class="border-t border-base-300 pb-3 pt-3">
                         <div class="px-4">
-                            <div
-                                class="text-base font-medium text-base-content"
-                            >
+                            <div class="text-sm font-semibold text-base-content">
                                 {{ $page.props?.auth?.user?.name }}
                             </div>
-                            <div class="text-sm font-medium text-base-content/70">
+                            <div class="text-xs font-medium text-base-content/70">
                                 {{ $page.props?.auth?.user?.email }}
                             </div>
                         </div>
 
                         <div class="mt-3 space-y-1">
                             <ResponsiveNavLink :href="route('profile.edit')">
-                                Profile
+                                Perfil
                             </ResponsiveNavLink>
                             <ResponsiveNavLink
                                 :href="route('logout')"
                                 method="post"
                                 as="button"
                             >
-                                Log Out
+                                Cerrar sesión
                             </ResponsiveNavLink>
                         </div>
                     </div>
                 </div>
             </nav>
 
-            <!-- Page Heading -->
-            <header
-                class="bg-base-100 shadow"
-                v-if="$slots.header"
-            >
-                <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                    <slot name="header" />
-                </div>
-            </header>
+            <!-- Contenedor Principal: Menú Lateral + Contenido de la Página -->
+            <div class="flex flex-1">
+                <!-- Menú Lateral Operativo para la Empresa Activa -->
+                <CompanySidebar
+                    v-if="activeCompany && companyMenu.length"
+                    :company="activeCompany"
+                    :menu="companyMenu"
+                />
 
-            <!-- Page Content -->
-            <main>
-                <slot />
-            </main>
+                <!-- Área de Contenido Principal -->
+                <div class="flex-1 flex flex-col min-w-0">
+                    <!-- Page Heading -->
+                    <header
+                        class="bg-base-100 shadow-xs border-b border-base-300/80"
+                        v-if="$slots.header"
+                    >
+                        <div class="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+                            <slot name="header" />
+                        </div>
+                    </header>
+
+                    <!-- Page Content -->
+                    <main class="flex-1">
+                        <slot />
+                    </main>
+                </div>
+            </div>
         </div>
     </div>
 </template>

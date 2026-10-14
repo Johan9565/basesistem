@@ -19,13 +19,9 @@ class CompanyContextController extends Controller
             abort(401);
         }
 
-        // Verificar si el usuario tiene membresía activa en la empresa solicitada o es admin global
-        $hasMembership = $user->companyMemberships()
-            ->where('company_id', (string) $company->_id)
-            ->where('status', 'active')
-            ->exists();
+        $accessibleIds = $user->getAccessibleCompanyIds();
 
-        if (! $hasMembership && ! $user->hasPermission('administration')) {
+        if (! $user->isSuperAdmin() && ! in_array((string) $company->_id, $accessibleIds, true)) {
             return back()->with('flash', [
                 'type' => 'error',
                 'message' => 'No tienes acceso a la empresa seleccionada.',

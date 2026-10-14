@@ -221,11 +221,10 @@ class SystemMasterSeeder extends Seeder
 
         // ROL: Administrador de Empresa
         $companyAdminPerms = array_values(array_filter($allPermissionObjects, function ($p) use ($permissionMap) {
-            // Admin de empresa tiene empleados, roles, inventario, servicios, calendario y whatsapp
+            // Admin de empresa tiene empleados, inventario, servicios, calendario y whatsapp (NO TIENE ROLES)
             return in_array($p['id'], [
                 $permissionMap['administration']['id'] ?? '',
                 $permissionMap['employees']['id'] ?? '',
-                $permissionMap['roles']['id'] ?? '',
                 $permissionMap['products']['id'] ?? '',
                 $permissionMap['services']['id'] ?? '',
                 $permissionMap['whatsapp.calendar']['id'] ?? '',
@@ -818,7 +817,10 @@ class SystemMasterSeeder extends Seeder
             'styles' => [],
         ]);
 
-        // 10. Limpiar toda la caché en Redis
+        // 10. Sembrar permisos atómicos detallados
+        $this->call(AtomicPermissionsSeeder::class);
+
+        // 11. Limpiar toda la caché en Redis
         app(PermissionCacheService::class)->invalidateAll();
 
         if ($this->command) {

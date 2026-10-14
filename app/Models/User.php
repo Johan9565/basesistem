@@ -82,18 +82,114 @@ class User extends Authenticatable
         );
     }
 
+    public function ownedCompanies()
+    {
+        return $this->hasMany(Company::class, 'user_id');
+    }
+
     public function getMembershipForCompany(?string $companyId): ?CompanyUser
     {
         if (empty($companyId)) {
             return null;
         }
 
-        $userId = (string) $this->getKey();
+        $userIdStr = (string) $this->getKey();
+        $userObjId = null;
+        try {
+            $userObjId = new \MongoDB\BSON\ObjectId($userIdStr);
+        } catch (\Throwable $e) {
+        }
 
-        return CompanyUser::where('user_id', $userId)
-            ->where('company_id', (string) $companyId)
-            ->where('status', 'active')
-            ->first();
+        $companyIdStr = (string) $companyId;
+        $companyObjId = null;
+        try {
+            $companyObjId = new \MongoDB\BSON\ObjectId($companyIdStr);
+        } catch (\Throwable $e) {
+        }
+
+        return CompanyUser::where(function ($q) use ($userIdStr, $userObjId) {
+            $q->where('user_id', $userIdStr);
+            if ($userObjId) {
+                $q->orWhere('user_id', $userObjId);
+            }
+        })
+        ->where(function ($q) use ($companyIdStr, $companyObjId) {
+            $q->where('company_id', $companyIdStr);
+            if ($companyObjId) {
+                $q->orWhere('company_id', $companyObjId);
+            }
+        })
+        ->where('status', 'active')
+        ->first();
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        if ($this->email === 'johan_palma45@hotmail.com' || $this->user_type === 'superadmin') {
+            return true;
+        }
+
+        $role = $this->role_data()->first();
+        if ($role && in_array($role->role, ['superadmin', 'super_admin'], true)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Retorna los IDs (en formato string) de las empresas asignadas directamente a este usuario
+     * (como propietario directo o con membresía activa).
+     *
+     * @return list<string>
+     */
+    public function getAssignedCompanyIds(): array
+    {
+        $userIdStr = (string) $this->getKey();
+        if ($userIdStr === '') {
+            return [];
+        }
+
+        $userObjId = null;
+        try {
+            $userObjId = new \MongoDB\BSON\ObjectId($userIdStr);
+        } catch (\Throwable $e) {
+        }
+
+        // 1. Empresas donde es propietario directo
+        $ownedCompanies = Company::where(function ($q) use ($userIdStr, $userObjId) {
+            $q->where('user_id', $userIdStr);
+            if ($userObjId) {
+                $q->orWhere('user_id', $userObjId);
+            }
+        })
+        ->get(['_id']);
+
+        $ownedIds = $ownedCompanies->map(fn ($c) => (string) $c->getKey())->filter()->values()->toArray();
+
+        // 2. Membresías activas en company_user
+        $memberships = CompanyUser::where(function ($q) use ($userIdStr, $userObjId) {
+            $q->where('user_id', $userIdStr);
+            if ($userObjId) {
+                $q->orWhere('user_id', $userObjId);
+            }
+        })
+        ->where('status', 'active')
+        ->get(['company_id']);
+
+        $memberCompanyIds = $memberships->map(fn ($cu) => (string) ($cu->company_id ?? ''))->filter()->values()->toArray();
+
+        return array_values(array_unique(array_filter(array_merge($ownedIds, $memberCompanyIds))));
+    }
+
+    /**
+     * Retorna los IDs de las empresas asignadas al usuario.
+     *
+     * @return list<string>
+     */
+    public function getAccessibleCompanyIds(): array
+    {
+        return $this->getAssignedCompanyIds();
     }
 
     /**
@@ -101,41 +197,6 @@ class User extends Authenticatable
      */
     public function hasPermission(string $permission, ?string $companyId = null): bool
     {
-        $role = null;
-
-        if (! empty($companyId)) {
-            $membership = $this->getMembershipForCompany($companyId);
-            if ($membership) {
-                // Si la membresía tiene excepciones personalizadas
-                if (! empty($membership->custom_permissions) && in_array($permission, $membership->custom_permissions, true)) {
-                    return true;
-                }
-                $role = $membership->role;
-            }
-        }
-
-        // Fallback al rol asignado directo al usuario (compatibilidad global)
-        if (! $role) {
-            $role = $this->role_data()->first();
-        }
-
-        if (! $role) {
-            return false;
-        }
-
-        $permissionIds = collect($role->getPermissionsList())
-            ->pluck('id')
-            ->filter()
-            ->map(fn ($id) => (string) $id)
-            ->toArray();
-
-        if (empty($permissionIds)) {
-            return false;
-        }
-
-        return PermissionsModel::whereIn('_id', $permissionIds)
-            ->where('status', 1)
-            ->where('module', $permission)
-            ->exists();
+        return app(\App\Services\Tenancy\PermissionCacheService::class)->hasPermission($this, $permission, $companyId);
     }
 }

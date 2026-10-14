@@ -28,40 +28,34 @@ class SetCompanyContext
             $sessionCompanyId = $request->session()->get('active_company_id');
             $activeCompany = null;
 
-            if (! empty($sessionCompanyId)) {
-                // Verificar que el usuario tenga membresía activa en la empresa seleccionada
-                $membership = $user->companyMemberships()
-                    ->where('company_id', (string) $sessionCompanyId)
-                    ->where('status', 'active')
-                    ->first();
+            $accessibleCompanyIds = $user->getAccessibleCompanyIds();
 
-                if ($membership) {
-                    $activeCompany = Company::find($sessionCompanyId);
+            if (! empty($sessionCompanyId)) {
+                // Verificar que el usuario tenga acceso legítimo a la empresa seleccionada en sesión
+                if (in_array((string) $sessionCompanyId, $accessibleCompanyIds, true)) {
+                    $activeCompany = Company::whereInMongoIds([(string) $sessionCompanyId])->where('status', 'active')->first();
                 }
             }
 
-            // Si no hay empresa válida en sesión, auto-asignar la primera empresa disponible del usuario
-            if (! $activeCompany) {
-                $firstMembership = $user->companyMemberships()
+            // Si no hay empresa válida en sesión, auto-asignar la primera empresa asignada al usuario
+            if (! $activeCompany && ! empty($accessibleCompanyIds)) {
+                $activeCompany = Company::whereInMongoIds($accessibleCompanyIds)
                     ->where('status', 'active')
                     ->first();
 
-                if ($firstMembership) {
-                    $activeCompany = Company::find($firstMembership->company_id);
-                    if ($activeCompany) {
-                        $request->session()->put('active_company_id', (string) $activeCompany->_id);
-                    }
-                } elseif ($user->hasPermission('administration')) {
-                    // Fallback para administradores globales
-                    $activeCompany = Company::where('status', 'active')->first();
-                    if ($activeCompany) {
-                        $request->session()->put('active_company_id', (string) $activeCompany->_id);
-                    }
+                if ($activeCompany) {
+                    $request->session()->put('active_company_id', (string) $activeCompany->_id);
+                } else {
+                    $request->session()->forget('active_company_id');
                 }
+            } elseif (! $activeCompany) {
+                $request->session()->forget('active_company_id');
             }
 
             if ($activeCompany) {
                 $this->companyContext->setCompany($activeCompany);
+            } else {
+                $this->companyContext->clear();
             }
         }
 

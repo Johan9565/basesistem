@@ -16,6 +16,7 @@ class Company extends Model
     protected $table = 'companies';
 
     protected $fillable = [
+        'user_id',
         'client_id',
         'name',
         'slug',
@@ -33,6 +34,35 @@ class Company extends Model
             'modules' => 'array',
             'settings' => 'array',
         ];
+    }
+
+    public function owner()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * Scope para buscar por _id soportando tanto string como ObjectId en MongoDB.
+     */
+    public function scopeWhereInMongoIds($query, array $ids)
+    {
+        $searchValues = [];
+        foreach ($ids as $id) {
+            $str = (string) $id;
+            if ($str === '') {
+                continue;
+            }
+            $searchValues[] = $str;
+            try {
+                $searchValues[] = new \MongoDB\BSON\ObjectId($str);
+            } catch (\Throwable $e) {
+                // ignorar si no es un ObjectId válido
+            }
+        }
+
+        $searchValues = array_values(array_unique($searchValues));
+
+        return $query->whereIn('_id', $searchValues);
     }
 
     public function client()
@@ -76,6 +106,17 @@ class Company extends Model
     public function whatsappInstances()
     {
         return $this->hasMany(WhatsappInstance::class, 'company_id');
+    }
+
+    public function branches()
+    {
+        return $this->hasMany(Branch::class, 'company_id');
+    }
+
+    public function mainBranch(): ?Branch
+    {
+        return $this->branches()->where('is_main', true)->first()
+            ?? $this->branches()->first();
     }
 
     public function whatsappAppointments()
