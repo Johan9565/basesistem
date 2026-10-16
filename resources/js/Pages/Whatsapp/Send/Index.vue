@@ -29,7 +29,7 @@ const form = useForm({
 
 const instanceOptions = computed(() =>
     props.instances.map((i) => ({
-        label: i.instance_name,
+        label: i.company_name ? `${i.instance_name} (${i.company_name})` : i.instance_name,
         value: i.instance_name,
     })),
 );

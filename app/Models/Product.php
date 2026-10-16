@@ -18,6 +18,7 @@ class Product extends Model
 
     protected $fillable = [
         'company_id',
+        'branch_id',
         'sku',
         'name',
         'description',
@@ -45,5 +46,10 @@ class Product extends Model
     public function company()
     {
         return $this->belongsTo(Company::class, 'company_id');
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
     }
 }

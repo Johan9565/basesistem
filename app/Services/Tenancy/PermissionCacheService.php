@@ -34,43 +34,65 @@ class PermissionCacheService
         $key = $this->getCacheKey($userId, $companyId);
 
         return Cache::remember($key, self::TTL, function () use ($user, $companyId) {
-            // Si el usuario es Super Administrador, tiene acceso total a todos los permisos atómicos
-            if ($user->isSuperAdmin()) {
-                $allPerms = PermissionsModel::where('status', 1)->pluck('name')->toArray();
-                return array_values(array_unique($allPerms));
+            // Si el usuario es Super Administrador y no tiene rol asignado directamente, buscar el rol superadmin como fallback
+            if ($user->isSuperAdmin() && empty($user->role_id) && empty($companyId)) {
+                $superAdminRole = \App\Models\RoleModel::whereIn('role', ['superadmin', 'super_admin'])->first();
+                if ($superAdminRole) {
+                    $roles[] = $superAdminRole;
+                }
             }
 
-            $role = null;
+            $roles = [];
             $customPermissions = [];
 
             if (! empty($companyId)) {
                 $membership = $user->getMembershipForCompany($companyId);
                 if ($membership) {
-                    $role = $membership->role ?: (empty($membership->role_id) ? null : \App\Models\RoleModel::find($membership->role_id));
+                    $mRole = $membership->role ?: (empty($membership->role_id) ? null : \App\Models\RoleModel::find($membership->role_id));
+                    if ($mRole) {
+                        $roles[] = $mRole;
+                    }
                     $customPermissions = $membership->custom_permissions ?? [];
                 }
             }
 
-            // Fallback a rol global del usuario
-            if (! $role && ! empty($user->role_id)) {
-                $role = $user->role_data()->first() ?: \App\Models\RoleModel::find($user->role_id);
+            // También incluir rol global del usuario si existe
+            if (! empty($user->role_id)) {
+                $globalRole = $user->role_data()->first() ?: \App\Models\RoleModel::find($user->role_id);
+                if ($globalRole) {
+                    $roles[] = $globalRole;
+                }
             }
 
-            if (! $role && empty($customPermissions)) {
+            if (empty($roles) && empty($customPermissions)) {
                 return [];
             }
 
             $permissionIds = [];
-            if ($role) {
-                $permissionIds = collect($role->getPermissionsList())
+            $permissionsFromRole = [];
+
+            foreach ($roles as $roleItem) {
+                $ids = collect($roleItem->getPermissionsList())
                     ->pluck('id')
                     ->filter()
                     ->map(fn ($id) => (string) $id)
                     ->values()
                     ->toArray();
+                $permissionIds = array_merge($permissionIds, $ids);
+
+                if (is_array($roleItem->permissions)) {
+                    foreach ($roleItem->permissions as $p) {
+                        if (is_array($p) && ! empty($p['name'])) {
+                            $permissionsFromRole[] = $p['name'];
+                        } elseif (is_string($p) && trim($p) !== '') {
+                            $permissionsFromRole[] = trim($p);
+                        }
+                    }
+                }
             }
 
-            $permissionsFromRole = [];
+            $permissionIds = array_values(array_unique(array_filter($permissionIds)));
+
             if (! empty($permissionIds)) {
                 $objectIds = [];
                 foreach ($permissionIds as $id) {
@@ -96,15 +118,6 @@ class PermissionCacheService
                 }
             }
 
-            // También incluir nombres desde role->permissions array directo si existen
-            if ($role && is_array($role->permissions)) {
-                foreach ($role->permissions as $p) {
-                    if (is_array($p) && ! empty($p['name'])) {
-                        $permissionsFromRole[] = $p['name'];
-                    }
-                }
-            }
-
             $allPerms = array_unique(array_merge($permissionsFromRole, $customPermissions));
 
             // Si el usuario NO es superadmin, nos aseguramos de que NUNCA tenga permisos de 'roles'
@@ -126,20 +139,17 @@ class PermissionCacheService
             return $user->isSuperAdmin();
         }
 
-        if ($user->isSuperAdmin()) {
-            return true;
-        }
-
         $permissions = $this->getUserPermissions($user, $companyId);
 
         // Normalizaciones de nombres comunes en español/inglés
         $aliases = [
             'administration' => ['administracion', 'administración', 'Administración'],
             'companies' => ['empresas'],
+            'branches' => ['sucursales'],
             'users' => ['usuarios'],
             'employees' => ['empleados'],
-            'components' => ['componentes'],
             'products' => ['inventario'],
+            'orders' => ['pedidos'],
             'services' => ['servicios'],
             'whatsapp.calendar' => ['calendario'],
         ];
@@ -167,9 +177,9 @@ class PermissionCacheService
                 }
             }
 
-            // Caso especial: 'administration' engloba 'companies', 'users', 'employees', 'components'
+            // Caso especial: 'administration' engloba 'companies', 'branches', 'users', 'employees'
             if ($permission === 'administration' || in_array($permission, ['administracion', 'administración', 'Administración'], true)) {
-                $adminSubmodules = ['companies', 'users', 'employees', 'components'];
+                $adminSubmodules = ['companies', 'branches', 'users', 'employees'];
                 foreach ($adminSubmodules as $sub) {
                     if (in_array($sub, $permissions, true)) {
                         return true;
@@ -193,6 +203,16 @@ class PermissionCacheService
             $parts = explode('.', $permission);
             $baseModule = $parts[0];
 
+            // Permisos atómicos exclusivos/de alta sensibilidad que NO deben heredarse por tener el módulo genérico 'companies' o 'administration'
+            $explicitOnlyPermissions = [
+                'companies.manage_all',
+                'companies.select_all',
+                'companies.manage_owner',
+            ];
+            if (in_array($permission, $explicitOnlyPermissions, true)) {
+                return false;
+            }
+
             // Si el rol tiene el módulo general heredado completo (ej: 'products' o 'inventario')
             if (in_array($baseModule, $permissions, true)) {
                 return true;
@@ -206,7 +226,7 @@ class PermissionCacheService
             }
 
             // Si pertenece a administración y el usuario tiene el permiso general de administración
-            $adminSubmodules = ['companies', 'users', 'employees', 'components'];
+            $adminSubmodules = ['companies', 'branches', 'users', 'employees'];
             if (in_array($baseModule, $adminSubmodules, true)) {
                 if (in_array('administration', $permissions, true) || in_array('administracion', $permissions, true) || in_array('administración', $permissions, true) || in_array('Administración', $permissions, true)) {
                     return true;

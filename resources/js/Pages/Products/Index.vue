@@ -1,25 +1,40 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
 import InputNumber from 'primevue/inputnumber';
 import Textarea from 'primevue/textarea';
+import Select from 'primevue/select';
 import ToggleSwitch from 'primevue/toggleswitch';
 
 const props = defineProps({
     products: Object,
+    branches: {
+        type: Array,
+        default: () => [],
+    },
     filters: Object,
 });
 
 const search = ref(props.filters?.search ?? '');
+const selectedBranch = ref(props.filters?.branch_id ?? '');
 const dialogVisible = ref(false);
 const isEditing = ref(false);
 const editingProductId = ref(null);
 
+const branchOptions = computed(() => [
+    { label: '🏢 Todas las sucursales', value: '' },
+    ...(props.branches || []).map((b) => ({
+        label: `${b.name} ${b.is_main ? '(Matriz)' : ''}`,
+        value: b.id,
+    })),
+]);
+
 const form = useForm({
+    branch_id: '',
     sku: '',
     name: '',
     description: '',
@@ -36,6 +51,8 @@ function openCreateDialog() {
     editingProductId.value = null;
     form.reset();
     form.clearErrors();
+    const mainBranch = props.branches?.find((b) => b.is_main) || props.branches?.[0];
+    form.branch_id = mainBranch ? mainBranch.id : '';
     form.is_active = true;
     dialogVisible.value = true;
 }
@@ -45,6 +62,7 @@ function openEditDialog(product) {
     editingProductId.value = product.id || product._id;
     form.reset();
     form.clearErrors();
+    form.branch_id = product.branch_id ?? '';
     form.sku = product.sku ?? '';
     form.name = product.name ?? '';
     form.description = product.description ?? '';
@@ -75,8 +93,11 @@ function deleteProduct(product) {
     }
 }
 
-function applySearch() {
-    router.get(route('products'), { search: search.value }, {
+function applyFilters() {
+    router.get(route('products'), {
+        search: search.value,
+        branch_id: selectedBranch.value,
+    }, {
         preserveState: true,
         replace: true,
     });
@@ -90,11 +111,12 @@ function applySearch() {
         <template #header>
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h2 class="text-xl font-bold leading-tight text-base-content">
-                        📦 Inventario y Catálogo de Productos
+                    <h2 class="text-xl font-bold leading-tight text-base-content flex items-center gap-2">
+                        <span>📦</span>
+                        <span>Inventario y Catálogo de Productos</span>
                     </h2>
                     <p class="text-xs text-base-content/60">
-                        Gestiona el stock, SKU, costos y disponibilidad de productos en la empresa activa.
+                        Gestiona el stock global de la empresa identificado y segmentado por sucursal operativa.
                     </p>
                 </div>
                 <Button
@@ -109,14 +131,25 @@ function applySearch() {
 
         <div class="py-6">
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
-                <!-- Barra de Búsqueda -->
-                <div class="flex items-center gap-3 rounded-2xl border border-base-300 bg-base-100 p-4 shadow-xs">
+                <!-- Barra de Búsqueda y Filtro de Sucursal -->
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 rounded-2xl border border-base-300 bg-base-100 p-4 shadow-xs">
                     <div class="relative flex-1">
                         <InputText
                             v-model="search"
                             placeholder="Buscar por nombre, SKU o categoría..."
                             class="w-full text-sm"
-                            @keydown.enter="applySearch"
+                            @keydown.enter="applyFilters"
+                        />
+                    </div>
+                    <div v-if="branches && branches.length > 0" class="w-full sm:w-64">
+                        <Select
+                            v-model="selectedBranch"
+                            :options="branchOptions"
+                            optionLabel="label"
+                            optionValue="value"
+                            placeholder="Filtrar por sucursal"
+                            class="w-full text-sm"
+                            @change="applyFilters"
                         />
                     </div>
                     <Button
@@ -124,7 +157,7 @@ function applySearch() {
                         icon="pi pi-search"
                         size="small"
                         severity="secondary"
-                        @click="applySearch"
+                        @click="applyFilters"
                     />
                 </div>
 
@@ -135,6 +168,7 @@ function applySearch() {
                             <thead class="border-b border-base-300 bg-base-200/60 text-xs font-semibold uppercase tracking-wider text-base-content/70">
                                 <tr>
                                     <th class="px-6 py-4">SKU / Producto</th>
+                                    <th class="px-6 py-4">Sucursal</th>
                                     <th class="px-6 py-4">Categoría</th>
                                     <th class="px-6 py-4">Precio</th>
                                     <th class="px-6 py-4">Stock</th>
@@ -151,6 +185,13 @@ function applySearch() {
                                     <td class="px-6 py-4">
                                         <div class="font-bold text-base-content">{{ product.name }}</div>
                                         <div class="text-xs font-mono text-primary">{{ product.sku }}</div>
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        <span class="inline-flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                                            <i class="pi pi-building text-[10px]"></i>
+                                            {{ product.branch_name }}
+                                            <span v-if="product.branch_code" class="text-[10px] opacity-70">({{ product.branch_code }})</span>
+                                        </span>
                                     </td>
                                     <td class="px-6 py-4">
                                         <span class="rounded-md bg-base-300 px-2 py-1 text-xs font-medium text-base-content/80">
@@ -200,8 +241,8 @@ function applySearch() {
                                 </tr>
 
                                 <tr v-if="!products.data || products.data.length === 0">
-                                    <td colspan="6" class="px-6 py-12 text-center text-sm text-base-content/50">
-                                        No hay productos registrados en el inventario de esta empresa.
+                                    <td colspan="7" class="px-6 py-12 text-center text-sm text-base-content/50">
+                                        No hay productos registrados en el inventario para los filtros seleccionados.
                                     </td>
                                 </tr>
                             </tbody>
@@ -216,10 +257,30 @@ function applySearch() {
             v-model:visible="dialogVisible"
             modal
             :header="isEditing ? 'Editar Producto' : 'Nuevo Producto en Inventario'"
-            :style="{ width: '500px' }"
+            :style="{ width: '520px' }"
             class="p-fluid"
         >
             <form @submit.prevent="submitForm" class="space-y-4 pt-2">
+                <div v-if="branches && branches.length > 0">
+                    <label class="text-xs font-semibold text-base-content/80">Sucursal Asignada *</label>
+                    <Select
+                        v-model="form.branch_id"
+                        :options="branches"
+                        optionLabel="name"
+                        optionValue="id"
+                        placeholder="Selecciona una sucursal"
+                        class="w-full text-sm mt-1"
+                        required
+                    >
+                        <template #option="slotProps">
+                            <div class="flex items-center justify-between gap-2 w-full">
+                                <span class="font-medium">{{ slotProps.option.name }}</span>
+                                <span v-if="slotProps.option.is_main" class="badge badge-xs badge-primary">Matriz</span>
+                            </div>
+                        </template>
+                    </Select>
+                </div>
+
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="text-xs font-semibold text-base-content/80">SKU *</label>

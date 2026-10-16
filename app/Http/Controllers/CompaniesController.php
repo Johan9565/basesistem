@@ -18,15 +18,30 @@ class CompaniesController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
-        $query = Company::with(['client', 'owner'])->orderBy('name', 'asc');
+        $query = Company::with(['client', 'owner', 'branches'])->orderBy('name', 'asc');
 
-        if (! $user->isSuperAdmin()) {
-            $accessibleIds = $user->getAccessibleCompanyIds();
-            $query->whereInMongoIds($accessibleIds);
+        if (! $user->canManageAllCompanies()) {
+            $assignedIds = $user->getAssignedCompanyIds();
+            $query->whereInMongoIds($assignedIds);
         }
+
+        $canManageOwner = $user->hasPermission('companies.manage_owner');
 
         $companies = $query->get()->map(function ($c) {
             $ownerUser = $c->owner ?: ($c->user_id ? \App\Models\User::find($c->user_id) : null);
+
+            $branchesList = $c->branches ?: collect();
+
+            $branches = $branchesList->sortByDesc('is_main')->values()->map(fn ($b) => [
+                'id' => (string) $b->_id,
+                'name' => $b->name,
+                'code' => $b->code ?? '',
+                'phone' => $b->phone ?? '',
+                'email' => $b->email ?? '',
+                'address' => $b->address ?? '',
+                'is_main' => (bool) $b->is_main,
+                'is_active' => (bool) ($b->is_active ?? true),
+            ])->toArray();
 
             return [
                 'id' => (string) $c->_id,
@@ -41,11 +56,14 @@ class CompaniesController extends Controller
                 'status' => $c->status,
                 'modules' => $c->modules ?? [
                     'inventory' => false,
+                    'orders' => false,
                     'services' => false,
                     'appointments' => false,
                     'whatsapp' => false,
                 ],
                 'client_name' => $c->client?->name ?? 'Cliente Principal',
+                'branches' => $branches,
+                'branches_count' => count($branches),
             ];
         });
 
@@ -55,7 +73,7 @@ class CompaniesController extends Controller
         ]);
 
         $usersQuery = \App\Models\User::where('status', 1)->orderBy('name', 'asc');
-        if (! $user->isSuperAdmin()) {
+        if (! $canManageOwner) {
             $usersQuery->where('_id', (string) $user->_id);
         }
         $users = $usersQuery->get(['_id', 'name', 'email'])->map(fn ($u) => [
@@ -68,6 +86,18 @@ class CompaniesController extends Controller
             'companies' => $companies,
             'clients' => $clients,
             'users' => $users,
+            'can' => [
+                'create' => $user->hasPermission('companies.create'),
+                'edit' => $user->hasPermission('companies.edit'),
+                'toggle_module' => $user->hasPermission('companies.toggle_module'),
+                'manage_owner' => $canManageOwner,
+                'manage_all' => $user->canManageAllCompanies(),
+                'select_all' => $user->canSelectAllCompanies(),
+                'branches_view' => $user->hasPermission('branches.view'),
+                'branches_create' => $user->hasPermission('branches.create'),
+                'branches_edit' => $user->hasPermission('branches.edit'),
+                'branches_delete' => $user->hasPermission('branches.delete'),
+            ],
         ]);
     }
 
@@ -77,6 +107,8 @@ class CompaniesController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $user = $request->user();
+        $canManageOwner = $user->hasPermission('companies.manage_owner');
+
         $rules = [
             'user_id' => 'required|string',
             'client_id' => 'nullable|string',
@@ -87,7 +119,7 @@ class CompaniesController extends Controller
             'modules' => 'nullable|array',
         ];
 
-        if (! $user->isSuperAdmin()) {
+        if (! $canManageOwner) {
             $request->merge(['user_id' => (string) $user->_id]);
         }
 
@@ -102,6 +134,7 @@ class CompaniesController extends Controller
         $validated['status'] = 'active';
         $validated['modules'] = array_merge([
             'inventory' => false,
+            'orders' => false,
             'services' => false,
             'appointments' => false,
             'whatsapp' => false,
@@ -133,9 +166,9 @@ class CompaniesController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->isSuperAdmin()) {
-            $accessibleIds = $user->getAccessibleCompanyIds();
-            if (! in_array((string) $company->_id, $accessibleIds, true)) {
+        if (! $user->canManageAllCompanies()) {
+            $assignedIds = $user->getAssignedCompanyIds();
+            if (! in_array((string) $company->_id, $assignedIds, true)) {
                 abort(403, 'No tienes permiso para modificar esta empresa.');
             }
         }
@@ -148,6 +181,14 @@ class CompaniesController extends Controller
             'phone' => 'nullable|string|max:50',
             'status' => 'required|string|in:active,inactive',
         ]);
+
+        $canManageOwner = $user->hasPermission('companies.manage_owner');
+        $isCurrentOwner = (string) $company->user_id === (string) $user->_id;
+
+        if (! $canManageOwner && ! $isCurrentOwner) {
+            $validated['user_id'] = (string) $company->user_id;
+            $validated['status'] = $company->status ?? 'active';
+        }
 
         $oldOwnerId = $company->user_id ? (string) $company->user_id : null;
         $newOwnerId = (string) $validated['user_id'];
@@ -225,22 +266,32 @@ class CompaniesController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->isSuperAdmin()) {
-            $accessibleIds = $user->getAccessibleCompanyIds();
-            if (! in_array((string) $company->_id, $accessibleIds, true)) {
+        if (! $user->canManageAllCompanies()) {
+            $assignedIds = $user->getAssignedCompanyIds();
+            if (! in_array((string) $company->_id, $assignedIds, true)) {
                 abort(403, 'No tienes permiso para modificar esta empresa.');
             }
         }
 
         $validated = $request->validate([
-            'module' => 'required|string|in:inventory,services,appointments,whatsapp',
+            'module' => 'required|string|in:inventory,orders,services,appointments,whatsapp,chat-test',
             'enabled' => 'required|boolean',
         ]);
 
         $module = $validated['module'];
         $enabled = (bool) $validated['enabled'];
 
-        if ($enabled) {
+        if ($module === 'orders' && $enabled) {
+            // El módulo de pedidos es inherente a inventarios: requiere inventario activo
+            if (! $company->isModuleEnabled('inventory')) {
+                $company->enableModule('inventory');
+            }
+            $company->enableModule('orders');
+        } elseif ($module === 'inventory' && ! $enabled) {
+            // Si se desactiva inventario, también se desactiva pedidos
+            $company->disableModule('orders');
+            $company->disableModule('inventory');
+        } elseif ($enabled) {
             $company->enableModule($module);
         } else {
             $company->disableModule($module);

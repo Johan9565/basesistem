@@ -21,6 +21,40 @@ const greeting = computed(() => {
     return '¡Buenas noches';
 });
 
+const hasWhatsapp = computed(() => Boolean(props.stats?.whatsapp?.enabled));
+const hasAppointments = computed(() => Boolean(props.stats?.appointments?.enabled));
+const hasInventory = computed(() => Boolean(props.stats?.inventory?.enabled));
+const hasServices = computed(() => Boolean(props.stats?.services?.enabled));
+const hasChatTest = computed(() => Boolean(props.stats?.chat_test?.enabled) || hasWhatsapp.value);
+
+const enabledModulesCount = computed(() => {
+    let count = 0;
+    if (hasWhatsapp.value) count++;
+    if (hasAppointments.value) count++;
+    if (hasInventory.value) count++;
+    if (hasServices.value) count++;
+    return count;
+});
+
+const hasAnyOperationalModule = computed(() => enabledModulesCount.value > 0);
+
+const kpiGridClass = computed(() => {
+    const count = enabledModulesCount.value;
+    if (count === 1) return 'grid grid-cols-1 gap-4';
+    if (count === 2) return 'grid grid-cols-1 sm:grid-cols-2 gap-4';
+    if (count === 3) return 'grid grid-cols-1 sm:grid-cols-3 gap-4';
+    return 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4';
+});
+
+const showAppointmentsPanel = computed(() => hasAppointments.value);
+const showOperationsPanel = computed(() => hasWhatsapp.value || hasInventory.value);
+const panelsGridClass = computed(() => {
+    if (showAppointmentsPanel.value && showOperationsPanel.value) {
+        return 'grid grid-cols-1 gap-6 lg:grid-cols-2';
+    }
+    return 'grid grid-cols-1 gap-6';
+});
+
 function formatDate(dateStr) {
     if (!dateStr) return 'Fecha pendiente';
     try {
@@ -80,8 +114,8 @@ function formatDate(dateStr) {
                             <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warning/20 text-warning">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <circle cx="12" cy="12" r="10"/>
-                                    <line x1="12" x2="12" y1="8" y2="12"/>
-                                    <line x1="12" x2="12.01" y1="16" y2="16"/>
+                                    <line x1="12" y1="8" x2="12"/>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"/>
                                 </svg>
                             </span>
                             <div>
@@ -101,11 +135,45 @@ function formatDate(dateStr) {
                     </div>
                 </div>
 
-                <!-- TARJETAS DE MÉTRICAS (KPIs) -->
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <!-- AVISO SI LA EMPRESA NO TIENE MÓDULOS ACTIVOS -->
+                <div
+                    v-else-if="!hasAnyOperationalModule"
+                    class="rounded-2xl border border-info/30 bg-info/10 p-5 shadow-xs backdrop-blur-md"
+                >
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-info/20 text-info">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="12" y1="16" x2="12" y2="12"/>
+                                    <line x1="12" y1="8" x2="12.01" y2="8"/>
+                                </svg>
+                            </span>
+                            <div>
+                                <h3 class="text-sm font-bold text-base-content">Sin módulos operativos activados</h3>
+                                <p class="text-xs text-base-content/70">
+                                    La empresa <strong>{{ activeCompany.name }}</strong> no tiene módulos activos (WhatsApp CRM, Agenda de Citas, Inventario o Servicios). Los paneles correspondientes están ocultos en este dashboard.
+                                </p>
+                            </div>
+                        </div>
+                        <Link
+                            v-if="stats.saas?.can_manage"
+                            :href="route('companies')"
+                            class="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-content shadow-xs transition hover:brightness-110 shrink-0"
+                        >
+                            Activar Módulos
+                        </Link>
+                    </div>
+                </div>
+
+                <!-- TARJETAS DE MÉTRICAS (KPIs) - SOLO MÓDULOS ACTIVOS -->
+                <div v-if="hasAnyOperationalModule" :class="kpiGridClass">
                     
                     <!-- KPI 1: WhatsApp CRM -->
-                    <div class="group relative overflow-hidden rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs transition-all duration-200 hover:border-primary/40 hover:shadow-md">
+                    <div
+                        v-if="hasWhatsapp"
+                        class="group relative overflow-hidden rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs transition-all duration-200 hover:border-primary/40 hover:shadow-md"
+                    >
                         <div class="flex items-center justify-between">
                             <span class="text-[11px] font-bold uppercase tracking-wider text-base-content/50">WhatsApp CRM</span>
                             <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-success/10 text-success transition-transform duration-200 group-hover:scale-110">
@@ -132,7 +200,10 @@ function formatDate(dateStr) {
                     </div>
 
                     <!-- KPI 2: Agenda & Citas -->
-                    <div class="group relative overflow-hidden rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs transition-all duration-200 hover:border-primary/40 hover:shadow-md">
+                    <div
+                        v-if="hasAppointments"
+                        class="group relative overflow-hidden rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs transition-all duration-200 hover:border-primary/40 hover:shadow-md"
+                    >
                         <div class="flex items-center justify-between">
                             <span class="text-[11px] font-bold uppercase tracking-wider text-base-content/50">Agenda & Citas</span>
                             <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-info/10 text-info transition-transform duration-200 group-hover:scale-110">
@@ -159,7 +230,10 @@ function formatDate(dateStr) {
                     </div>
 
                     <!-- KPI 3: Inventario & Stock -->
-                    <div class="group relative overflow-hidden rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs transition-all duration-200 hover:border-primary/40 hover:shadow-md">
+                    <div
+                        v-if="hasInventory"
+                        class="group relative overflow-hidden rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs transition-all duration-200 hover:border-primary/40 hover:shadow-md"
+                    >
                         <div class="flex items-center justify-between">
                             <span class="text-[11px] font-bold uppercase tracking-wider text-base-content/50">Inventario</span>
                             <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-warning/10 text-warning transition-transform duration-200 group-hover:scale-110">
@@ -188,7 +262,10 @@ function formatDate(dateStr) {
                     </div>
 
                     <!-- KPI 4: Equipo & Servicios -->
-                    <div class="group relative overflow-hidden rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs transition-all duration-200 hover:border-primary/40 hover:shadow-md">
+                    <div
+                        v-if="hasServices"
+                        class="group relative overflow-hidden rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs transition-all duration-200 hover:border-primary/40 hover:shadow-md"
+                    >
                         <div class="flex items-center justify-between">
                             <span class="text-[11px] font-bold uppercase tracking-wider text-base-content/50">Servicios & Equipo</span>
                             <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform duration-200 group-hover:scale-110">
@@ -216,11 +293,13 @@ function formatDate(dateStr) {
 
                 </div>
 
-                <!-- ACCESOS RÁPIDOS (QUICK ACTIONS) -->
-                <div class="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs">
+                <!-- ACCESOS RÁPIDOS (QUICK ACTIONS) - FILTRADOS SEGÚN MÓDULOS ACTIVOS -->
+                <div v-if="hasAnyOperationalModule || hasChatTest" class="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs">
                     <h3 class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-3">Accesos Directos</h3>
                     <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                        
                         <Link
+                            v-if="hasWhatsapp"
                             :href="route('whatsapp.instances')"
                             class="flex flex-col items-center justify-center rounded-xl border border-base-300/80 bg-base-200/40 p-3 text-center transition hover:bg-base-200 hover:border-primary/40 group"
                         >
@@ -234,6 +313,7 @@ function formatDate(dateStr) {
                         </Link>
 
                         <Link
+                            v-if="hasWhatsapp"
                             :href="route('whatsapp.conversations')"
                             class="flex flex-col items-center justify-center rounded-xl border border-base-300/80 bg-base-200/40 p-3 text-center transition hover:bg-base-200 hover:border-primary/40 group"
                         >
@@ -245,7 +325,24 @@ function formatDate(dateStr) {
                             <span class="text-xs font-semibold text-base-content">Conversaciones</span>
                         </Link>
 
+                        <!-- NUEVO: MÓDULO CHAT TEST (PRUEBAS DE BOT SIN WHATSAPP) -->
                         <Link
+                            v-if="hasChatTest"
+                            :href="route('whatsapp.chat-test')"
+                            class="flex flex-col items-center justify-center rounded-xl border border-base-300/80 bg-base-200/40 p-3 text-center transition hover:bg-base-200 hover:border-primary/40 group"
+                        >
+                            <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500 mb-2 group-hover:scale-110 transition-transform">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                                    <path d="M12 7v4"/>
+                                    <path d="M10 9h4"/>
+                                </svg>
+                            </span>
+                            <span class="text-xs font-semibold text-base-content">Chat Test</span>
+                        </Link>
+
+                        <Link
+                            v-if="hasWhatsapp"
                             :href="route('whatsapp.send')"
                             class="flex flex-col items-center justify-center rounded-xl border border-base-300/80 bg-base-200/40 p-3 text-center transition hover:bg-base-200 hover:border-primary/40 group"
                         >
@@ -259,10 +356,11 @@ function formatDate(dateStr) {
                         </Link>
 
                         <Link
+                            v-if="hasAppointments"
                             :href="route('whatsapp.calendar')"
                             class="flex flex-col items-center justify-center rounded-xl border border-base-300/80 bg-base-200/40 p-3 text-center transition hover:bg-base-200 hover:border-primary/40 group"
                         >
-                            <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500 mb-2 group-hover:scale-110 transition-transform">
+                            <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-500/10 text-rose-500 mb-2 group-hover:scale-110 transition-transform">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M8 2v4"/>
                                     <path d="M16 2v4"/>
@@ -274,6 +372,7 @@ function formatDate(dateStr) {
                         </Link>
 
                         <Link
+                            v-if="hasInventory"
                             :href="route('products')"
                             class="flex flex-col items-center justify-center rounded-xl border border-base-300/80 bg-base-200/40 p-3 text-center transition hover:bg-base-200 hover:border-primary/40 group"
                         >
@@ -287,10 +386,11 @@ function formatDate(dateStr) {
                         </Link>
 
                         <Link
+                            v-if="hasServices"
                             :href="route('services')"
                             class="flex flex-col items-center justify-center rounded-xl border border-base-300/80 bg-base-200/40 p-3 text-center transition hover:bg-base-200 hover:border-primary/40 group"
                         >
-                            <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-500/10 text-rose-500 mb-2 group-hover:scale-110 transition-transform">
+                            <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-500/10 text-teal-500 mb-2 group-hover:scale-110 transition-transform">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <rect width="20" height="14" x="2" y="7" rx="2" ry="2"/>
                                     <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
@@ -302,10 +402,13 @@ function formatDate(dateStr) {
                 </div>
 
                 <!-- DOS COLUMNAS: PRÓXIMAS CITAS & ESTADO DE INSTANCIAS / INVENTARIO -->
-                <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <div v-if="showAppointmentsPanel || showOperationsPanel" :class="panelsGridClass">
 
-                    <!-- PANEL 1: PRÓXIMAS CITAS PROGRAMADAS -->
-                    <div class="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs">
+                    <!-- PANEL 1: PRÓXIMAS CITAS PROGRAMADAS (SOLO SI CITAS ESTÁ ACTIVO) -->
+                    <div
+                        v-if="showAppointmentsPanel"
+                        class="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs"
+                    >
                         <div class="flex items-center justify-between pb-3 border-b border-base-300/60">
                             <div>
                                 <h3 class="text-sm font-bold text-base-content">Próximas Citas en Agenda</h3>
@@ -330,8 +433,13 @@ function formatDate(dateStr) {
                                         </svg>
                                     </span>
                                     <div class="min-w-0">
-                                        <h4 class="text-xs font-bold text-base-content truncate">{{ appointment.summary }}</h4>
-                                        <div class="text-[11px] text-base-content/60 flex items-center gap-2">
+                                        <div class="flex items-center gap-2">
+                                            <h4 class="text-xs font-bold text-base-content truncate">{{ appointment.summary }}</h4>
+                                            <span v-if="appointment.branch_name" class="rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                                                🏢 {{ appointment.branch_name }}
+                                            </span>
+                                        </div>
+                                        <div class="text-[11px] text-base-content/60 flex items-center gap-2 mt-0.5">
                                             <span>📱 {{ appointment.user_phone }}</span>
                                             <span>&bull;</span>
                                             <span>{{ formatDate(appointment.starts_at) }}</span>
@@ -357,11 +465,14 @@ function formatDate(dateStr) {
                         </div>
                     </div>
 
-                    <!-- PANEL 2: INSTANCIAS DE WHATSAPP & ALERTAS DE STOCK -->
-                    <div class="space-y-6">
+                    <!-- PANEL 2: INSTANCIAS DE WHATSAPP & ALERTAS DE STOCK (SOLO SI AL MENOS UNO ESTÁ ACTIVO) -->
+                    <div v-if="showOperationsPanel" class="space-y-6">
                         
-                        <!-- Instancias de WhatsApp -->
-                        <div class="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs">
+                        <!-- Instancias de WhatsApp (Solo si WhatsApp está activo) -->
+                        <div
+                            v-if="hasWhatsapp"
+                            class="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs"
+                        >
                             <div class="flex items-center justify-between pb-3 border-b border-base-300/60">
                                 <div>
                                     <h3 class="text-sm font-bold text-base-content">Instancias de WhatsApp</h3>
@@ -405,8 +516,11 @@ function formatDate(dateStr) {
                             </div>
                         </div>
 
-                        <!-- Alertas de Stock Bajo -->
-                        <div class="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs">
+                        <!-- Alertas de Stock Bajo (Solo si Inventario está activo) -->
+                        <div
+                            v-if="hasInventory"
+                            class="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-xs"
+                        >
                             <div class="flex items-center justify-between pb-3 border-b border-base-300/60">
                                 <div class="flex items-center gap-2">
                                     <h3 class="text-sm font-bold text-base-content">Alertas de Inventario</h3>
@@ -426,7 +540,12 @@ function formatDate(dateStr) {
                                     class="flex items-center justify-between rounded-xl border border-base-300/60 bg-error/5 p-2.5"
                                 >
                                     <div class="min-w-0">
-                                        <div class="text-xs font-bold text-base-content truncate">{{ prod.name }}</div>
+                                        <div class="flex items-center gap-2">
+                                            <div class="text-xs font-bold text-base-content truncate">{{ prod.name }}</div>
+                                            <span v-if="prod.branch_name" class="rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                                                🏢 {{ prod.branch_name }}
+                                            </span>
+                                        </div>
                                         <div class="text-[10px] text-base-content/50 font-mono">SKU: {{ prod.sku || 'N/A' }}</div>
                                     </div>
                                     <div class="text-right">
@@ -483,9 +602,9 @@ function formatDate(dateStr) {
                         </div>
 
                         <div class="rounded-xl border border-base-300/60 bg-base-200/30 p-4">
-                            <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/50">Personalización</span>
-                            <Link :href="route('components')" class="text-xs font-semibold text-primary hover:underline block mt-1">
-                                Temas & Branding &rarr;
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-base-content/50">Gestión</span>
+                            <Link :href="route('companies')" class="text-xs font-semibold text-primary hover:underline block mt-1">
+                                Empresas & Sucursales &rarr;
                             </Link>
                         </div>
                     </div>

@@ -32,24 +32,36 @@ class SetCompanyContext
 
             if (! empty($sessionCompanyId)) {
                 // Verificar que el usuario tenga acceso legítimo a la empresa seleccionada en sesión
-                if (in_array((string) $sessionCompanyId, $accessibleCompanyIds, true)) {
-                    $activeCompany = Company::whereInMongoIds([(string) $sessionCompanyId])->where('status', 'active')->first();
+                if ($user->canSelectAllCompanies() || in_array((string) $sessionCompanyId, $accessibleCompanyIds, true)) {
+                    $activeCompany = Company::whereInMongoIds([(string) $sessionCompanyId])
+                        ->where('status', '!=', 'inactive')
+                        ->first();
+
+                    if (! $activeCompany) {
+                        $activeCompany = Company::whereInMongoIds([(string) $sessionCompanyId])->first();
+                    }
                 }
             }
 
-            // Si no hay empresa válida en sesión, auto-asignar la primera empresa asignada al usuario
-            if (! $activeCompany && ! empty($accessibleCompanyIds)) {
-                $activeCompany = Company::whereInMongoIds($accessibleCompanyIds)
-                    ->where('status', 'active')
-                    ->first();
+            // Si no hay empresa válida en sesión, auto-asignar la primera empresa disponible
+            if (! $activeCompany) {
+                if (! empty($accessibleCompanyIds)) {
+                    $activeCompany = Company::whereInMongoIds($accessibleCompanyIds)
+                        ->where('status', '!=', 'inactive')
+                        ->first();
+
+                    if (! $activeCompany) {
+                        $activeCompany = Company::whereInMongoIds($accessibleCompanyIds)->first();
+                    }
+                } elseif ($user->canSelectAllCompanies()) {
+                    $activeCompany = Company::where('status', '!=', 'inactive')->first() ?: Company::first();
+                }
 
                 if ($activeCompany) {
                     $request->session()->put('active_company_id', (string) $activeCompany->_id);
                 } else {
                     $request->session()->forget('active_company_id');
                 }
-            } elseif (! $activeCompany) {
-                $request->session()->forget('active_company_id');
             }
 
             if ($activeCompany) {

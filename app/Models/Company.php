@@ -36,6 +36,39 @@ class Company extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::created(function (Company $company) {
+            $companyIdStr = (string) $company->_id;
+            if (Branch::where('company_id', $companyIdStr)->count() === 0) {
+                Branch::create([
+                    'company_id' => $companyIdStr,
+                    'name' => $company->name,
+                    'code' => 'MATRIZ',
+                    'phone' => $company->phone ?? '',
+                    'email' => $company->email ?? '',
+                    'is_main' => true,
+                    'is_active' => true,
+                ]);
+            }
+        });
+
+        static::updated(function (Company $company) {
+            $companyIdStr = (string) $company->_id;
+            // Si la empresa solo tiene su primera sucursal (la matriz) y cambia de nombre o teléfono, mantenerla sincronizada
+            if ($company->wasChanged(['name', 'phone', 'email']) && Branch::where('company_id', $companyIdStr)->count() === 1) {
+                $mainBranch = Branch::where('company_id', $companyIdStr)->where('is_main', true)->first();
+                if ($mainBranch) {
+                    $mainBranch->update([
+                        'name' => $company->name,
+                        'phone' => $company->phone ?? '',
+                        'email' => $company->email ?? '',
+                    ]);
+                }
+            }
+        });
+    }
+
     public function owner()
     {
         return $this->belongsTo(User::class, 'user_id');
@@ -98,6 +131,11 @@ class Company extends Model
         return $this->hasMany(Product::class, 'company_id');
     }
 
+    public function orders()
+    {
+        return $this->hasMany(Order::class, 'company_id');
+    }
+
     public function services()
     {
         return $this->hasMany(Service::class, 'company_id');
@@ -129,6 +167,13 @@ class Company extends Model
      */
     public function isModuleEnabled(string $module): bool
     {
+        // El módulo 'orders' (pedidos) es inherente de inventarios
+        if ($module === 'orders') {
+            if (! $this->isModuleEnabled('inventory')) {
+                return false;
+            }
+        }
+
         $modules = $this->modules ?? [];
 
         if (is_array($modules)) {
@@ -137,7 +182,19 @@ class Company extends Model
                 return (bool) $modules[$module];
             }
 
-            return in_array($module, $modules, true);
+            if (in_array($module, $modules, true)) {
+                return true;
+            }
+
+            // Si se consulta chat-test y no fue explícitamente configurado, hereda de whatsapp
+            if ($module === 'chat-test') {
+                return $this->isModuleEnabled('whatsapp');
+            }
+
+            // Si se consulta pedidos y no fue configurado explícitamente, hereda de inventario
+            if ($module === 'orders') {
+                return $this->isModuleEnabled('inventory');
+            }
         }
 
         return false;
@@ -149,6 +206,12 @@ class Company extends Model
     public function enableModule(string $module): void
     {
         $modules = $this->modules ?? [];
+
+        // Si se activa pedidos, asegurar que inventario también quede activo
+        if ($module === 'orders' && ! $this->isModuleEnabled('inventory')) {
+            $modules['inventory'] = true;
+        }
+
         $modules[$module] = true;
         $this->modules = $modules;
         $this->save();
@@ -161,6 +224,12 @@ class Company extends Model
     {
         $modules = $this->modules ?? [];
         $modules[$module] = false;
+
+        // Si se desactiva inventario, pedidos también debe desactivarse por ser inherente
+        if ($module === 'inventory') {
+            $modules['orders'] = false;
+        }
+
         $this->modules = $modules;
         $this->save();
     }

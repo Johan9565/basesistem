@@ -17,6 +17,7 @@ class WhatsappAppointment extends Model
 
     protected $fillable = [
         'company_id',
+        'branch_id',
         'service_id',
         'employee_id',
         'instance_name',
@@ -42,6 +43,11 @@ class WhatsappAppointment extends Model
     public function employee()
     {
         return $this->belongsTo(User::class, 'employee_id');
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
     }
 
     protected function casts(): array

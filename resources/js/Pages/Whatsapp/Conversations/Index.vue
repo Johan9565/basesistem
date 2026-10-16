@@ -57,6 +57,13 @@ watch(
                             <h3 class="text-lg font-medium text-base-content">
                                 {{ inst.instance_name }}
                             </h3>
+                            <div
+                                v-if="inst.company_name"
+                                class="mt-0.5 text-xs text-secondary flex items-center gap-1"
+                            >
+                                <i class="pi pi-building text-[10px]" />
+                                {{ inst.company_name }}
+                            </div>
                             <p class="mt-1 text-xs uppercase text-base-content/50">
                                 {{ inst.status }}
                             </p>

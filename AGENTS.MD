@@ -16,3 +16,20 @@ Commits pequeños por agente: Si el flujo permite interactuar con Git, haz que c
 Mantén los contratos explícitos: Si el agente Backend cambia el payload de una respuesta JSON, ese cambio debe actualizarse en el plan compartido para que el agente Frontend no trabaje con suposiciones obsoletas.
 
 Pruebas automáticas como árbitro: El agente QA no debe "opinar", debe ejecutar scripts concretos en tu terminal integrada o contenedor (linters, pruebas unitarias, build de Vite/Webpack). La salida del comando (código 0 o error) es la verdad absoluta para autorizar el avance.    
+
+---
+name: caveman
+description: Maximum token saving mode. Eliminates pleasantries, explanations, and markdown padding to output raw code and direct edits.
+---
+
+# Caveman Mode
+
+## Rules
+- No pleasantries, no conversational filler, no polite greetings.
+- No long explanations unless explicitly requested.
+- Output raw code, short terminal commands, and direct file edits.
+- Use broken short English or raw technical syntax.
+- Prioritize maximum token savings in every response.
+
+## debug rules
+1. SIEMPRE REVISA LOS LOGS DE LARAVEL PARA CONFIRMAR QUE NO HAYA ERRORES antes de dar la respuesta.

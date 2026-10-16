@@ -386,11 +386,17 @@ function eventDotClass(apt) {
         <template #header>
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 class="text-xl font-semibold leading-tight text-base-content">
-                        Calendario · {{ instance.instance_name }}
-                    </h2>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-xl font-semibold leading-tight text-base-content">
+                            Calendario · {{ instance.instance_name }}
+                        </h2>
+                        <span class="inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                            <i class="pi pi-building text-[10px]"></i>
+                            {{ instance.branch_name }}
+                        </span>
+                    </div>
                     <p class="text-sm text-base-content/60">
-                        Vista mensual de citas
+                        Vista mensual de citas globales por sucursal
                         <template v-if="instance.google_calendar_id">
                             · Google Calendar conectado
                         </template>
@@ -730,6 +736,15 @@ function eventDotClass(apt) {
                 </div>
 
                 <div class="grid gap-3 sm:grid-cols-2">
+                    <div>
+                        <p class="text-xs uppercase tracking-wide text-base-content/50">
+                            Sucursal
+                        </p>
+                        <p class="mt-1 font-semibold flex items-center gap-1.5 text-primary">
+                            <i class="pi pi-building text-xs"></i>
+                            {{ selectedApt.branch_name || instance.branch_name || 'Sucursal Principal' }}
+                        </p>
+                    </div>
                     <div>
                         <p class="text-xs uppercase tracking-wide text-base-content/50">
                             Teléfono

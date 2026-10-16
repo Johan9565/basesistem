@@ -11,20 +11,38 @@ use Throwable;
 
 class MessagesController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $instances = WhatsappInstance::query()
-            ->where('status', 'active')
+        $user = $request->user();
+        $canSeeAllCompanies = $user ? $user->canSelectAllCompanies() : false;
+        $accessibleCompanyIds = $user ? $user->getAccessibleCompanyIds() : [];
+
+        $query = WhatsappInstance::withoutGlobalScopes()->where('status', 'active');
+        if (! $canSeeAllCompanies) {
+            $searchVals = [];
+            foreach ($accessibleCompanyIds as $id) {
+                $searchVals[] = (string) $id;
+                try {
+                    $searchVals[] = new \MongoDB\BSON\ObjectId((string) $id);
+                } catch (\Throwable $e) {}
+            }
+            $query->whereIn('company_id', array_values(array_unique($searchVals)));
+        }
+
+        $instances = $query
+            ->with('company')
             ->orderBy('instance_name')
             ->get()
             ->map(fn (WhatsappInstance $row) => [
                 'id' => (string) $row->getKey(),
                 'instance_name' => (string) $row->instance_name,
+                'company_name' => $row->company?->name ?? '',
             ])
             ->values();
 
         return Inertia::render('Whatsapp/Send/Index', [
             'instances' => $instances,
+            'canSeeAllCompanies' => $canSeeAllCompanies,
         ]);
     }
 
@@ -36,7 +54,11 @@ class MessagesController extends Controller
             'text' => 'required|string|max:4000',
         ]);
 
-        $row = WhatsappInstance::query()
+        $user = $request->user();
+        $canSeeAllCompanies = $user ? $user->canSelectAllCompanies() : false;
+        $accessibleCompanyIds = $user ? $user->getAccessibleCompanyIds() : [];
+
+        $row = WhatsappInstance::withoutGlobalScopes()
             ->where('instance_name', $validated['instance_name'])
             ->first();
 
@@ -44,6 +66,13 @@ class MessagesController extends Controller
             return back()->withInput()->with('flash', [
                 'type' => 'error',
                 'message' => 'La instancia no existe en Mongo.',
+            ]);
+        }
+
+        if (! $canSeeAllCompanies && ! in_array((string) $row->company_id, $accessibleCompanyIds, true)) {
+            return back()->withInput()->with('flash', [
+                'type' => 'error',
+                'message' => 'No tienes permiso para enviar mensajes desde esta instancia.',
             ]);
         }
 

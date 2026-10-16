@@ -183,12 +183,63 @@ class User extends Authenticatable
     }
 
     /**
-     * Retorna los IDs de las empresas asignadas al usuario.
+     * Determina si el usuario tiene permiso para gestionar todas las empresas del sistema.
+     */
+    public function canManageAllCompanies(): bool
+    {
+        if ($this->hasPermission('companies.manage_all')) {
+            return true;
+        }
+
+        // Permiso contextual en la empresa activa de sesión
+        $activeCompanyId = session('active_company_id');
+        if ($activeCompanyId && $this->hasPermission('companies.manage_all', $activeCompanyId)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Determina si el usuario tiene permiso para seleccionar y cambiar a cualquier empresa del sistema.
+     */
+    public function canSelectAllCompanies(): bool
+    {
+        if ($this->hasPermission('companies.select_all') || $this->hasPermission('companies.manage_all')) {
+            return true;
+        }
+
+        // Permiso contextual en la empresa activa de sesión
+        $activeCompanyId = session('active_company_id');
+        if ($activeCompanyId && ($this->hasPermission('companies.select_all', $activeCompanyId) || $this->hasPermission('companies.manage_all', $activeCompanyId))) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Retorna los IDs de las empresas accesibles para el usuario.
+     * Si tiene permiso de select_all o manage_all, retorna todas las empresas activas.
+     * Si no, únicamente las asignadas (como dueño o con membresía).
      *
      * @return list<string>
      */
     public function getAccessibleCompanyIds(): array
     {
+        if ($this->canSelectAllCompanies()) {
+            $companies = Company::where('status', '!=', 'inactive')->get(['_id']);
+            if ($companies->isEmpty()) {
+                $companies = Company::all(['_id']);
+            }
+
+            return $companies
+                ->map(fn ($c) => (string) $c->getKey())
+                ->filter()
+                ->values()
+                ->toArray();
+        }
+
         return $this->getAssignedCompanyIds();
     }
 

@@ -175,6 +175,15 @@ class SystemMasterSeeder extends Seeder
                 'relation' => 'whatsapp',
                 'order_index' => 3,
             ],
+            [
+                'perm_name' => 'whatsapp-chat-test',
+                'perm_slug' => 'whatsapp.chat-test',
+                'perm_desc' => 'Simulador de pruebas de contestación de bot sin WhatsApp',
+                'mod_name' => 'Chat Test',
+                'mod_route' => 'whatsapp.chat-test',
+                'relation' => 'whatsapp',
+                'order_index' => 4,
+            ],
         ];
 
         $allPermissionObjects = [];

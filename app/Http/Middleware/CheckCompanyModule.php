@@ -24,7 +24,12 @@ class CheckCompanyModule
     {
         $company = $this->companyContext->getCompany();
 
-        if (! $company || ! $company->isModuleEnabled($module)) {
+        $isEnabled = $company && (
+            $company->isModuleEnabled($module)
+            || ($module === 'whatsapp' && $company->isModuleEnabled('chat-test'))
+        );
+
+        if (! $isEnabled) {
             if ($request->expectsJson()) {
                 return response()->json([
                     'ok' => false,

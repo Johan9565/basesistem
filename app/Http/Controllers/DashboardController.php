@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Company;
 use App\Models\CompanyUser;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\Service;
 use App\Models\User;
@@ -57,6 +58,16 @@ class DashboardController extends Controller
                 'total_services' => 0,
                 'featured_services' => [],
             ],
+            'orders' => [
+                'enabled' => $activeCompany ? $activeCompany->isModuleEnabled('orders') : false,
+                'total_orders' => 0,
+                'pending_orders' => 0,
+                'total_revenue' => 0,
+                'recent_orders' => [],
+            ],
+            'chat_test' => [
+                'enabled' => $activeCompany ? ($activeCompany->isModuleEnabled('whatsapp') || $activeCompany->isModuleEnabled('chat-test')) : false,
+            ],
             'team' => [
                 'total_members' => 0,
             ],
@@ -95,6 +106,7 @@ class DashboardController extends Controller
                     ->count();
 
                 $stats['appointments']['upcoming'] = WhatsappAppointment::where('company_id', $activeCompanyId)
+                    ->with('branch')
                     ->where('starts_at', '>=', $now)
                     ->orderBy('starts_at', 'asc')
                     ->limit(5)
@@ -102,6 +114,7 @@ class DashboardController extends Controller
                     ->map(fn ($app) => [
                         'id' => (string) $app->_id,
                         'summary' => $app->summary ?? 'Cita Programada',
+                        'branch_name' => $app->branch?->name ?? 'Sucursal Principal',
                         'user_phone' => $app->user_phone ?? 'Sin teléfono',
                         'starts_at' => $app->starts_at ? $app->starts_at->toIso8601String() : null,
                         'sync_status' => $app->sync_status ?? 'pending',
@@ -112,7 +125,7 @@ class DashboardController extends Controller
 
             // Inventario
             if ($stats['inventory']['enabled']) {
-                $products = Product::where('company_id', $activeCompanyId)->get();
+                $products = Product::where('company_id', $activeCompanyId)->with('branch')->get();
                 $stats['inventory']['total_products'] = $products->count();
 
                 $lowStock = $products->filter(fn ($p) => ($p->stock ?? 0) <= ($p->min_stock ?? 0));
@@ -123,6 +136,7 @@ class DashboardController extends Controller
                         'id' => (string) $p->_id,
                         'name' => $p->name,
                         'sku' => $p->sku,
+                        'branch_name' => $p->branch?->name ?? 'Sucursal Principal',
                         'stock' => $p->stock ?? 0,
                         'min_stock' => $p->min_stock ?? 0,
                         'price' => $p->price ?? 0,
@@ -133,15 +147,44 @@ class DashboardController extends Controller
 
             // Servicios
             if ($stats['services']['enabled']) {
-                $services = Service::where('company_id', $activeCompanyId)->where('is_active', true)->get();
+                $services = Service::where('company_id', $activeCompanyId)->where('is_active', true)->with('branch')->get();
                 $stats['services']['total_services'] = $services->count();
                 $stats['services']['featured_services'] = $services->take(4)->map(fn ($s) => [
                     'id' => (string) $s->_id,
                     'name' => $s->name,
+                    'branch_name' => $s->branch?->name ?? 'Sucursal Principal',
                     'price' => $s->price ?? 0,
                     'duration_minutes' => $s->duration_minutes ?? 0,
                 ])->values()->toArray();
             }
+
+            // Pedidos
+            if ($stats['orders']['enabled']) {
+                $orders = Order::where('company_id', $activeCompanyId)->get();
+                $stats['orders']['total_orders'] = $orders->count();
+                $stats['orders']['pending_orders'] = $orders->whereIn('status', ['pending', 'processing'])->count();
+                $stats['orders']['total_revenue'] = (float) $orders->where('status', '!=', 'cancelled')->sum('total');
+                $stats['orders']['recent_orders'] = $orders->sortByDesc('created_at')->take(5)->map(fn ($o) => [
+                    'id' => (string) $o->_id,
+                    'order_number' => $o->order_number,
+                    'customer_name' => $o->customer_name,
+                    'status' => $o->status,
+                    'total' => $o->total,
+                    'items_count' => count($o->items ?? []),
+                ])->values()->toArray();
+            }
+
+            // Sucursales activas
+            $companyBranches = \App\Models\Branch::where('company_id', $activeCompanyId)->where('is_active', true)->get();
+            $stats['branches'] = [
+                'total' => $companyBranches->count(),
+                'list' => $companyBranches->map(fn ($b) => [
+                    'id' => (string) $b->_id,
+                    'name' => $b->name,
+                    'code' => $b->code ?? '',
+                    'is_main' => (bool) $b->is_main,
+                ])->values()->toArray(),
+            ];
 
             // Equipo
             $stats['team']['total_members'] = CompanyUser::where('company_id', $activeCompanyId)->count();

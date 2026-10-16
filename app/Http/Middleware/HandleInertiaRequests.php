@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\ComponentThemeModel;
 use App\Models\ModulesModel;
 use App\Models\NotificationsModel;
+use App\Models\PermissionsModel;
 use App\Support\LandingPalette;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -57,23 +58,130 @@ class HandleInertiaRequests extends Middleware
             $userPermissions = $permissionCache->getUserPermissions($user, $companyContext->getCompanyId());
 
             // Obtener lista de empresas accesibles del usuario
-            $companyIds = $user->getAccessibleCompanyIds();
-            if (! empty($companyIds)) {
-                $userCompanies = \App\Models\Company::whereInMongoIds($companyIds)
-                    ->where('status', 'active')
-                    ->orderBy('name', 'asc')
-                    ->get()
-                    ->map(function ($comp) use ($companyContext) {
-                        return [
-                            'id' => (string) $comp->_id,
-                            'name' => $comp->name,
-                            'slug' => $comp->slug,
-                            'is_active' => (string) $comp->_id === (string) $companyContext->getCompanyId(),
-                            'modules' => $comp->modules ?? [],
-                        ];
-                    })
-                    ->values()
-                    ->toArray();
+            if ($user->canSelectAllCompanies()) {
+                $compQuery = \App\Models\Company::query();
+                $allComps = $compQuery->where('status', '!=', 'inactive')->orderBy('name', 'asc')->get();
+                if ($allComps->isEmpty()) {
+                    $allComps = \App\Models\Company::orderBy('name', 'asc')->get();
+                }
+                $userCompanies = $allComps->map(function ($comp) use ($companyContext) {
+                    return [
+                        'id' => (string) $comp->_id,
+                        'name' => $comp->name,
+                        'slug' => $comp->slug,
+                        'is_active' => (string) $comp->_id === (string) $companyContext->getCompanyId(),
+                        'modules' => $comp->modules ?? [],
+                    ];
+                })->values()->toArray();
+            } else {
+                $companyIds = $user->getAssignedCompanyIds();
+                if (! empty($companyIds)) {
+                    $userCompanies = \App\Models\Company::whereInMongoIds($companyIds)
+                        ->where('status', '!=', 'inactive')
+                        ->orderBy('name', 'asc')
+                        ->get()
+                        ->map(function ($comp) use ($companyContext) {
+                            return [
+                                'id' => (string) $comp->_id,
+                                'name' => $comp->name,
+                                'slug' => $comp->slug,
+                                'is_active' => (string) $comp->_id === (string) $companyContext->getCompanyId(),
+                                'modules' => $comp->modules ?? [],
+                            ];
+                        })
+                        ->values()
+                        ->toArray();
+                }
+            }
+
+            // Si activeCompany es null pero existen empresas disponibles, auto-sincronizar la primera
+            if (! $activeCompany && ! empty($userCompanies)) {
+                $firstComp = \App\Models\Company::whereInMongoIds([$userCompanies[0]['id']])->first();
+                if ($firstComp) {
+                    $activeCompany = $firstComp;
+                    $companyContext->setCompany($activeCompany);
+                    $request->session()->put('active_company_id', (string) $activeCompany->_id);
+                    $userCompanies[0]['is_active'] = true;
+                    $companyModules = $activeCompany->modules ?? [];
+                }
+            }
+
+            if (ModulesModel::where('route', 'whatsapp.chat-test')->doesntExist()) {
+                ModulesModel::create([
+                    'route' => 'whatsapp.chat-test',
+                    'name' => 'Chat Test',
+                    'relation' => 'whatsapp',
+                    'order_index' => 4,
+                    'status' => 1,
+                ]);
+            }
+            if (PermissionsModel::where('name', 'whatsapp.chat-test')->doesntExist()) {
+                PermissionsModel::create([
+                    'name' => 'whatsapp.chat-test',
+                    'description' => 'Módulo Chat Test (Simulador)',
+                    'module' => 'whatsapp.chat-test',
+                    'status' => 1,
+                ]);
+                PermissionsModel::create([
+                    'name' => 'whatsapp.chat-test.view',
+                    'description' => 'Ver y acceder a Chat Test',
+                    'module' => 'whatsapp.chat-test',
+                    'status' => 1,
+                ]);
+                PermissionsModel::create([
+                    'name' => 'whatsapp.chat-test.send',
+                    'description' => 'Enviar mensajes en Chat Test',
+                    'module' => 'whatsapp.chat-test',
+                    'status' => 1,
+                ]);
+                PermissionsModel::create([
+                    'name' => 'whatsapp.chat-test.reset',
+                    'description' => 'Reiniciar Chat Test',
+                    'module' => 'whatsapp.chat-test',
+                    'status' => 1,
+                ]);
+            }
+
+            if (ModulesModel::where('route', 'orders')->doesntExist()) {
+                ModulesModel::create([
+                    'route' => 'orders',
+                    'name' => 'Pedidos',
+                    'relation' => 1,
+                    'order_index' => 3,
+                    'status' => 1,
+                ]);
+            }
+            if (PermissionsModel::where('name', 'orders.view')->doesntExist()) {
+                PermissionsModel::create([
+                    'name' => 'orders',
+                    'description' => 'Módulo Pedidos y Ventas',
+                    'module' => 'orders',
+                    'status' => 1,
+                ]);
+                PermissionsModel::create([
+                    'name' => 'orders.view',
+                    'description' => 'Ver listado y detalles de pedidos',
+                    'module' => 'orders',
+                    'status' => 1,
+                ]);
+                PermissionsModel::create([
+                    'name' => 'orders.create',
+                    'description' => 'Crear pedidos y descontar inventario',
+                    'module' => 'orders',
+                    'status' => 1,
+                ]);
+                PermissionsModel::create([
+                    'name' => 'orders.edit',
+                    'description' => 'Modificar pedidos y estado',
+                    'module' => 'orders',
+                    'status' => 1,
+                ]);
+                PermissionsModel::create([
+                    'name' => 'orders.delete',
+                    'description' => 'Eliminar o cancelar pedidos',
+                    'module' => 'orders',
+                    'status' => 1,
+                ]);
             }
 
             if (! empty($userPermissions)) {
@@ -89,19 +197,17 @@ class HandleInertiaRequests extends Middleware
                             return false;
                         }
 
-                        if (! $user->isSuperAdmin()) {
-                            // Dropdowns contenedores se filtrarán por sus hijos
-                            if ($module->relation !== 0 && (string) $module->relation !== '0') {
-                                $hasAccess = in_array($route, $userPermissions, true)
-                                    || in_array("{$route}.view", $userPermissions, true);
+                        // Dropdowns contenedores se filtrarán por sus hijos
+                        if ($module->relation !== 0 && (string) $module->relation !== '0') {
+                            $hasAccess = in_array($route, $userPermissions, true)
+                                || in_array("{$route}.view", $userPermissions, true);
 
-                                if (! $hasAccess) {
-                                    $hasAccess = collect($userPermissions)->contains(fn ($p) => str_starts_with($p, "{$route}."));
-                                }
+                            if (! $hasAccess) {
+                                $hasAccess = collect($userPermissions)->contains(fn ($p) => str_starts_with($p, "{$route}."));
+                            }
 
-                                if (! $hasAccess) {
-                                    return false;
-                                }
+                            if (! $hasAccess) {
+                                return false;
                             }
                         }
 
@@ -116,13 +222,19 @@ class HandleInertiaRequests extends Middleware
                         if (str_starts_with($route, 'products') && ! $activeCompany->isModuleEnabled('inventory')) {
                             return false;
                         }
+                        if (str_starts_with($route, 'orders') && ! $activeCompany->isModuleEnabled('orders')) {
+                            return false;
+                        }
                         if (str_starts_with($route, 'services') && ! $activeCompany->isModuleEnabled('services')) {
                             return false;
                         }
                         if ($route === 'whatsapp.calendar' && ! $activeCompany->isModuleEnabled('appointments')) {
                             return false;
                         }
-                        if (str_starts_with($route, 'whatsapp') && $route !== 'whatsapp.calendar' && ! $activeCompany->isModuleEnabled('whatsapp')) {
+                        if ($route === 'whatsapp.chat-test' && ! $activeCompany->isModuleEnabled('chat-test') && ! $activeCompany->isModuleEnabled('whatsapp')) {
+                            return false;
+                        }
+                        if (str_starts_with($route, 'whatsapp') && $route !== 'whatsapp.calendar' && $route !== 'whatsapp.chat-test' && ! $activeCompany->isModuleEnabled('whatsapp')) {
                             return false;
                         }
 
@@ -140,12 +252,15 @@ class HandleInertiaRequests extends Middleware
                 $isCompanyRoute = function (string $route, mixed $relation = null): bool {
                     $companyKeys = [
                         'products',
+                        'orders',
                         'services',
                         'whatsapp.calendar',
                         'whatsapp',
                         'whatsapp.instances',
                         'whatsapp.conversations',
                         'whatsapp.send',
+                        'whatsapp.chat-test',
+                        'chat-test',
                         'employees',
                     ];
 
@@ -159,6 +274,7 @@ class HandleInertiaRequests extends Middleware
 
                     return str_starts_with($route, 'whatsapp.')
                         || str_starts_with($route, 'products.')
+                        || str_starts_with($route, 'orders.')
                         || str_starts_with($route, 'services.');
                 };
 
@@ -249,7 +365,7 @@ class HandleInertiaRequests extends Middleware
                             $sections['whatsapp']['items'][] = $item;
                         } elseif ($r === 'whatsapp.calendar') {
                             $sections['appointments']['items'][] = $item;
-                        } elseif (in_array($r, ['products', 'services'], true) || str_starts_with($r, 'products.') || str_starts_with($r, 'services.')) {
+                        } elseif (in_array($r, ['products', 'orders', 'services'], true) || str_starts_with($r, 'products.') || str_starts_with($r, 'orders.') || str_starts_with($r, 'services.')) {
                             $sections['operations']['items'][] = $item;
                         } elseif (in_array($r, ['employees', 'roles'], true)) {
                             $sections['team']['items'][] = $item;

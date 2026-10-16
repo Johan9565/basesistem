@@ -23,6 +23,12 @@ trait HasWhatsappBookingTools
             $tools[] = $this->queryInventoryProductsToolDefinition();
         }
 
+        // Módulo de pedidos (inherente a inventario)
+        if (! $company || $company->isModuleEnabled('orders')) {
+            $tools[] = $this->createOrderToolDefinition();
+            $tools[] = $this->listMyOrdersToolDefinition();
+        }
+
         // Módulo de servicios
         if ($company && $company->isModuleEnabled('services')) {
             $tools[] = $this->queryCompanyServicesToolDefinition();
@@ -107,6 +113,95 @@ trait HasWhatsappBookingTools
                         'search' => [
                             'type' => 'string',
                             'description' => 'Término de búsqueda o nombre del servicio.',
+                        ],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Herramienta para registrar pedidos de compra de productos descontando del inventario.
+     */
+    public function createOrderToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'create_order',
+                'description' => 'Genera y registra formalmente una orden o pedido de productos en el sistema, descontando de forma inmediata el stock del inventario. Úsala cuando el cliente confirme explícitamente su compra tras haberle presentado el resumen y el total.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'items' => [
+                            'type' => 'array',
+                            'description' => 'Lista de productos a comprar con sus cantidades.',
+                            'items' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'name' => [
+                                        'type' => 'string',
+                                        'description' => 'Nombre o término del producto tal como figura en el catálogo de inventario.',
+                                    ],
+                                    'sku' => [
+                                        'type' => 'string',
+                                        'description' => 'SKU del producto si se conoce.',
+                                    ],
+                                    'product_id' => [
+                                        'type' => 'string',
+                                        'description' => 'ID del producto si se conoce.',
+                                    ],
+                                    'quantity' => [
+                                        'type' => 'integer',
+                                        'description' => 'Cantidad solicitada (mínimo 1).',
+                                    ],
+                                    'unit_price' => [
+                                        'type' => 'number',
+                                        'description' => 'Precio unitario pactado o del catálogo.',
+                                    ],
+                                ],
+                                'required' => ['name', 'quantity'],
+                            ],
+                        ],
+                        'customer_name' => [
+                            'type' => 'string',
+                            'description' => 'Nombre del cliente para la orden.',
+                        ],
+                        'delivery_address' => [
+                            'type' => 'string',
+                            'description' => 'Dirección de entrega o indicación de recogida en sucursal.',
+                        ],
+                        'notes' => [
+                            'type' => 'string',
+                            'description' => 'Observaciones o notas adicionales sobre el pedido.',
+                        ],
+                        'client_confirmed' => [
+                            'type' => 'boolean',
+                            'description' => 'true SOLO si el cliente confirmó explícitamente la compra tras conocer productos y total.',
+                        ],
+                    ],
+                    'required' => ['items', 'client_confirmed'],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Herramienta para consultar pedidos anteriores o activos del cliente.
+     */
+    public function listMyOrdersToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'list_my_orders',
+                'description' => 'Consulta el historial de pedidos y compras recientes asociadas al cliente / teléfono actual en este negocio.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'order_number' => [
+                            'type' => 'string',
+                            'description' => 'Número de pedido específico si el cliente lo indicó (ej. PED-00001).',
                         ],
                     ],
                 ],

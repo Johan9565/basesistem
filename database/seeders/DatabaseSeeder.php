@@ -14,6 +14,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call(SystemMasterSeeder::class);
+        $this->call([
+            SystemMasterSeeder::class,
+            ChatTestModuleSeeder::class,
+        ]);
     }
 }

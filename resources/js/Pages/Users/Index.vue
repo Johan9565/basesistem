@@ -523,8 +523,9 @@ function dialItemsFor(user) {
                                                     {{ user.email }}
                                                 </div>
                                                 <div class="flex flex-wrap gap-1 mt-1.5">
-                                                    <span v-if="user.companies_count" class="badge badge-neutral badge-xs">
-                                                        🏢 {{ user.companies_count }} empresa(s)
+                                                    <span v-if="user.companies_count" class="badge badge-neutral badge-xs flex items-center">
+                                                        <i class="pi pi-building text-[10px] mr-1"></i>
+                                                        <span>{{ user.companies_count }} empresa(s)</span>
                                                     </span>
                                                     <span
                                                         v-for="(cname, ci) in (user.companies_list || []).slice(0, 2)"

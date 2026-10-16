@@ -13,9 +13,25 @@ use Inertia\Inertia;
 
 class ConversationsController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $instances = WhatsappInstance::query()
+        $user = $request->user();
+        $canSeeAllCompanies = $user ? $user->canSelectAllCompanies() : false;
+        $accessibleCompanyIds = $user ? $user->getAccessibleCompanyIds() : [];
+
+        $query = WhatsappInstance::withoutGlobalScopes()->with('company');
+        if (! $canSeeAllCompanies) {
+            $searchVals = [];
+            foreach ($accessibleCompanyIds as $id) {
+                $searchVals[] = (string) $id;
+                try {
+                    $searchVals[] = new \MongoDB\BSON\ObjectId((string) $id);
+                } catch (\Throwable $e) {}
+            }
+            $query->whereIn('company_id', array_values(array_unique($searchVals)));
+        }
+
+        $instances = $query
             ->orderBy('instance_name')
             ->get()
             ->map(function (WhatsappInstance $row) {
@@ -38,6 +54,7 @@ class ConversationsController extends Controller
 
                 return [
                     'instance_name' => $name,
+                    'company_name' => $row->company?->name ?? '',
                     'status' => (string) ($row->status ?? 'active'),
                     'thread_count' => $phones,
                     'message_count' => $messages->count(),
@@ -51,14 +68,23 @@ class ConversationsController extends Controller
 
         return Inertia::render('Whatsapp/Conversations/Index', [
             'instances' => $instances,
+            'canSeeAllCompanies' => $canSeeAllCompanies,
         ]);
     }
 
     public function show(Request $request, string $instance, BookingStateRepository $bookingStates)
     {
-        $row = WhatsappInstance::query()->where('instance_name', $instance)->first();
+        $user = $request->user();
+        $canSeeAllCompanies = $user ? $user->canSelectAllCompanies() : false;
+        $accessibleCompanyIds = $user ? $user->getAccessibleCompanyIds() : [];
+
+        $row = WhatsappInstance::withoutGlobalScopes()->where('instance_name', $instance)->first();
         if (! $row) {
             abort(404);
+        }
+
+        if (! $canSeeAllCompanies && ! in_array((string) $row->company_id, $accessibleCompanyIds, true)) {
+            abort(403, 'No tienes permiso para ver las conversaciones de esta instancia.');
         }
 
         $sessionKey = $row->evolutionName();

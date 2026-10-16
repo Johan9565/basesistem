@@ -16,8 +16,29 @@ class ProductsController extends Controller
     public function index(Request $request): Response
     {
         $search = trim((string) $request->input('search', ''));
+        $branchId = trim((string) $request->input('branch_id', ''));
 
-        $query = Product::query()->orderBy('name', 'asc');
+        $companyContext = app(\App\Services\Tenancy\CompanyContext::class);
+        $activeCompanyId = $companyContext->getCompanyId();
+
+        $branches = [];
+        if ($activeCompanyId) {
+            $branches = \App\Models\Branch::where('company_id', $activeCompanyId)
+                ->where('is_active', true)
+                ->orderByDesc('is_main')
+                ->orderBy('name', 'asc')
+                ->get()
+                ->map(fn ($b) => [
+                    'id' => (string) $b->_id,
+                    'name' => $b->name,
+                    'code' => $b->code ?? '',
+                    'is_main' => (bool) $b->is_main,
+                ])
+                ->values()
+                ->toArray();
+        }
+
+        $query = Product::with('branch')->orderBy('name', 'asc');
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
@@ -27,12 +48,34 @@ class ProductsController extends Controller
             });
         }
 
-        $products = $query->paginate(15)->withQueryString();
+        if ($branchId !== '') {
+            $query->where('branch_id', $branchId);
+        }
+
+        $products = $query->paginate(15)->through(function ($p) {
+            return [
+                'id' => (string) $p->_id,
+                'branch_id' => (string) ($p->branch_id ?? ''),
+                'branch_name' => $p->branch?->name ?? 'Sucursal Principal',
+                'branch_code' => $p->branch?->code ?? '',
+                'sku' => $p->sku,
+                'name' => $p->name,
+                'description' => $p->description,
+                'category' => $p->category,
+                'price' => $p->price,
+                'cost' => $p->cost,
+                'stock' => $p->stock,
+                'min_stock' => $p->min_stock,
+                'is_active' => (bool) $p->is_active,
+            ];
+        })->withQueryString();
 
         return Inertia::render('Products/Index', [
             'products' => $products,
+            'branches' => $branches,
             'filters' => [
                 'search' => $search,
+                'branch_id' => $branchId,
             ],
         ]);
     }
@@ -43,6 +86,7 @@ class ProductsController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
+            'branch_id' => 'nullable|string',
             'sku' => 'required|string|max:50',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -53,6 +97,14 @@ class ProductsController extends Controller
             'min_stock' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
         ]);
+
+        if (empty($validated['branch_id'])) {
+            $companyContext = app(\App\Services\Tenancy\CompanyContext::class);
+            $mainBranch = \App\Models\Branch::where('company_id', $companyContext->getCompanyId())
+                ->where('is_main', true)
+                ->first();
+            $validated['branch_id'] = $mainBranch ? (string) $mainBranch->_id : null;
+        }
 
         Product::create($validated);
 
@@ -68,6 +120,7 @@ class ProductsController extends Controller
     public function update(Request $request, Product $product): RedirectResponse
     {
         $validated = $request->validate([
+            'branch_id' => 'nullable|string',
             'sku' => 'required|string|max:50',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -78,6 +131,14 @@ class ProductsController extends Controller
             'min_stock' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
         ]);
+
+        if (empty($validated['branch_id'])) {
+            $companyContext = app(\App\Services\Tenancy\CompanyContext::class);
+            $mainBranch = \App\Models\Branch::where('company_id', $companyContext->getCompanyId())
+                ->where('is_main', true)
+                ->first();
+            $validated['branch_id'] = $mainBranch ? (string) $mainBranch->_id : null;
+        }
 
         $product->update($validated);
 

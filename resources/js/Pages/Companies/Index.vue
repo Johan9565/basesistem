@@ -12,7 +12,24 @@ const props = defineProps({
     companies: Array,
     clients: Array,
     users: Array,
+    can: {
+        type: Object,
+        default: () => ({
+            create: false,
+            edit: false,
+            toggle_module: false,
+            manage_owner: false,
+            manage_all: false,
+            select_all: false,
+            branches_view: false,
+            branches_create: false,
+            branches_edit: false,
+            branches_delete: false,
+        }),
+    },
 });
+
+
 
 const dialogVisible = ref(false);
 const isEditing = ref(false);
@@ -28,9 +45,11 @@ const form = useForm({
     status: 'active',
     modules: {
         inventory: false,
+        orders: false,
         services: false,
         appointments: false,
         whatsapp: true,
+        'chat-test': true,
     },
 });
 
@@ -42,9 +61,11 @@ function openCreateDialog() {
     form.status = 'active';
     form.modules = {
         inventory: true,
+        orders: true,
         services: true,
         appointments: true,
         whatsapp: true,
+        'chat-test': true,
     };
     if (props.clients && props.clients.length) {
         form.client_id = props.clients[0].id;
@@ -90,6 +111,72 @@ function toggleCompanyModule(company, moduleKey, event) {
         preserveScroll: true,
     });
 }
+
+// --- Gestión de Sucursales ---
+const branchDialogVisible = ref(false);
+const isEditingBranch = ref(false);
+const selectedCompanyForBranch = ref(null);
+const editingBranchId = ref(null);
+
+const branchForm = useForm({
+    name: '',
+    code: '',
+    phone: '',
+    email: '',
+    address: '',
+    is_main: false,
+    is_active: true,
+});
+
+function openCreateBranchDialog(company) {
+    selectedCompanyForBranch.value = company;
+    isEditingBranch.value = false;
+    editingBranchId.value = null;
+    branchForm.reset();
+    branchForm.clearErrors();
+    branchForm.is_active = true;
+    branchForm.is_main = !company.branches || company.branches.length === 0;
+    branchDialogVisible.value = true;
+}
+
+function openEditBranchDialog(company, branch) {
+    selectedCompanyForBranch.value = company;
+    isEditingBranch.value = true;
+    editingBranchId.value = branch.id;
+    branchForm.reset();
+    branchForm.clearErrors();
+    branchForm.name = branch.name ?? '';
+    branchForm.code = branch.code ?? '';
+    branchForm.phone = branch.phone ?? '';
+    branchForm.email = branch.email ?? '';
+    branchForm.address = branch.address ?? '';
+    branchForm.is_main = Boolean(branch.is_main);
+    branchForm.is_active = branch.is_active ?? true;
+    branchDialogVisible.value = true;
+}
+
+function submitBranchForm() {
+    if (!selectedCompanyForBranch.value) return;
+
+    if (isEditingBranch.value) {
+        branchForm.patch(route('companies.branches.update', [selectedCompanyForBranch.value.id, editingBranchId.value]), {
+            onSuccess: () => { branchDialogVisible.value = false; },
+        });
+    } else {
+        branchForm.post(route('companies.branches.store', selectedCompanyForBranch.value.id), {
+            onSuccess: () => { branchDialogVisible.value = false; },
+        });
+    }
+}
+
+function deleteBranch() {
+    if (!selectedCompanyForBranch.value || !editingBranchId.value) return;
+    if (confirm('¿Estás seguro de que deseas eliminar esta sucursal?')) {
+        router.delete(route('companies.branches.destroy', [selectedCompanyForBranch.value.id, editingBranchId.value]), {
+            onSuccess: () => { branchDialogVisible.value = false; },
+        });
+    }
+}
 </script>
 
 <template>
@@ -99,14 +186,16 @@ function toggleCompanyModule(company, moduleKey, event) {
         <template #header>
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h2 class="text-xl font-bold leading-tight text-base-content">
-                        🏢 Empresas y Módulos Habilitados
+                    <h2 class="text-xl font-bold leading-tight text-base-content flex items-center gap-2">
+                        <i class="pi pi-building text-base-content/70"></i>
+                        <span>Empresas y Módulos Habilitados</span>
                     </h2>
                     <p class="text-xs text-base-content/60">
                         Administra las empresas asociadas a la cuenta y activa o desactiva módulos individualmente en tiempo real.
                     </p>
                 </div>
                 <Button
+                    v-if="can?.create"
                     label="Nueva Empresa"
                     icon="pi pi-plus"
                     size="small"
@@ -169,58 +258,152 @@ function toggleCompanyModule(company, moduleKey, event) {
 
                                 <!-- WhatsApp CRM -->
                                 <div class="flex items-center justify-between rounded-xl bg-base-200/50 p-2.5">
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-emerald-500 font-bold text-xs">📱 WhatsApp CRM</span>
+                                    <div class="flex items-center gap-2 text-base-content/80">
+                                        <i class="pi pi-comments text-xs text-base-content/60"></i>
+                                        <span class="font-medium text-xs">WhatsApp CRM</span>
                                     </div>
                                     <ToggleSwitch
                                         :modelValue="Boolean(company.modules?.whatsapp)"
+                                        :disabled="!can?.toggle_module"
                                         @update:modelValue="toggleCompanyModule(company, 'whatsapp', $event)"
                                     />
                                 </div>
 
                                 <!-- Citas / Google Calendar -->
                                 <div class="flex items-center justify-between rounded-xl bg-base-200/50 p-2.5">
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-sky-500 font-bold text-xs">📅 Citas & Agenda</span>
+                                    <div class="flex items-center gap-2 text-base-content/80">
+                                        <i class="pi pi-calendar text-xs text-base-content/60"></i>
+                                        <span class="font-medium text-xs">Citas & Agenda</span>
                                     </div>
                                     <ToggleSwitch
                                         :modelValue="Boolean(company.modules?.appointments)"
+                                        :disabled="!can?.toggle_module"
                                         @update:modelValue="toggleCompanyModule(company, 'appointments', $event)"
                                     />
                                 </div>
 
                                 <!-- Catálogo de Servicios -->
                                 <div class="flex items-center justify-between rounded-xl bg-base-200/50 p-2.5">
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-indigo-500 font-bold text-xs">💼 Servicios</span>
+                                    <div class="flex items-center gap-2 text-base-content/80">
+                                        <i class="pi pi-briefcase text-xs text-base-content/60"></i>
+                                        <span class="font-medium text-xs">Servicios</span>
                                     </div>
                                     <ToggleSwitch
                                         :modelValue="Boolean(company.modules?.services)"
+                                        :disabled="!can?.toggle_module"
                                         @update:modelValue="toggleCompanyModule(company, 'services', $event)"
                                     />
                                 </div>
 
                                 <!-- Inventario -->
                                 <div class="flex items-center justify-between rounded-xl bg-base-200/50 p-2.5">
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-amber-500 font-bold text-xs">📦 Inventario</span>
+                                    <div class="flex items-center gap-2 text-base-content/80">
+                                        <i class="pi pi-box text-xs text-base-content/60"></i>
+                                        <span class="font-medium text-xs">Inventario</span>
                                     </div>
                                     <ToggleSwitch
                                         :modelValue="Boolean(company.modules?.inventory)"
+                                        :disabled="!can?.toggle_module"
                                         @update:modelValue="toggleCompanyModule(company, 'inventory', $event)"
                                     />
+                                </div>
+
+                                <!-- Pedidos (Ventas & Descuento de Inventario) -->
+                                <div class="flex items-center justify-between rounded-xl bg-base-200/50 p-2.5">
+                                    <div class="flex items-center gap-2 text-base-content/80">
+                                        <i class="pi pi-shopping-cart text-xs text-base-content/60"></i>
+                                        <div class="flex flex-col">
+                                            <span class="font-medium text-xs">Pedidos</span>
+                                            <span class="text-[10px] text-base-content/50">Inherente a Inventario</span>
+                                        </div>
+                                    </div>
+                                    <ToggleSwitch
+                                        :modelValue="Boolean(company.modules?.orders && company.modules?.inventory)"
+                                        :disabled="!can?.toggle_module"
+                                        @update:modelValue="toggleCompanyModule(company, 'orders', $event)"
+                                    />
+                                </div>
+
+                                <!-- Chat Test (Simulador de Bot) -->
+                                <div class="flex items-center justify-between rounded-xl bg-base-200/50 p-2.5">
+                                    <div class="flex items-center gap-2 text-base-content/80">
+                                        <i class="pi pi-bolt text-xs text-base-content/60"></i>
+                                        <span class="font-medium text-xs">Chat Test</span>
+                                    </div>
+                                    <ToggleSwitch
+                                        :modelValue="Boolean(company.modules?.['chat-test'] ?? company.modules?.whatsapp)"
+                                        :disabled="!can?.toggle_module"
+                                        @update:modelValue="toggleCompanyModule(company, 'chat-test', $event)"
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- Sección de Sucursales -->
+                            <div v-if="can?.branches_view" class="mt-5 pt-4 border-t border-base-300">
+                                <div class="flex items-center justify-between mb-2.5">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-[11px] font-bold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
+                                            <i class="pi pi-sitemap text-xs"></i>
+                                            <span>Sucursales ({{ company.branches_count || company.branches?.length || 0 }})</span>
+                                        </span>
+                                    </div>
+                                    <Button
+                                        v-if="can?.branches_create"
+                                        label="Nueva Sucursal"
+                                        icon="pi pi-plus"
+                                        size="small"
+                                        text
+                                        class="!text-xs !py-0.5 !px-1.5 text-primary hover:bg-primary/10"
+                                        @click="openCreateBranchDialog(company)"
+                                    />
+                                </div>
+
+                                <!-- Lista de Sucursales -->
+                                <div class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                                    <div
+                                        v-for="branch in company.branches || []"
+                                        :key="branch.id"
+                                        class="flex items-center justify-between rounded-lg bg-base-200/60 p-2 text-xs transition-all hover:bg-base-200"
+                                    >
+                                        <div class="flex items-center gap-2 truncate">
+                                            <span v-if="branch.is_main" class="badge badge-primary badge-xs font-bold uppercase text-[9px]">Matriz</span>
+                                            <span v-else class="badge badge-ghost badge-xs font-mono text-[9px]">{{ branch.code || 'SUC' }}</span>
+                                            <span class="font-medium text-base-content truncate">{{ branch.name }}</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <span
+                                                class="badge badge-xs"
+                                                :class="branch.is_active ? 'badge-success' : 'badge-ghost'"
+                                            >
+                                                {{ branch.is_active ? 'Activa' : 'Inactiva' }}
+                                            </span>
+                                            <button
+                                                v-if="can?.branches_edit"
+                                                type="button"
+                                                class="btn btn-ghost btn-xs btn-square text-base-content/60 hover:text-primary"
+                                                title="Editar sucursal"
+                                                @click="openEditBranchDialog(company, branch)"
+                                            >
+                                                <i class="pi pi-pencil text-[10px]"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div v-if="!company.branches || !company.branches.length" class="text-[11px] text-base-content/40 italic py-1 text-center">
+                                        Sin sucursales registradas
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Footer -->
-                        <div class="mt-6 pt-4 border-t border-base-300 flex justify-end">
+                        <div v-if="can?.edit" class="mt-6 pt-4 border-t border-base-300 flex justify-end">
                             <Button
                                 label="Editar Datos"
                                 icon="pi pi-pencil"
                                 text
                                 size="small"
                                 severity="secondary"
+                                class="!text-xs !py-1 !px-2"
                                 @click="openEditDialog(company)"
                             />
                         </div>
@@ -238,7 +421,7 @@ function toggleCompanyModule(company, moduleKey, event) {
             class="p-fluid"
         >
             <form @submit.prevent="submitForm" class="space-y-4 pt-2">
-                <div>
+                <div v-if="can?.manage_owner || !isEditing">
                     <label class="text-xs font-semibold text-base-content/80">Usuario Propietario (Dueño de la Empresa) *</label>
                     <Select
                         v-model="form.user_id"
@@ -256,6 +439,12 @@ function toggleCompanyModule(company, moduleKey, event) {
                             </div>
                         </template>
                     </Select>
+                </div>
+                <div v-else>
+                    <label class="text-xs font-semibold text-base-content/80">Usuario Propietario</label>
+                    <div class="p-2.5 rounded-lg bg-base-200/60 text-xs text-base-content/80 font-medium mt-1">
+                        {{ users.find(u => u.id === form.user_id)?.name || 'Propietario asignado' }}
+                    </div>
                 </div>
 
                 <div v-if="!isEditing && clients && clients.length">
@@ -291,7 +480,7 @@ function toggleCompanyModule(company, moduleKey, event) {
                     <InputText v-model="form.email" type="email" class="w-full text-sm mt-1" placeholder="contacto@empresa.com" />
                 </div>
 
-                <div v-if="isEditing">
+                <div v-if="isEditing && can?.manage_owner">
                     <label class="text-xs font-semibold text-base-content/80">Estado de la Empresa *</label>
                     <Select
                         v-model="form.status"
@@ -309,6 +498,78 @@ function toggleCompanyModule(company, moduleKey, event) {
                 <div class="flex justify-end gap-2 pt-4 border-t border-base-300">
                     <Button label="Cancelar" severity="secondary" text size="small" @click="dialogVisible = false" />
                     <Button :label="isEditing ? 'Actualizar' : 'Crear Empresa'" type="submit" severity="primary" size="small" :loading="form.processing" />
+                </div>
+            </form>
+        </Dialog>
+
+        <!-- Modal Crear / Editar Sucursal -->
+        <Dialog
+            v-model:visible="branchDialogVisible"
+            modal
+            :header="isEditingBranch ? 'Editar Sucursal' : `Nueva Sucursal - ${selectedCompanyForBranch?.name}`"
+            :style="{ width: '500px' }"
+            class="p-fluid"
+        >
+            <form @submit.prevent="submitBranchForm" class="space-y-4 pt-2">
+                <div>
+                    <label class="text-xs font-semibold text-base-content/80">Nombre de la Sucursal *</label>
+                    <InputText v-model="branchForm.name" class="w-full text-sm mt-1" placeholder="Ej. Sucursal Centro" required />
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-semibold text-base-content/80">Código Interno</label>
+                        <InputText v-model="branchForm.code" class="w-full text-sm mt-1" placeholder="SUC-01" />
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-base-content/80">Teléfono</label>
+                        <InputText v-model="branchForm.phone" class="w-full text-sm mt-1" placeholder="+1 234 567 890" />
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-xs font-semibold text-base-content/80">Email de Contacto</label>
+                    <InputText v-model="branchForm.email" type="email" class="w-full text-sm mt-1" placeholder="sucursal@empresa.com" />
+                </div>
+
+                <div>
+                    <label class="text-xs font-semibold text-base-content/80">Dirección</label>
+                    <InputText v-model="branchForm.address" class="w-full text-sm mt-1" placeholder="Av. Principal #123, Col. Centro" />
+                </div>
+
+                <div class="flex items-center justify-between rounded-xl bg-base-200/50 p-3 mt-2">
+                    <div>
+                        <div class="text-xs font-bold text-base-content">¿Es Sucursal Matriz / Principal?</div>
+                        <div class="text-[11px] text-base-content/50">La sucursal matriz representa la sede central de la empresa.</div>
+                    </div>
+                    <ToggleSwitch v-model="branchForm.is_main" />
+                </div>
+
+                <div class="flex items-center justify-between rounded-xl bg-base-200/50 p-3">
+                    <div>
+                        <div class="text-xs font-bold text-base-content">Estado Activo</div>
+                        <div class="text-[11px] text-base-content/50">Habilita o deshabilita la operación de esta sucursal.</div>
+                    </div>
+                    <ToggleSwitch v-model="branchForm.is_active" />
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-base-300">
+                    <div>
+                        <Button
+                            v-if="isEditingBranch && can?.branches_delete && (selectedCompanyForBranch?.branches_count > 1 || selectedCompanyForBranch?.branches?.length > 1)"
+                            label="Eliminar"
+                            icon="pi pi-trash"
+                            severity="danger"
+                            text
+                            size="small"
+                            type="button"
+                            @click="deleteBranch"
+                        />
+                    </div>
+                    <div class="flex gap-2">
+                        <Button label="Cancelar" severity="secondary" text size="small" type="button" @click="branchDialogVisible = false" />
+                        <Button :label="isEditingBranch ? 'Guardar Cambios' : 'Crear Sucursal'" type="submit" severity="primary" size="small" :loading="branchForm.processing" />
+                    </div>
                 </div>
             </form>
         </Dialog>

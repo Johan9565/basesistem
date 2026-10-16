@@ -33,6 +33,43 @@ class AtomicPermissionsSeeder extends Seeder
                 'module' => 'companies',
                 'description' => 'Activar o desactivar módulos en empresas',
             ],
+            [
+                'name' => 'companies.manage_owner',
+                'module' => 'companies',
+                'description' => 'Asignar o transferir el propietario de la empresa',
+            ],
+            [
+                'name' => 'companies.manage_all',
+                'module' => 'companies',
+                'description' => 'Seleccionar, alternar y configurar todas las empresas del sistema aunque no sean propias',
+            ],
+            [
+                'name' => 'companies.select_all',
+                'module' => 'companies',
+                'description' => 'Seleccionar y alternar entre todas las empresas del sistema en el conmutador de contexto',
+            ],
+
+            // --- 1.1 Módulo Sucursales de Empresa ---
+            [
+                'name' => 'branches.view',
+                'module' => 'branches',
+                'description' => 'Ver sucursales de la empresa',
+            ],
+            [
+                'name' => 'branches.create',
+                'module' => 'branches',
+                'description' => 'Crear y registrar nuevas sucursales',
+            ],
+            [
+                'name' => 'branches.edit',
+                'module' => 'branches',
+                'description' => 'Modificar información de sucursales',
+            ],
+            [
+                'name' => 'branches.delete',
+                'module' => 'branches',
+                'description' => 'Eliminar sucursales de la empresa',
+            ],
 
             // --- 2. Módulo Usuarios Clientes (SaaS) ---
             [
@@ -100,17 +137,7 @@ class AtomicPermissionsSeeder extends Seeder
                 'description' => 'Eliminar roles personalizados',
             ],
 
-            // --- 5. Módulo Componentes & Tema ---
-            [
-                'name' => 'components.view',
-                'module' => 'components',
-                'description' => 'Ver personalizador de estilos y temas',
-            ],
-            [
-                'name' => 'components.edit',
-                'module' => 'components',
-                'description' => 'Modificar temas, colores y logotipo',
-            ],
+
 
             // --- 6. Módulo Inventario / Productos ---
             [
@@ -132,6 +159,28 @@ class AtomicPermissionsSeeder extends Seeder
                 'name' => 'products.delete',
                 'module' => 'products',
                 'description' => 'Eliminar productos del catálogo',
+            ],
+
+            // --- 6.1 Módulo Pedidos (Descuento de Inventario) ---
+            [
+                'name' => 'orders.view',
+                'module' => 'orders',
+                'description' => 'Ver listado y detalles de pedidos',
+            ],
+            [
+                'name' => 'orders.create',
+                'module' => 'orders',
+                'description' => 'Crear pedidos y descontar inventario',
+            ],
+            [
+                'name' => 'orders.edit',
+                'module' => 'orders',
+                'description' => 'Modificar pedidos y estado de entrega',
+            ],
+            [
+                'name' => 'orders.delete',
+                'module' => 'orders',
+                'description' => 'Eliminar o cancelar pedidos y restaurar stock',
             ],
 
             // --- 7. Módulo Servicios ---
@@ -228,6 +277,28 @@ class AtomicPermissionsSeeder extends Seeder
                 'module' => 'whatsapp.send',
                 'description' => 'Enviar mensajes individuales o masivos',
             ],
+
+            // --- 12. Módulo WhatsApp CRM - Chat Test (Simulador Bot) ---
+            [
+                'name' => 'whatsapp.chat-test',
+                'module' => 'whatsapp.chat-test',
+                'description' => 'Acceso general al módulo Chat Test (Simulador)',
+            ],
+            [
+                'name' => 'whatsapp.chat-test.view',
+                'module' => 'whatsapp.chat-test',
+                'description' => 'Visualizar y acceder a la interfaz de Chat Test',
+            ],
+            [
+                'name' => 'whatsapp.chat-test.send',
+                'module' => 'whatsapp.chat-test',
+                'description' => 'Enviar mensajes de prueba en el simulador de bot',
+            ],
+            [
+                'name' => 'whatsapp.chat-test.reset',
+                'module' => 'whatsapp.chat-test',
+                'description' => 'Reiniciar historial de conversación y estado en pruebas',
+            ],
         ];
 
         $savedPermissions = [];
@@ -256,34 +327,39 @@ class AtomicPermissionsSeeder extends Seeder
         }
 
         // Actualizar ROL: Administrador de Empresa (Módulos operativos y empleados, SIN ROLES)
-        $companyAdminRole = RoleModel::where('role', 'company_admin')->first();
-        if ($companyAdminRole) {
-            $compAdminPermKeys = [
-                // Empleados
-                'employees.view', 'employees.create', 'employees.edit', 'employees.delete',
-                // Inventario
-                'products.view', 'products.create', 'products.edit', 'products.delete',
-                // Servicios
-                'services.view', 'services.create', 'services.edit', 'services.delete',
-                // Calendario
-                'whatsapp.calendar.view', 'whatsapp.calendar.sync', 'whatsapp.calendar.delete',
-                // WhatsApp Instancias
-                'whatsapp.instances.view', 'whatsapp.instances.create', 'whatsapp.instances.edit', 'whatsapp.instances.connect', 'whatsapp.instances.delete',
-                // WhatsApp Conversaciones
-                'whatsapp.conversations.view', 'whatsapp.conversations.delete', 'whatsapp.conversations.resume_bot',
-                // WhatsApp Envío
-                'whatsapp.send.view', 'whatsapp.send.execute',
-            ];
+        $compAdminPermKeys = [
+            // Empresas y Sucursales
+            'companies.view', 'companies.edit',
+            'branches.view', 'branches.create', 'branches.edit', 'branches.delete',
+            // Empleados
+            'employees.view', 'employees.create', 'employees.edit', 'employees.delete',
+            // Inventario
+            'products.view', 'products.create', 'products.edit', 'products.delete',
+            // Pedidos
+            'orders.view', 'orders.create', 'orders.edit', 'orders.delete',
+            // Servicios
+            'services.view', 'services.create', 'services.edit', 'services.delete',
+            // Calendario
+            'whatsapp.calendar.view', 'whatsapp.calendar.sync', 'whatsapp.calendar.delete',
+            // WhatsApp Instancias
+            'whatsapp.instances.view', 'whatsapp.instances.create', 'whatsapp.instances.edit', 'whatsapp.instances.connect', 'whatsapp.instances.delete',
+            // WhatsApp Conversaciones
+            'whatsapp.conversations.view', 'whatsapp.conversations.delete', 'whatsapp.conversations.resume_bot',
+            // WhatsApp Envío
+            'whatsapp.send.view', 'whatsapp.send.execute',
+        ];
 
-            $compAdminPerms = [];
-            foreach ($compAdminPermKeys as $key) {
-                if (isset($savedPermissions[$key])) {
-                    $compAdminPerms[] = $savedPermissions[$key];
-                }
+        $compAdminPerms = [];
+        foreach ($compAdminPermKeys as $key) {
+            if (isset($savedPermissions[$key])) {
+                $compAdminPerms[] = $savedPermissions[$key];
             }
+        }
 
-            $companyAdminRole->permissions = $compAdminPerms;
-            $companyAdminRole->save();
+        $companyAdminRoles = RoleModel::whereIn('role', ['company_admin', 'admin'])->get();
+        foreach ($companyAdminRoles as $roleModel) {
+            $roleModel->permissions = $compAdminPerms;
+            $roleModel->save();
         }
 
         // Invalidar caché de permisos

@@ -197,7 +197,15 @@ class GoogleCalendarService
                 ->where('google_event_id', $event['id'])
                 ->first();
 
+            $branchId = ! empty($instance->branch_id) ? (string) $instance->branch_id : null;
+            if (! $branchId && ! empty($instance->company_id)) {
+                $mainBranch = \App\Models\Branch::where('company_id', (string) $instance->company_id)->where('is_main', true)->first();
+                $branchId = $mainBranch ? (string) $mainBranch->_id : null;
+            }
+
             $payload = [
+                'company_id' => (string) ($instance->company_id ?? ''),
+                'branch_id' => $branchId,
                 'instance_name' => $instance->evolutionName(),
                 'user_phone' => $existing?->user_phone ?: 'google',
                 'summary' => $event['summary'],

@@ -16,27 +16,63 @@ use Throwable;
 
 class InstancesController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $instances = WhatsappInstance::query()
+        $user = $request->user();
+        $canSeeAllCompanies = $user ? $user->canSelectAllCompanies() : false;
+        $accessibleCompanyIds = $user ? $user->getAccessibleCompanyIds() : [];
+        $activeCompanyId = (string) (session('active_company_id') ?? '');
+
+        $query = WhatsappInstance::withoutGlobalScopes()->with(['company', 'branch']);
+
+        if (! $canSeeAllCompanies) {
+            $query->whereIn('company_id', $this->mongoIdValues($accessibleCompanyIds));
+        } elseif ($request->filled('company_id')) {
+            $query->whereIn('company_id', $this->mongoIdValues([(string) $request->query('company_id')]));
+        }
+
+        $instances = $query
             ->orderBy('instance_name')
             ->get()
             ->map(fn (WhatsappInstance $row) => $this->serialize($row))
             ->values();
 
-        $branches = \App\Models\Branch::where('is_active', true)
+        $branchesQuery = \App\Models\Branch::where('is_active', true);
+        if (! $canSeeAllCompanies) {
+            $branchesQuery->whereIn('company_id', $this->mongoIdValues($accessibleCompanyIds));
+        }
+
+        $branches = $branchesQuery
             ->orderBy('name')
-            ->get(['_id', 'name', 'is_main', 'address'])
+            ->get(['_id', 'company_id', 'name', 'is_main', 'address'])
             ->map(fn ($b) => [
                 'id' => (string) $b->_id,
+                'company_id' => (string) ($b->company_id ?? ''),
                 'name' => $b->name,
                 'is_main' => (bool) $b->is_main,
                 'address' => (string) ($b->address ?? ''),
             ]);
 
+        $companiesQuery = \App\Models\Company::query();
+        if (! $canSeeAllCompanies) {
+            $companiesQuery->whereInMongoIds($accessibleCompanyIds);
+        }
+        $companies = $companiesQuery
+            ->where('status', '!=', 'inactive')
+            ->orderBy('name')
+            ->get(['_id', 'name', 'slug'])
+            ->map(fn ($c) => [
+                'id' => (string) $c->_id,
+                'name' => $c->name,
+                'slug' => $c->slug,
+            ]);
+
         return Inertia::render('Whatsapp/Instances/Index', [
             'instances' => $instances,
             'branches' => $branches,
+            'companies' => $companies,
+            'canSeeAllCompanies' => $canSeeAllCompanies,
+            'activeCompanyId' => $activeCompanyId,
             'defaults' => [
                 'timezone' => (string) config('services.google_calendar.timezone', 'America/Merida'),
                 'calendar_id' => (string) config('services.google_calendar.calendar_id', ''),
@@ -56,8 +92,9 @@ class InstancesController extends Controller
                 'max:100',
                 'regex:/^[a-zA-Z0-9_-]+$/',
             ],
+            'company_id' => 'nullable|string',
             'branch_id' => 'nullable|string',
-            'google_calendar_id' => 'required|string|max:255',
+            'google_calendar_id' => 'nullable|string|max:255',
             'timezone' => 'nullable|string|max:64',
             'system_prompt' => 'nullable|string|max:5000',
             'business_name' => 'nullable|string|max:255',
@@ -65,11 +102,27 @@ class InstancesController extends Controller
             'status' => 'nullable|string|in:active,inactive',
             'create_in_evolution' => 'sometimes|boolean',
             'webhook_url' => 'nullable|string|max:500',
-            'credentials_file' => 'required|file|max:512|mimes:json,txt',
+            'credentials_file' => 'nullable|file|max:512|mimes:json,txt',
             'telegram_bot_token' => 'nullable|string|max:200',
             'telegram_allowed_user_ids' => 'nullable|string|max:2000',
             'register_telegram_webhook' => 'sometimes|boolean',
         ]);
+
+        $user = $request->user();
+        $canSeeAllCompanies = $user ? $user->canSelectAllCompanies() : false;
+        $accessibleCompanyIds = $user ? $user->getAccessibleCompanyIds() : [];
+
+        $targetCompanyId = null;
+        if (! empty($validated['company_id'])) {
+            if (! $canSeeAllCompanies && ! in_array((string) $validated['company_id'], $accessibleCompanyIds, true)) {
+                return back()->withInput()->withErrors([
+                    'company_id' => 'No tienes permiso para asociar una instancia a esta empresa.',
+                ]);
+            }
+            $targetCompanyId = (string) $validated['company_id'];
+        } else {
+            $targetCompanyId = session('active_company_id') ?: ($accessibleCompanyIds[0] ?? null);
+        }
 
         if (WhatsappInstance::query()->where('instance_name', $validated['instance_name'])->exists()) {
             return back()->withInput()->withErrors([
@@ -77,15 +130,18 @@ class InstancesController extends Controller
             ]);
         }
 
-        try {
-            $credentials = $this->storeCredentialsFile(
-                $request->file('credentials_file'),
-                $validated['instance_name'],
-            );
-        } catch (RuntimeException $e) {
-            return back()->withInput()->withErrors([
-                'credentials_file' => $e->getMessage(),
-            ]);
+        $credentials = null;
+        if ($request->hasFile('credentials_file')) {
+            try {
+                $credentials = $this->storeCredentialsFile(
+                    $request->file('credentials_file'),
+                    $validated['instance_name'],
+                );
+            } catch (RuntimeException $e) {
+                return back()->withInput()->withErrors([
+                    'credentials_file' => $e->getMessage(),
+                ]);
+            }
         }
 
         $createInEvolution = filter_var(
@@ -100,7 +156,9 @@ class InstancesController extends Controller
                     ! empty($validated['webhook_url']) ? $validated['webhook_url'] : null,
                 );
             } catch (Throwable $e) {
-                $this->deleteCredentialsFile($credentials['path']);
+                if ($credentials && ! empty($credentials['path'])) {
+                    $this->deleteCredentialsFile($credentials['path']);
+                }
 
                 return back()->withInput()->with('flash', [
                     'type' => 'error',
@@ -110,12 +168,13 @@ class InstancesController extends Controller
         }
 
         WhatsappInstance::query()->create([
+            'company_id' => $targetCompanyId,
             'instance_name' => $validated['instance_name'],
             'branch_id' => ! empty($validated['branch_id']) ? $validated['branch_id'] : null,
-            'google_calendar_id' => $validated['google_calendar_id'],
-            'google_credentials_path' => $credentials['path'],
-            'google_service_email' => $credentials['email'],
-            'timezone' => $validated['timezone'] ?: config('services.google_calendar.timezone'),
+            'google_calendar_id' => ! empty($validated['google_calendar_id']) ? $validated['google_calendar_id'] : null,
+            'google_credentials_path' => $credentials['path'] ?? null,
+            'google_service_email' => $credentials['email'] ?? null,
+            'timezone' => ($validated['timezone'] ?? null) ?: config('services.google_calendar.timezone'),
             'system_prompt' => $validated['system_prompt'] ?? null,
             'business_name' => $validated['business_name'] ?? null,
             'ai_provider' => $validated['ai_provider'] ?? 'deepseek',
@@ -158,7 +217,7 @@ class InstancesController extends Controller
 
         $validated = $request->validate([
             'branch_id' => 'nullable|string',
-            'google_calendar_id' => 'required|string|max:255',
+            'google_calendar_id' => 'nullable|string|max:255',
             'timezone' => 'nullable|string|max:64',
             'system_prompt' => 'nullable|string|max:5000',
             'business_name' => 'nullable|string|max:255',
@@ -174,8 +233,8 @@ class InstancesController extends Controller
 
         $payload = [
             'branch_id' => ! empty($validated['branch_id']) ? $validated['branch_id'] : null,
-            'google_calendar_id' => $validated['google_calendar_id'],
-            'timezone' => $validated['timezone'] ?: config('services.google_calendar.timezone'),
+            'google_calendar_id' => ! empty($validated['google_calendar_id']) ? $validated['google_calendar_id'] : null,
+            'timezone' => ($validated['timezone'] ?? null) ?: ($row->timezone ?: config('services.google_calendar.timezone')),
             'system_prompt' => $validated['system_prompt'] ?? null,
             'business_name' => $validated['business_name'] ?? null,
             'ai_provider' => $validated['ai_provider'],
@@ -384,10 +443,18 @@ class InstancesController extends Controller
 
     protected function findInstance(string $id): WhatsappInstance
     {
-        $row = WhatsappInstance::query()->find($id);
+        $row = WhatsappInstance::withoutGlobalScopes()->find($id);
 
         if (! $row) {
             abort(404);
+        }
+
+        $user = auth()->user();
+        if ($user && ! $user->canSelectAllCompanies()) {
+            $accessible = $user->getAccessibleCompanyIds();
+            if (! in_array((string) $row->company_id, $accessible, true)) {
+                abort(403, 'No tienes permiso para acceder a esta instancia.');
+            }
         }
 
         return $row;
@@ -477,6 +544,8 @@ class InstancesController extends Controller
 
         return [
             'id' => (string) $row->getKey(),
+            'company_id' => (string) ($row->company_id ?? ''),
+            'company_name' => (string) ($row->company?->name ?? ''),
             'instance_name' => (string) ($row->instance_name ?? ''),
             'evolution_instance_name' => $row->evolutionName(),
             'shares_session' => $row->evolutionName() !== (string) ($row->instance_name ?? ''),
@@ -605,5 +674,27 @@ class InstancesController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * @param  list<string>  $ids
+     * @return list<mixed>
+     */
+    protected function mongoIdValues(array $ids): array
+    {
+        $vals = [];
+        foreach ($ids as $id) {
+            $str = (string) $id;
+            if ($str === '') {
+                continue;
+            }
+            $vals[] = $str;
+            try {
+                $vals[] = new \MongoDB\BSON\ObjectId($str);
+            } catch (\Throwable $e) {
+            }
+        }
+
+        return array_values(array_unique($vals));
     }
 }

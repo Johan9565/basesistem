@@ -16,15 +16,29 @@ class CalendarController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
+        $canSeeAllCompanies = $user ? $user->canSelectAllCompanies() : false;
+        $accessibleCompanyIds = $user ? $user->getAccessibleCompanyIds() : [];
+
         $companyContext = app(\App\Services\Tenancy\CompanyContext::class);
         $companyId = $companyContext->getCompanyId();
         $membership = $user ? $user->getMembershipForCompany($companyId) : null;
         $roleModel = $user ? $user->role_data()->first() : null;
-        $isSuperAdmin = ($user && $user->email === 'johan_palma45@hotmail.com') || (bool) ($membership ? $membership->is_owner : false) || ($roleModel && $roleModel->role === 'superadmin');
         $roleSlug = $membership && $membership->role ? $membership->role->role : ($roleModel ? $roleModel->role : null);
-        $isSpecialist = ($roleSlug === 'especialista') && ! $isSuperAdmin;
+        $isSpecialist = ($roleSlug === 'especialista') && ! $canSeeAllCompanies;
 
-        $instances = WhatsappInstance::query()
+        $query = WhatsappInstance::withoutGlobalScopes()->with(['branch', 'company']);
+        if (! $canSeeAllCompanies) {
+            $searchVals = [];
+            foreach ($accessibleCompanyIds as $id) {
+                $searchVals[] = (string) $id;
+                try {
+                    $searchVals[] = new \MongoDB\BSON\ObjectId((string) $id);
+                } catch (\Throwable $e) {}
+            }
+            $query->whereIn('company_id', array_values(array_unique($searchVals)));
+        }
+
+        $instances = $query
             ->orderBy('instance_name')
             ->get()
             ->map(function (WhatsappInstance $row) use ($user, $isSpecialist) {
@@ -51,6 +65,10 @@ class CalendarController extends Controller
                 return [
                     'instance_name' => $name,
                     'evolution_instance_name' => $sessionKey,
+                    'company_name' => $row->company?->name ?? '',
+                    'branch_id' => (string) ($row->branch_id ?? ''),
+                    'branch_name' => $row->branch?->name ?? 'Sucursal Principal',
+                    'branch_code' => $row->branch?->code ?? '',
                     'appointment_count' => $count,
                     'next_at' => $next?->starts_at?->toIso8601String(),
                     'next_summary' => $next?->summary,
@@ -60,24 +78,31 @@ class CalendarController extends Controller
 
         return Inertia::render('Whatsapp/Calendar/Index', [
             'instances' => $instances,
+            'canSeeAllCompanies' => $canSeeAllCompanies,
         ]);
     }
 
     public function show(Request $request, string $instance)
     {
-        $row = WhatsappInstance::query()->where('instance_name', $instance)->first();
+        $user = $request->user();
+        $canSeeAllCompanies = $user ? $user->canSelectAllCompanies() : false;
+        $accessibleCompanyIds = $user ? $user->getAccessibleCompanyIds() : [];
+
+        $row = WhatsappInstance::withoutGlobalScopes()->where('instance_name', $instance)->first();
         if (! $row) {
             abort(404);
         }
 
-        $user = $request->user();
+        if (! $canSeeAllCompanies && ! in_array((string) $row->company_id, $accessibleCompanyIds, true)) {
+            abort(403, 'No tienes permiso para ver el calendario de esta instancia.');
+        }
+
         $companyContext = app(\App\Services\Tenancy\CompanyContext::class);
         $companyId = $companyContext->getCompanyId();
         $membership = $user ? $user->getMembershipForCompany($companyId) : null;
         $roleModel = $user ? $user->role_data()->first() : null;
-        $isSuperAdmin = ($user && $user->email === 'johan_palma45@hotmail.com') || (bool) ($membership ? $membership->is_owner : false) || ($roleModel && $roleModel->role === 'superadmin');
         $roleSlug = $membership && $membership->role ? $membership->role->role : ($roleModel ? $roleModel->role : null);
-        $isSpecialist = ($roleSlug === 'especialista') && ! $isSuperAdmin;
+        $isSpecialist = ($roleSlug === 'especialista') && ! $canSeeAllCompanies;
 
         $from = $request->query('from');
         $to = $request->query('to');
@@ -115,10 +140,14 @@ class CalendarController extends Controller
         }
 
         $appointments = $query
+            ->with('branch')
             ->limit(500)
             ->get()
             ->map(fn (WhatsappAppointment $a) => [
                 'id' => (string) $a->getKey(),
+                'branch_id' => (string) ($a->branch_id ?? $row->branch_id ?? ''),
+                'branch_name' => $a->branch?->name ?? $row->branch?->name ?? 'Sucursal Principal',
+                'branch_code' => $a->branch?->code ?? $row->branch?->code ?? '',
                 'summary' => (string) ($a->summary ?? ''),
                 'description' => (string) ($a->description ?? ''),
                 'user_phone' => (string) ($a->user_phone ?? ''),
@@ -136,6 +165,9 @@ class CalendarController extends Controller
         return Inertia::render('Whatsapp/Calendar/Show', [
             'instance' => [
                 'instance_name' => (string) $row->instance_name,
+                'branch_id' => (string) ($row->branch_id ?? ''),
+                'branch_name' => $row->branch?->name ?? 'Sucursal Principal',
+                'branch_code' => $row->branch?->code ?? '',
                 'google_calendar_id' => (string) ($row->google_calendar_id ?? ''),
                 'has_credentials' => filled($row->google_credentials_path),
             ],

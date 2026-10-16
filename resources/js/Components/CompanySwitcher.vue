@@ -9,7 +9,7 @@ const activeCompany = computed(() => page.props?.auth?.active_company ?? null);
 const userCompanies = computed(() => page.props?.auth?.user_companies ?? []);
 
 function toggleDropdown() {
-    if (userCompanies.value.length > 1) {
+    if (userCompanies.value.length > 1 || !activeCompany.value) {
         isOpen.value = !isOpen.value;
     }
 }
@@ -32,13 +32,13 @@ function switchCompany(companyId) {
 </script>
 
 <template>
-    <div v-if="activeCompany" class="relative inline-block text-left" v-click-outside="closeDropdown">
+    <div v-if="activeCompany || userCompanies.length > 0" class="relative inline-block text-left" v-click-outside="closeDropdown">
         <button
             type="button"
             @click="toggleDropdown"
             class="group inline-flex items-center gap-2 rounded-lg border border-base-300 bg-base-100/80 px-3 py-1.5 text-xs font-semibold text-base-content/80 shadow-xs backdrop-blur-md transition-all duration-200 hover:border-primary/40 hover:bg-base-200 hover:text-base-content focus:outline-hidden"
-            :class="{ 'cursor-default': userCompanies.length <= 1 }"
-            :title="userCompanies.length > 1 ? 'Cambiar de empresa' : 'Empresa activa'"
+            :class="{ 'cursor-default': userCompanies.length <= 1 && !!activeCompany }"
+            :title="userCompanies.length > 1 || !activeCompany ? 'Cambiar de empresa' : 'Empresa activa'"
         >
             <!-- Icono Empresa -->
             <span class="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -58,12 +58,12 @@ function switchCompany(companyId) {
             </span>
 
             <span class="max-w-[140px] truncate font-medium sm:max-w-[180px]">
-                {{ activeCompany.name }}
+                {{ activeCompany ? activeCompany.name : 'Seleccionar Empresa' }}
             </span>
 
-            <!-- Flecha desplegable si hay más de 1 empresa -->
+            <!-- Flecha desplegable si hay más de 1 empresa o si falta empresa activa -->
             <svg
-                v-if="userCompanies.length > 1"
+                v-if="userCompanies.length > 1 || !activeCompany"
                 xmlns="http://www.w3.org/2000/svg"
                 class="h-3.5 w-3.5 text-base-content/50 transition-transform duration-200"
                 :class="{ 'rotate-180': isOpen }"
@@ -84,11 +84,11 @@ function switchCompany(companyId) {
             leave-to-class="transform scale-95 opacity-0"
         >
             <div
-                v-if="isOpen && userCompanies.length > 1"
+                v-if="isOpen && (userCompanies.length > 1 || !activeCompany)"
                 class="absolute right-0 z-50 mt-2 w-64 origin-top-right rounded-xl border border-base-300 bg-base-100 p-1.5 shadow-2xl backdrop-blur-xl focus:outline-hidden"
             >
                 <div class="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-base-content/40">
-                    Tus Empresas Disponibles
+                    Empresas Disponibles
                 </div>
 
                 <div class="space-y-1">

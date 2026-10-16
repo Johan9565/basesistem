@@ -2,13 +2,12 @@
 
 namespace App\Models;
 
-use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use MongoDB\Laravel\Eloquent\Model;
 
 class Branch extends Model
 {
-    use BelongsToCompany, HasFactory;
+    use HasFactory;
 
     protected $connection = 'mongodb';
 
@@ -56,5 +55,10 @@ class Branch extends Model
     public function products()
     {
         return $this->hasMany(Product::class, 'branch_id');
+    }
+
+    public function appointments()
+    {
+        return $this->hasMany(WhatsappAppointment::class, 'branch_id');
     }
 }

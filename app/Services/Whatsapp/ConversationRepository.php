@@ -12,7 +12,7 @@ class ConversationRepository
         $limit = $limit ?? (int) config('services.whatsapp.history_limit', 15);
 
         // _id de Mongo es monotónico: evita desorden cuando created_at coincide al segundo.
-        return WhatsappMessage::query()
+        return WhatsappMessage::withoutGlobalScopes()
             ->where('instance_name', $instanceName)
             ->where('user_phone', $userPhone)
             ->orderBy('_id', 'desc')

@@ -21,7 +21,7 @@ class CompanyContextController extends Controller
 
         $accessibleIds = $user->getAccessibleCompanyIds();
 
-        if (! $user->isSuperAdmin() && ! in_array((string) $company->_id, $accessibleIds, true)) {
+        if (! in_array((string) $company->_id, $accessibleIds, true)) {
             return back()->with('flash', [
                 'type' => 'error',
                 'message' => 'No tienes acceso a la empresa seleccionada.',

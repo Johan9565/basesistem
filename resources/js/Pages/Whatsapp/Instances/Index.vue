@@ -25,6 +25,18 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    companies: {
+        type: Array,
+        default: () => [],
+    },
+    canSeeAllCompanies: {
+        type: Boolean,
+        default: false,
+    },
+    activeCompanyId: {
+        type: String,
+        default: '',
+    },
     defaults: {
         type: Object,
         default: () => ({
@@ -50,6 +62,7 @@ const isConnecting = ref(false);
 const isDeleting = ref(false);
 const editTab = ref('negocio');
 const createTab = ref('negocio');
+const companyFilter = ref('');
 
 const duplicateForm = useForm({
     instance_name: '',
@@ -85,15 +98,45 @@ const selected = computed(
     () => props.instances.find((i) => i.id === selectedId.value) ?? null,
 );
 
-const branchOptions = computed(() => [
-    { label: 'Toda la empresa (sin sucursal fija)', value: '' },
-    ...(props.branches || []).map((b) => ({
-        label: `${b.name}${b.is_main ? ' (Principal)' : ''}${b.address ? ' — ' + b.address : ''}`,
-        value: b.id,
+const companyFilterOptions = computed(() => [
+    { label: 'Todas las empresas', value: '' },
+    ...(props.companies || []).map((c) => ({
+        label: c.name,
+        value: c.id,
     })),
 ]);
 
+const companyCreateOptions = computed(() =>
+    (props.companies || []).map((c) => ({
+        label: c.name,
+        value: c.id,
+    })),
+);
+
+const filteredInstances = computed(() => {
+    if (!companyFilter.value) {
+        return props.instances;
+    }
+    return props.instances.filter((i) => String(i.company_id) === String(companyFilter.value));
+});
+
+const branchOptions = computed(() => {
+    const targetCompId = form.company_id || props.activeCompanyId || '';
+    const filteredBranches = targetCompId
+        ? (props.branches || []).filter((b) => !b.company_id || String(b.company_id) === String(targetCompId))
+        : (props.branches || []);
+
+    return [
+        { label: 'Toda la empresa (sin sucursal fija)', value: '' },
+        ...filteredBranches.map((b) => ({
+            label: `${b.name}${b.is_main ? ' (Principal)' : ''}${b.address ? ' — ' + b.address : ''}`,
+            value: b.id,
+        })),
+    ];
+});
+
 const form = useForm({
+    company_id: props.activeCompanyId || '',
     instance_name: '',
     branch_id: '',
     google_calendar_id: '',
@@ -158,6 +201,7 @@ function openCreateDialog() {
     selectedId.value = null;
     createTab.value = 'negocio';
     form.reset();
+    form.company_id = companyFilter.value || props.activeCompanyId || (props.companies[0]?.id ?? '');
     form.instance_name = '';
     form.branch_id = '';
     form.google_calendar_id = props.defaults.calendar_id ?? '';
@@ -192,6 +236,19 @@ function submitCreate() {
         forceFormData: true,
         preserveScroll: true,
         onSuccess: () => closeCreateDialog(),
+        onError: (errors) => {
+            const tabFieldMap = {
+                negocio: ['instance_name', 'business_name', 'company_id', 'branch_id', 'system_prompt', 'status'],
+                tecnico: ['google_calendar_id', 'credentials_file', 'timezone', 'ai_provider', 'webhook_url'],
+                telegram: ['telegram_bot_token', 'telegram_allowed_user_ids'],
+            };
+            for (const [tab, fields] of Object.entries(tabFieldMap)) {
+                if (fields.some((f) => errors[f])) {
+                    createTab.value = tab;
+                    break;
+                }
+            }
+        },
     });
 }
 
@@ -201,9 +258,10 @@ function openEditDialog(id) {
     selectedId.value = id;
     editTab.value = 'negocio';
     form.clearErrors();
+    form.company_id = row.company_id || '';
     form.instance_name = row.instance_name;
     form.branch_id = row.branch_id || '';
-    form.google_calendar_id = row.google_calendar_id;
+    form.google_calendar_id = row.google_calendar_id ?? '';
     form.timezone = row.timezone;
     form.system_prompt = row.system_prompt ?? '';
     form.business_name = row.business_name ?? '';
@@ -362,17 +420,28 @@ function closeConnectDialog() {
                                 Instancias
                             </h3>
                             <p class="mt-1 text-sm text-base-content/60">
-                                {{ instances.length }} registrada{{
-                                    instances.length !== 1 ? 's' : ''
+                                {{ filteredInstances.length }} registrada{{
+                                    filteredInstances.length !== 1 ? 's' : ''
                                 }}. Gestiona Evolution, Calendar y prompt.
                             </p>
                         </div>
-                        <Button
-                            label="Nueva instancia"
-                            icon="pi pi-plus"
-                            severity="secondary"
-                            @click="openCreateDialog"
-                        />
+                        <div class="flex flex-wrap items-center gap-3">
+                            <Select
+                                v-if="canSeeAllCompanies || companies.length > 1"
+                                v-model="companyFilter"
+                                :options="companyFilterOptions"
+                                optionLabel="label"
+                                optionValue="value"
+                                placeholder="Filtrar por empresa"
+                                class="w-56 text-sm"
+                            />
+                            <Button
+                                label="Nueva instancia"
+                                icon="pi pi-plus"
+                                severity="secondary"
+                                @click="openCreateDialog"
+                            />
+                        </div>
                     </div>
 
                     <div class="overflow-x-auto p-6">
@@ -393,7 +462,7 @@ function closeConnectDialog() {
                             </thead>
                             <tbody class="divide-y divide-base-300">
                                 <tr
-                                    v-for="row in instances"
+                                    v-for="row in filteredInstances"
                                     :key="row.id"
                                     class="text-base-content"
                                 >
@@ -404,6 +473,13 @@ function closeConnectDialog() {
                                             class="mt-0.5 text-xs font-normal text-base-content/50"
                                         >
                                             {{ row.business_name }}
+                                        </div>
+                                        <div
+                                            v-if="row.company_name"
+                                            class="mt-0.5 flex items-center gap-1 text-xs font-normal text-secondary"
+                                        >
+                                            <i class="pi pi-building text-[10px]" />
+                                            {{ row.company_name }}
                                         </div>
                                         <div
                                             v-if="row.branch_name"
@@ -460,14 +536,14 @@ function closeConnectDialog() {
                                             :class="
                                                 row.has_credentials
                                                     ? 'bg-success/15 text-success'
-                                                    : 'bg-error/15 text-error'
+                                                    : 'bg-base-200 text-base-content/50'
                                             "
-                                            :title="row.google_service_email || ''"
+                                            :title="row.google_service_email || 'Sin credenciales configuradas'"
                                         >
                                             {{
                                                 row.has_credentials
                                                     ? 'JSON OK'
-                                                    : 'Sin JSON'
+                                                    : 'Opcional'
                                             }}
                                         </span>
                                     </td>
@@ -570,6 +646,22 @@ function closeConnectDialog() {
                     <p class="text-sm text-base-content/60">
                         Cómo se identifica el negocio, sucursal a la que pertenece y cómo habla el asistente.
                     </p>
+                    <div v-if="canSeeAllCompanies || companies.length > 1">
+                        <InputLabel value="Empresa" />
+                        <Select
+                            v-model="form.company_id"
+                            :options="companyCreateOptions"
+                            optionLabel="label"
+                            optionValue="value"
+                            class="mt-1 block w-full"
+                            placeholder="Seleccionar empresa"
+                        />
+                        <p class="mt-1 text-xs text-base-content/45">
+                            Empresa a la que pertenecerá esta instancia de WhatsApp.
+                        </p>
+                        <InputError :message="form.errors.company_id" class="mt-2" />
+                    </div>
+
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div>
                             <InputLabel value="Nombre técnico (Evolution)" />
@@ -641,19 +733,22 @@ function closeConnectDialog() {
                         Google Calendar, zona horaria e inteligencia artificial.
                     </p>
                     <div>
-                        <InputLabel value="Google Calendar ID" />
+                        <InputLabel value="Google Calendar ID (opcional)" />
                         <InputText
                             v-model="form.google_calendar_id"
                             class="mt-1 block w-full"
                             placeholder="correo@gmail.com o ID del calendario"
                         />
+                        <p class="mt-1 text-xs text-base-content/45">
+                            Opcional. Déjalo en blanco si no vas a sincronizar citas con Google Calendar.
+                        </p>
                         <InputError
                             :message="form.errors.google_calendar_id"
                             class="mt-2"
                         />
                     </div>
                     <div>
-                        <InputLabel value="JSON de cuenta de servicio (Google)" />
+                        <InputLabel value="JSON de cuenta de servicio de Google (opcional)" />
                         <input
                             ref="credentialsFileInput"
                             type="file"
@@ -662,7 +757,7 @@ function closeConnectDialog() {
                             @change="onCredentialsSelected($event, 'create')"
                         />
                         <p class="mt-1 text-xs text-base-content/45">
-                            Comparte el calendario con el <code>client_email</code> de ese JSON.
+                            Opcional. Solo necesario si vinculas Google Calendar. Comparte el calendario con el <code>client_email</code> de ese JSON.
                         </p>
                         <InputError
                             :message="form.errors.credentials_file"
@@ -929,13 +1024,14 @@ function closeConnectDialog() {
                 <!-- Técnico -->
                 <div v-show="editTab === 'tecnico'" class="space-y-4">
                     <div>
-                        <InputLabel value="Google Calendar ID" />
+                        <InputLabel value="Google Calendar ID (opcional)" />
                         <InputText
                             v-model="form.google_calendar_id"
                             class="mt-1 block w-full"
+                            placeholder="correo@gmail.com o ID del calendario"
                         />
                         <p class="mt-1 text-xs text-base-content/45">
-                            Correo del calendario o ID compartido con la cuenta de servicio.
+                            Opcional. Correo del calendario o ID compartido con la cuenta de servicio.
                         </p>
                         <InputError
                             :message="form.errors.google_calendar_id"
@@ -946,7 +1042,7 @@ function closeConnectDialog() {
                         <div class="flex flex-wrap items-start justify-between gap-2">
                             <div>
                                 <p class="text-sm font-medium text-base-content">
-                                    Credenciales Google
+                                    Credenciales Google (opcional)
                                 </p>
                                 <p
                                     v-if="selected?.google_service_email"
@@ -956,9 +1052,9 @@ function closeConnectDialog() {
                                 </p>
                                 <p
                                     v-else
-                                    class="mt-1 text-xs text-error"
+                                    class="mt-1 text-xs text-base-content/50"
                                 >
-                                    Sin JSON cargado
+                                    Sin JSON cargado (opcional)
                                 </p>
                             </div>
                             <span
@@ -966,10 +1062,10 @@ function closeConnectDialog() {
                                 :class="
                                     selected?.has_credentials
                                         ? 'badge-success'
-                                        : 'badge-error'
+                                        : 'badge-ghost'
                                 "
                             >
-                                {{ selected?.has_credentials ? 'Listo' : 'Falta' }}
+                                {{ selected?.has_credentials ? 'Listo' : 'No configurado' }}
                             </span>
                         </div>
                         <InputLabel

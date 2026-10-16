@@ -301,8 +301,9 @@ function dialItemsFor(employee) {
                 <h2 class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">
                     Equipo de Empleados
                 </h2>
-                <div v-if="activeCompany" class="text-sm font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1 rounded-full w-fit">
-                    🏢 {{ activeCompany.name }}
+                <div v-if="activeCompany" class="text-sm font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1 rounded-full w-fit flex items-center gap-1.5">
+                    <i class="pi pi-building text-xs"></i>
+                    <span>{{ activeCompany.name }}</span>
                 </div>
             </div>
         </template>
