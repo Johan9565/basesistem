@@ -78,7 +78,7 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
 Route::middleware(['auth', 'module:inventory', 'permission:products'])->group(function () {
     Route::get('/products', [ProductsController::class, 'index'])->middleware('permission:products.view')->name('products');
     Route::post('/products', [ProductsController::class, 'store'])->middleware('permission:products.create')->name('products.store');
-    Route::patch('/products/{product}', [ProductsController::class, 'update'])->middleware('permission:products.edit')->name('products.update');
+    Route::match(['patch', 'post'], '/products/{product}', [ProductsController::class, 'update'])->middleware('permission:products.edit')->name('products.update');
     Route::delete('/products/{product}', [ProductsController::class, 'destroy'])->middleware('permission:products.delete')->name('products.destroy');
 });
 
@@ -92,7 +92,7 @@ Route::middleware(['auth', 'module:orders', 'permission:orders'])->group(functio
 Route::middleware(['auth', 'module:services', 'permission:services'])->group(function () {
     Route::get('/services', [ServicesController::class, 'index'])->middleware('permission:services.view')->name('services');
     Route::post('/services', [ServicesController::class, 'store'])->middleware('permission:services.create')->name('services.store');
-    Route::patch('/services/{service}', [ServicesController::class, 'update'])->middleware('permission:services.edit')->name('services.update');
+    Route::match(['patch', 'post'], '/services/{service}', [ServicesController::class, 'update'])->middleware('permission:services.edit')->name('services.update');
     Route::delete('/services/{service}', [ServicesController::class, 'destroy'])->middleware('permission:services.delete')->name('services.destroy');
 });
 

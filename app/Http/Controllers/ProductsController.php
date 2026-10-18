@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -52,7 +53,14 @@ class ProductsController extends Controller
             $query->where('branch_id', $branchId);
         }
 
-        $products = $query->paginate(15)->through(function ($p) {
+        $products = $query->paginate(16)->through(function ($p) {
+            $imageUrl = $p->image_url;
+
+            // Si el producto no tenía imagen persistida en BD, guardarla permanentemente
+            if (empty($p->getRawOriginal('image_url')) && empty($p->image_path) && ! empty($imageUrl)) {
+                $p->update(['image_url' => $imageUrl]);
+            }
+
             return [
                 'id' => (string) $p->_id,
                 'branch_id' => (string) ($p->branch_id ?? ''),
@@ -66,6 +74,8 @@ class ProductsController extends Controller
                 'cost' => $p->cost,
                 'stock' => $p->stock,
                 'min_stock' => $p->min_stock,
+                'image_path' => $p->image_path ?? null,
+                'image_url' => $imageUrl,
                 'is_active' => (bool) $p->is_active,
             ];
         })->withQueryString();
@@ -95,6 +105,8 @@ class ProductsController extends Controller
             'cost' => 'nullable|numeric|min:0',
             'stock' => 'required|integer|min:0',
             'min_stock' => 'nullable|integer|min:0',
+            'image' => 'nullable|image|max:5120',
+            'image_url' => 'nullable|string|max:1000',
             'is_active' => 'boolean',
         ]);
 
@@ -105,6 +117,14 @@ class ProductsController extends Controller
                 ->first();
             $validated['branch_id'] = $mainBranch ? (string) $mainBranch->_id : null;
         }
+
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('products', 'public');
+            $validated['image_path'] = $path;
+            $validated['image_url'] = asset('storage/'.$path);
+        }
+
+        unset($validated['image']);
 
         Product::create($validated);
 
@@ -129,6 +149,9 @@ class ProductsController extends Controller
             'cost' => 'nullable|numeric|min:0',
             'stock' => 'required|integer|min:0',
             'min_stock' => 'nullable|integer|min:0',
+            'image' => 'nullable|image|max:5120',
+            'image_url' => 'nullable|string|max:1000',
+            'remove_image' => 'nullable|boolean',
             'is_active' => 'boolean',
         ]);
 
@@ -139,6 +162,23 @@ class ProductsController extends Controller
                 ->first();
             $validated['branch_id'] = $mainBranch ? (string) $mainBranch->_id : null;
         }
+
+        if ($request->boolean('remove_image')) {
+            if (! empty($product->image_path)) {
+                Storage::disk('public')->delete($product->image_path);
+            }
+            $validated['image_path'] = null;
+            $validated['image_url'] = null;
+        } elseif ($request->hasFile('image')) {
+            if (! empty($product->image_path)) {
+                Storage::disk('public')->delete($product->image_path);
+            }
+            $path = $request->file('image')->store('products', 'public');
+            $validated['image_path'] = $path;
+            $validated['image_url'] = asset('storage/'.$path);
+        }
+
+        unset($validated['image'], $validated['remove_image']);
 
         $product->update($validated);
 
@@ -153,6 +193,10 @@ class ProductsController extends Controller
      */
     public function destroy(Product $product): RedirectResponse
     {
+        if (! empty($product->image_path)) {
+            Storage::disk('public')->delete($product->image_path);
+        }
+
         $product->delete();
 
         return back()->with('flash', [

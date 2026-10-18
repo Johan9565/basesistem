@@ -668,6 +668,7 @@ class AppointmentOrchestrator
             'create_order' => $this->toolCreateOrder($instance, $phone, $args),
             'list_my_orders' => $this->toolListMyOrders($instance, $phone, $args),
             'query_company_services' => $this->toolQueryCompanyServices($instance, $args),
+            'send_catalog_image' => $this->toolSendCatalogImage($instance, $phone, $args),
             default => ['ok' => false, 'error' => "Herramienta desconocida: {$name}"],
         };
     }
@@ -705,6 +706,8 @@ class AppointmentOrchestrator
             'stock' => $p->stock,
             'category' => $p->category,
             'available' => ($p->stock ?? 0) > 0,
+            'has_image' => ! empty($p->image_url) || ! empty($p->image_path),
+            'image_url' => $p->image_url ?? ($p->image_path ? asset('storage/'.$p->image_path) : null),
         ])->toArray();
 
         return [
@@ -739,12 +742,124 @@ class AppointmentOrchestrator
             'duration_minutes' => $s->duration_minutes,
             'price' => $s->price,
             'description' => $s->description,
+            'has_image' => ! empty($s->image_url) || ! empty($s->image_path),
+            'image_url' => $s->image_url ?? ($s->image_path ? asset('storage/'.$s->image_path) : null),
         ])->toArray();
 
         return [
             'ok' => true,
             'count' => count($services),
             'services' => $services,
+        ];
+    }
+
+    /**
+     * Envía al cliente la fotografía o imagen oficial de un producto o servicio por WhatsApp.
+     */
+    protected function toolSendCatalogImage(WhatsappInstance $instance, string $phone, array $args): array
+    {
+        $company = $instance->company ?: (! empty($instance->company_id) ? \App\Models\Company::find($instance->company_id) : null);
+        $companyId = $company ? (string) $company->_id : (string) $instance->company_id;
+
+        $term = trim((string) ($args['name_or_sku'] ?? ''));
+        $type = strtolower(trim((string) ($args['type'] ?? 'any')));
+        $customCaption = trim((string) ($args['caption'] ?? ''));
+
+        if ($term === '') {
+            return [
+                'ok' => false,
+                'image_sent' => false,
+                'error' => 'Debes especificar el nombre o SKU del producto o servicio.',
+            ];
+        }
+
+        $product = null;
+        $service = null;
+
+        if (in_array($type, ['product', 'any'], true)) {
+            $productQuery = \App\Models\Product::query()->where('is_active', true);
+            if ($companyId !== '') {
+                $productQuery->where('company_id', $companyId);
+            }
+            $product = $productQuery->where(function ($q) use ($term) {
+                $q->where('sku', 'like', "%{$term}%")
+                    ->orWhere('name', 'like', "%{$term}%")
+                    ->orWhere('description', 'like', "%{$term}%");
+            })->first();
+        }
+
+        if (! $product && in_array($type, ['service', 'any'], true)) {
+            $serviceQuery = \App\Models\Service::query()->where('is_active', true);
+            if ($companyId !== '') {
+                $serviceQuery->where('company_id', $companyId);
+            }
+            $service = $serviceQuery->where(function ($q) use ($term) {
+                $q->where('name', 'like', "%{$term}%")
+                    ->orWhere('description', 'like', "%{$term}%");
+            })->first();
+        }
+
+        if (! $product && ! $service) {
+            return [
+                'ok' => false,
+                'image_sent' => false,
+                'error' => "No se encontró ningún producto o servicio que coincida con '{$term}'.",
+                'message' => "No encontré en el catálogo ningún ítem con el nombre '{$term}'.",
+            ];
+        }
+
+        $item = $product ?: $service;
+        $itemType = $product ? 'product' : 'service';
+        $imageUrl = $item->image_url ?? ($item->image_path ? asset('storage/'.$item->image_path) : null);
+
+        if (empty($imageUrl)) {
+            return [
+                'ok' => false,
+                'image_sent' => false,
+                'item_name' => $item->name,
+                'item_type' => $itemType,
+                'message' => "El ".($itemType === 'product' ? 'producto' : 'servicio')." '{$item->name}' no tiene una fotografía cargada en el sistema. Explícaselo cordialmente al cliente y ofrécele información detallada por texto.",
+            ];
+        }
+
+        $sessionKey = $instance->evolutionName();
+        $caption = $customCaption !== '' ? $customCaption : "Aquí tienes la imagen de {$item->name}";
+
+        $isSim = str_starts_with($phone, '5219999999999') || str_starts_with($sessionKey, 'sim:');
+        if (! $isSim) {
+            try {
+                $this->evolution->sendImage($sessionKey, $phone, $imageUrl, $caption);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('toolSendCatalogImage sendImage error', [
+                    'instance' => $sessionKey,
+                    'phone' => $phone,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        // Registrar mensaje de imagen en el historial de la conversación
+        $this->conversations->append(
+            $sessionKey,
+            $phone,
+            'assistant',
+            $caption,
+            metadata: [
+                'image_url' => $imageUrl,
+                'item_name' => $item->name,
+                'item_type' => $itemType,
+                'sent_via_tool' => true,
+            ]
+        );
+
+        return [
+            'ok' => true,
+            'image_sent' => true,
+            'item_name' => $item->name,
+            'item_type' => $itemType,
+            'image_url' => $imageUrl,
+            'caption' => $caption,
+            'message' => "La fotografía de '{$item->name}' fue enviada con éxito al cliente.",
         ];
     }
 
@@ -1963,6 +2078,10 @@ Ventas y Generación de Pedidos:
 7) Si el cliente consulta por compras previas o el estado de sus pedidos, usa `list_my_orders`.
 8) Sé conciso y directo: responde en 2 a 3 oraciones claras sin rodeos, párrafos extensos ni introducciones redundantes.
 
+Envío de Fotos e Imágenes del Catálogo:
+1) Si el cliente pide fotos, imágenes, catálogos visuales o ver cómo luce un producto o servicio (ej. "tienes fotos?", "mándame foto del producto X", "cómo se ve el servicio Y"), ejecuta inmediatamente la herramienta `send_catalog_image` con el nombre o SKU y un pie de foto amigable.
+2) Si el producto o servicio cuenta con imagen en el sistema, `send_catalog_image` la enviará automáticamente al chat del cliente. Si no cuenta con fotografía registrada, la herramienta te lo informará para que se lo expliques con cortesía al cliente y le des detalles por texto.
+
 Herramientas:
 - update_booking_state: guarda etapa y datos (name, service, date, time, location). name/service nuevos sobrescriben; location debe incluir ciudad si la dijo.
 - check_availability: consulta ocupación real (sistema + Google) antes de ofrecer un horario.
@@ -1974,6 +2093,7 @@ Herramientas:
 - create_order: genera pedido y descuenta inventario automáticamente cuando el cliente confirma su compra.
 - list_my_orders: consulta pedidos y compras registradas para este teléfono.
 - query_company_services: consulta catálogo de servicios de la empresa.
+- send_catalog_image: envía directamente la foto o imagen oficial de un producto o servicio al WhatsApp del cliente cuando éste lo solicita.
 - escalate_to_human: dudas fuera de catálogo, quejas complejas, pide persona, o bucle 3 veces. NUNCA digas que transfieres a un humano ni que eres un bot limitado.
 
 Reglas transversales:
@@ -2291,7 +2411,10 @@ PROMPT;
 
             $dbServices = $servicesQuery->get();
             if ($dbServices->isNotEmpty()) {
-                $servicesText = $dbServices->map(fn ($s) => "- {$s->name}: \${$s->price} ({$s->duration_minutes} min)".($s->description ? " - {$s->description}" : ''))->implode("\n");
+                $servicesText = $dbServices->map(function ($s) {
+                    $hasPhoto = (! empty($s->image_url) || ! empty($s->image_path)) ? ' [Foto disponible]' : '';
+                    return "- {$s->name}: \${$s->price} ({$s->duration_minutes} min){$hasPhoto}".($s->description ? " - {$s->description}" : '');
+                })->implode("\n");
                 $sections['Catálogo oficial de Servicios'] = $servicesText;
             }
         }
@@ -2304,7 +2427,10 @@ PROMPT;
 
             $dbProducts = $productsQuery->limit(25)->get();
             if ($dbProducts->isNotEmpty()) {
-                $productsText = $dbProducts->map(fn ($p) => "- [{$p->sku}] {$p->name}: \${$p->price} (Stock: {$p->stock})".($p->description ? " - {$p->description}" : ''))->implode("\n");
+                $productsText = $dbProducts->map(function ($p) {
+                    $hasPhoto = (! empty($p->image_url) || ! empty($p->image_path)) ? ' [Foto disponible]' : '';
+                    return "- [{$p->sku}] {$p->name}: \${$p->price} (Stock: {$p->stock}){$hasPhoto}".($p->description ? " - {$p->description}" : '');
+                })->implode("\n");
                 $sections['Catálogo de Productos disponibles en Inventario'] = $productsText;
             }
         }

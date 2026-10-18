@@ -14,6 +14,13 @@ interface MessengerGatewayInterface
     public function sendText(string $instance, string $phone, string $text): array;
 
     /**
+     * Envía una imagen o archivo multimedia al cliente.
+     *
+     * @return array<string, mixed>
+     */
+    public function sendImage(string $instance, string $phone, string $imageUrlOrPath, ?string $caption = null, ?string $fileName = null): array;
+
+    /**
      * Indica "escribiendo..." al cliente (best-effort; no debe tumbar el flujo).
      */
     public function sendTyping(string $instance, string $phone): void;

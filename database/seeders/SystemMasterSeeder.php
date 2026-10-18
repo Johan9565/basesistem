@@ -669,6 +669,7 @@ class SystemMasterSeeder extends Seeder
             'description' => 'Profilaxis dental completa, eliminación de sarro y pulido dental.',
             'duration_minutes' => 45,
             'price' => 650.00,
+            'image_url' => 'https://images.unsplash.com/photo-1606811841689-23dfddce3e95?auto=format&fit=crop&w=800&q=80',
             'assigned_user_ids' => [(string) $drGarciaUser->_id],
             'is_active' => true,
         ]);
@@ -678,6 +679,7 @@ class SystemMasterSeeder extends Seeder
             'description' => 'Tratamiento estético de aclaramiento dental en una sola sesión.',
             'duration_minutes' => 60,
             'price' => 1800.00,
+            'image_url' => 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=800&q=80',
             'assigned_user_ids' => [(string) $drGarciaUser->_id],
             'is_active' => true,
         ]);
@@ -687,6 +689,7 @@ class SystemMasterSeeder extends Seeder
             'description' => 'Revisión odontológica general, diagnóstico con cámara intraoral.',
             'duration_minutes' => 30,
             'price' => 350.00,
+            'image_url' => 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=800&q=80',
             'assigned_user_ids' => [(string) $drGarciaUser->_id],
             'is_active' => true,
         ]);
@@ -702,6 +705,7 @@ class SystemMasterSeeder extends Seeder
             'cost' => 480.00,
             'stock' => 25,
             'min_stock' => 5,
+            'image_url' => 'https://images.unsplash.com/photo-1559494007-9f5847c49d94?auto=format&fit=crop&w=800&q=80',
             'is_active' => true,
         ]);
         Product::create([
@@ -714,6 +718,7 @@ class SystemMasterSeeder extends Seeder
             'cost' => 75.00,
             'stock' => 50,
             'min_stock' => 10,
+            'image_url' => 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80',
             'is_active' => true,
         ]);
 
@@ -728,6 +733,7 @@ class SystemMasterSeeder extends Seeder
             'cost' => 110.00,
             'stock' => 200,
             'min_stock' => 20,
+            'image_url' => 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=800&q=80',
             'is_active' => true,
         ]);
         Product::create([
@@ -740,6 +746,7 @@ class SystemMasterSeeder extends Seeder
             'cost' => 260.00,
             'stock' => 40,
             'min_stock' => 8,
+            'image_url' => 'https://images.unsplash.com/photo-1584017911766-d451b3d0e843?auto=format&fit=crop&w=800&q=80',
             'is_active' => true,
         ]);
         Product::create([
@@ -752,6 +759,7 @@ class SystemMasterSeeder extends Seeder
             'cost' => 210.00,
             'stock' => 60,
             'min_stock' => 10,
+            'image_url' => 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=80',
             'is_active' => true,
         ]);
 
@@ -762,6 +770,7 @@ class SystemMasterSeeder extends Seeder
             'description' => 'Sesión de consultoría en derecho mercantil y contratos.',
             'duration_minutes' => 60,
             'price' => 1500.00,
+            'image_url' => 'https://images.unsplash.com/photo-1450133064473-71024230f91b?auto=format&fit=crop&w=800&q=80',
             'assigned_user_ids' => [(string) $licSanchezUser->_id],
             'is_active' => true,
         ]);
@@ -771,6 +780,7 @@ class SystemMasterSeeder extends Seeder
             'description' => 'Revisión y diagnóstico de situación tributaria.',
             'duration_minutes' => 90,
             'price' => 2800.00,
+            'image_url' => 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
             'assigned_user_ids' => [(string) $licSanchezUser->_id],
             'is_active' => true,
         ]);

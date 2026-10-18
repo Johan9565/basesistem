@@ -34,6 +34,11 @@ trait HasWhatsappBookingTools
             $tools[] = $this->queryCompanyServicesToolDefinition();
         }
 
+        // Envío de imágenes de productos y servicios por WhatsApp
+        if (! $company || $company->isModuleEnabled('inventory') || $company->isModuleEnabled('services')) {
+            $tools[] = $this->sendCatalogImageToolDefinition();
+        }
+
         return $tools;
     }
 
@@ -115,6 +120,39 @@ trait HasWhatsappBookingTools
                             'description' => 'Término de búsqueda o nombre del servicio.',
                         ],
                     ],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Herramienta para enviar al cliente fotografías o imágenes de productos o servicios del catálogo.
+     */
+    public function sendCatalogImageToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'send_catalog_image',
+                'description' => 'Envía al cliente de WhatsApp la fotografía o imagen oficial de un producto del inventario o servicio del catálogo. Úsala inmediatamente cuando el cliente solicite ver fotos, imágenes, catálogos visuales o cómo luce un producto o servicio.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'name_or_sku' => [
+                            'type' => 'string',
+                            'description' => 'Nombre, término clave o SKU del producto o servicio cuya foto se desea enviar.',
+                        ],
+                        'type' => [
+                            'type' => 'string',
+                            'enum' => ['product', 'service', 'any'],
+                            'description' => 'Tipo de ítem ("product" para producto de inventario, "service" para servicio del catálogo, o "any" para buscar en ambos). Por defecto "any".',
+                        ],
+                        'caption' => [
+                            'type' => 'string',
+                            'description' => 'Pie de foto amigable y breve que acompañará a la imagen (ej: "Aquí tienes la foto del producto X").',
+                        ],
+                    ],
+                    'required' => ['name_or_sku'],
                 ],
             ],
         ];

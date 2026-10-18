@@ -6,6 +6,7 @@ use App\Models\Service;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -52,7 +53,14 @@ class ServicesController extends Controller
             $query->where('branch_id', $branchId);
         }
 
-        $services = $query->paginate(15)->through(function ($s) {
+        $services = $query->paginate(16)->through(function ($s) {
+            // Auto-persistir imagen libre si no tiene una guardada explícitamente en base de datos
+            $imageUrl = $s->image_url;
+            if (empty($s->getRawOriginal('image_url')) && ! empty($imageUrl)) {
+                $s->image_url = $imageUrl;
+                $s->save();
+            }
+
             return [
                 'id' => (string) $s->_id,
                 'branch_id' => (string) ($s->branch_id ?? ''),
@@ -63,6 +71,8 @@ class ServicesController extends Controller
                 'duration_minutes' => $s->duration_minutes,
                 'price' => $s->price,
                 'assigned_user_ids' => $s->assigned_user_ids ?? [],
+                'image_path' => $s->image_path ?? null,
+                'image_url' => $imageUrl,
                 'is_active' => (bool) $s->is_active,
             ];
         })->withQueryString();
@@ -99,6 +109,8 @@ class ServicesController extends Controller
             'price' => 'required|numeric|min:0',
             'assigned_user_ids' => 'nullable|array',
             'assigned_user_ids.*' => 'string',
+            'image' => 'nullable|image|max:5120',
+            'image_url' => 'nullable|string|max:1000',
             'is_active' => 'boolean',
         ]);
 
@@ -109,6 +121,14 @@ class ServicesController extends Controller
                 ->first();
             $validated['branch_id'] = $mainBranch ? (string) $mainBranch->_id : null;
         }
+
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('services', 'public');
+            $validated['image_path'] = $path;
+            $validated['image_url'] = asset('storage/'.$path);
+        }
+
+        unset($validated['image']);
 
         Service::create($validated);
 
@@ -131,6 +151,9 @@ class ServicesController extends Controller
             'price' => 'required|numeric|min:0',
             'assigned_user_ids' => 'nullable|array',
             'assigned_user_ids.*' => 'string',
+            'image' => 'nullable|image|max:5120',
+            'image_url' => 'nullable|string|max:1000',
+            'remove_image' => 'nullable|boolean',
             'is_active' => 'boolean',
         ]);
 
@@ -141,6 +164,23 @@ class ServicesController extends Controller
                 ->first();
             $validated['branch_id'] = $mainBranch ? (string) $mainBranch->_id : null;
         }
+
+        if ($request->boolean('remove_image')) {
+            if (! empty($service->image_path)) {
+                Storage::disk('public')->delete($service->image_path);
+            }
+            $validated['image_path'] = null;
+            $validated['image_url'] = null;
+        } elseif ($request->hasFile('image')) {
+            if (! empty($service->image_path)) {
+                Storage::disk('public')->delete($service->image_path);
+            }
+            $path = $request->file('image')->store('services', 'public');
+            $validated['image_path'] = $path;
+            $validated['image_url'] = asset('storage/'.$path);
+        }
+
+        unset($validated['image'], $validated['remove_image']);
 
         $service->update($validated);
 
@@ -155,6 +195,10 @@ class ServicesController extends Controller
      */
     public function destroy(Service $service): RedirectResponse
     {
+        if (! empty($service->image_path)) {
+            Storage::disk('public')->delete($service->image_path);
+        }
+
         $service->delete();
 
         return back()->with('flash', [

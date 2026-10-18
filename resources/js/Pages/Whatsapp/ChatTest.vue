@@ -87,6 +87,7 @@ const filteredConversations = computed(() => {
 // Píldoras de prueba rápida con 1 clic
 const quickPrompts = [
     '¡Hola! ¿Qué servicios ofrecen?',
+    '¿Me puedes mandar fotos de sus productos o servicios?',
     '¿Tienen citas disponibles para mañana por la tarde?',
     '¿Qué productos tienen en inventario?',
     '¿Cuáles son sus horarios y ubicación?',
@@ -231,16 +232,6 @@ async function sendMessage(customText = null) {
         const data = await response.json();
 
         if (response.ok && data.ok) {
-            // Agregar mensaje del asistente
-            messages.value.push({
-                id: 'bot-' + Date.now(),
-                role: 'assistant',
-                content: data.reply,
-                tool_calls: data.tool_calls || [],
-                created_at: new Date().toISOString(),
-                execution_time_ms: data.execution_time_ms,
-            });
-
             lastToolCalls.value = data.tool_calls || [];
             lastBookingState.value = data.booking_state || {};
             lastPrompts.value = {
@@ -248,7 +239,22 @@ async function sendMessage(customText = null) {
                 dynamic: data.dynamic_prompt || '',
             };
 
-            // Refrescar conversaciones en segundo plano para actualizar último mensaje
+            // Sincronizar historial completo (incluye mensajes con fotos enviados por herramientas)
+            await loadHistory(testPhone.value, activeSource.value);
+
+            // Respaldo por si el historial no devolvió la respuesta de inmediato
+            if (!messages.value.some((m) => m.content === data.reply)) {
+                messages.value.push({
+                    id: 'bot-' + Date.now(),
+                    role: 'assistant',
+                    content: data.reply,
+                    tool_calls: data.tool_calls || [],
+                    created_at: new Date().toISOString(),
+                    execution_time_ms: data.execution_time_ms,
+                });
+            }
+
+            scrollToBottom();
             fetchConversations();
         } else {
             messages.value.push({
@@ -770,10 +776,37 @@ function formatTime(isoStr) {
                                         </div>
 
                                         <!-- Burbuja del Asistente -->
-                                        <div class="rounded-2xl rounded-tl-xs bg-base-100 border border-base-300 px-4 py-3 shadow-xs text-xs text-base-content whitespace-pre-wrap leading-relaxed">
-                                            <p>{{ msg.content }}</p>
-                                            <div class="text-[10px] text-base-content/40 text-right mt-1.5 font-mono">
-                                                {{ formatTime(msg.created_at) }}
+                                        <div class="rounded-2xl rounded-tl-xs bg-base-100 border border-base-300 overflow-hidden shadow-xs text-xs text-base-content leading-relaxed">
+                                            <!-- Imagen enviada por el bot si existe -->
+                                            <div
+                                                v-if="msg.metadata?.image_url || msg.image_url"
+                                                class="border-b border-base-300 bg-base-200/40 p-2.5 max-w-sm"
+                                            >
+                                                <img
+                                                    :src="msg.metadata?.image_url || msg.image_url"
+                                                    :alt="msg.metadata?.item_name || 'Imagen del bot'"
+                                                    class="rounded-xl w-full max-h-60 object-cover shadow-xs border border-base-300/60"
+                                                    loading="lazy"
+                                                />
+                                                <div
+                                                    v-if="msg.metadata?.item_name"
+                                                    class="text-[10px] text-base-content/70 font-semibold mt-1.5 px-1 flex items-center justify-between"
+                                                >
+                                                    <span class="flex items-center gap-1 truncate">
+                                                        <span>📷</span>
+                                                        <span class="truncate">{{ msg.metadata.item_name }}</span>
+                                                    </span>
+                                                    <span v-if="msg.metadata?.item_type" class="badge badge-xs badge-neutral text-[9px] uppercase shrink-0">
+                                                        {{ msg.metadata.item_type === 'product' ? 'Producto' : 'Servicio' }}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div class="px-4 py-3 whitespace-pre-wrap">
+                                                <p>{{ msg.content }}</p>
+                                                <div class="text-[10px] text-base-content/40 text-right mt-1.5 font-mono">
+                                                    {{ formatTime(msg.created_at) }}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

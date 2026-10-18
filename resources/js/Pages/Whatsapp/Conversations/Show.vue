@@ -341,6 +341,18 @@ function resumeBot(phone) {
                                     </span>
                                     <span>{{ msg.created_at }}</span>
                                 </div>
+                                <div v-if="msg.metadata?.image_url" class="my-2 max-w-xs">
+                                    <img
+                                        :src="msg.metadata.image_url"
+                                        :alt="msg.metadata.item_name || 'Imagen'"
+                                        class="rounded-lg w-full max-h-48 object-cover border border-base-300"
+                                        loading="lazy"
+                                    />
+                                    <div v-if="msg.metadata.item_name" class="text-xs font-semibold text-base-content/70 mt-1 flex items-center gap-1">
+                                        <span>📷</span>
+                                        <span>{{ msg.metadata.item_name }}</span>
+                                    </div>
+                                </div>
                                 <p class="whitespace-pre-wrap text-sm text-base-content">
                                     {{ msg.content || '—' }}
                                 </p>

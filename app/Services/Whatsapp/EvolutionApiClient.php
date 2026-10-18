@@ -37,6 +37,70 @@ class EvolutionApiClient implements MessengerGatewayInterface
         return is_array($response) ? $response : [];
     }
 
+    /**
+     * Envía una imagen o archivo multimedia al destinatario vía Evolution API v2.
+     *
+     * @return array<string, mixed>
+     */
+    public function sendImage(
+        string $instance,
+        string $phone,
+        string $imageUrlOrPath,
+        ?string $caption = null,
+        ?string $fileName = null
+    ): array {
+        $number = $this->normalizePhone($phone);
+        $captionText = trim((string) ($caption ?? ''));
+
+        $mediaPayload = $imageUrlOrPath;
+        $mimeType = 'image/jpeg';
+
+        // Si es una ruta relativa en Storage::disk('public') o contiene /storage/
+        if (str_starts_with($imageUrlOrPath, 'http://') || str_starts_with($imageUrlOrPath, 'https://')) {
+            $parsed = parse_url($imageUrlOrPath);
+            $pathPart = $parsed['path'] ?? '';
+            if (str_contains($pathPart, '/storage/')) {
+                $storageRelative = ltrim(substr($pathPart, strpos($pathPart, '/storage/') + 9), '/');
+                if (\Illuminate\Support\Facades\Storage::disk('public')->exists($storageRelative)) {
+                    $fileContent = \Illuminate\Support\Facades\Storage::disk('public')->get($storageRelative);
+                    $mimeType = \Illuminate\Support\Facades\Storage::disk('public')->mimeType($storageRelative) ?: 'image/jpeg';
+                    $mediaPayload = 'data:'.$mimeType.';base64,'.base64_encode($fileContent);
+                }
+            }
+        } elseif (\Illuminate\Support\Facades\Storage::disk('public')->exists($imageUrlOrPath)) {
+            $fileContent = \Illuminate\Support\Facades\Storage::disk('public')->get($imageUrlOrPath);
+            $mimeType = \Illuminate\Support\Facades\Storage::disk('public')->mimeType($imageUrlOrPath) ?: 'image/jpeg';
+            $mediaPayload = 'data:'.$mimeType.';base64,'.base64_encode($fileContent);
+        }
+
+        $payload = [
+            'number' => $number,
+            'mediatype' => 'image',
+            'mimetype' => $mimeType,
+            'caption' => $captionText,
+            'media' => $mediaPayload,
+            'fileName' => $fileName ?: basename($imageUrlOrPath),
+        ];
+
+        try {
+            $response = $this->http(35)
+                ->post("/message/sendMedia/{$instance}", $payload)
+                ->throw()
+                ->json();
+        } catch (RequestException $e) {
+            Log::error('Evolution sendImage failed', [
+                'instance' => $instance,
+                'phone' => $number,
+                'media' => substr((string) $mediaPayload, 0, 100),
+                'error' => $e->getMessage(),
+            ]);
+
+            throw new RuntimeException('Error al enviar imagen por Evolution API: '.$e->getMessage(), 0, $e);
+        }
+
+        return is_array($response) ? $response : [];
+    }
+
     public function sendTyping(string $instance, string $phone): void
     {
         $number = $this->normalizePhone($phone);
