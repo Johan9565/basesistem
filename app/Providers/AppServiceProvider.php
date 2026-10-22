@@ -26,7 +26,6 @@ class AppServiceProvider extends ServiceProvider
 
         View::composer('app', function ($view) {
             $doc = ComponentThemeModel::first();
-            $view->with('componentTheme', $doc?->styles ?? []);
             $view->with('activeTheme', $doc?->active_theme ?? 'dark');
         });
     }

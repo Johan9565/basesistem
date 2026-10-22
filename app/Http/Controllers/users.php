@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Events\NotificacionToUser;
-use App\Models\DependenciesModel;
 use App\Models\RoleModel;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -23,7 +22,6 @@ class users extends Controller
             'search' => 'nullable|string|max:255',
             'role_id' => 'nullable|string',
             'status' => 'nullable|in:0,1',
-            'area_id' => 'nullable|string',
         ]);
 
         $query = User::query();
@@ -49,20 +47,12 @@ class users extends Controller
         if (array_key_exists('status', $filters) && $filters['status'] !== null && $filters['status'] !== '') {
             $query->where('status', (int) $filters['status']);
         }
-        if (! empty($filters['area_id'])) {
-            try {
-                $query->where('area_id', new ObjectId($filters['area_id']));
-            } catch (\Throwable $e) {
-                // id inválido: no aplicar filtro de area
-            }
-        }
 
         $users = $query->orderBy('name')
             ->paginate(12)
             ->withQueryString()
             ->through(function ($user) {
                 $role = $user->role_data()->first();
-                $areaId = $user->area_id ?? null;
 
                 return [
                     'id' => (string) $user->id,
@@ -73,7 +63,6 @@ class users extends Controller
                     'role' => $role ? $role->role : '—',
                     'role_id' => $role ? (string) $role->getKey() : '',
                     'status' => $user->status ?? 1,
-                    'area_id' => $areaId ? (string) $areaId : '',
                 ];
             });
 
@@ -83,24 +72,16 @@ class users extends Controller
                 'id' => (string) $r->id,
                 'name' => $r->role,
             ]);
-        $areas = DependenciesModel::where('status', 1)
-            ->get(['id', 'name'])
-            ->map(fn ($a) => [
-                'id' => (string) $a->id,
-                'name' => $a->name,
-            ]);
 
         return Inertia::render('Users/Index', [
             'users' => $users,
             'roles' => $roles,
-            'areas' => $areas,
             'filters' => [
                 'search' => $search,
                 'role_id' => $filters['role_id'] ?? '',
                 'status' => array_key_exists('status', $filters) && $filters['status'] !== null && $filters['status'] !== ''
                     ? (string) $filters['status']
                     : '',
-                'area_id' => $filters['area_id'] ?? '',
             ],
         ]);
     }
@@ -114,7 +95,6 @@ class users extends Controller
             'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'role_id' => 'required|string',
-            'area_id' => 'required|string',
             'status' => 'required|in:0,1',
         ]);
 
@@ -125,7 +105,6 @@ class users extends Controller
             'ape_pat' => $request->ape_pat,
             'ape_mat' => $request->ape_mat,
             'email' => $request->email,
-            'area_id' => new ObjectId($request->area_id),
             'password' => Hash::make($request->password),
             'role_id' => new ObjectId($role->getKey()),
             'status' => (int) $request->status,
@@ -154,7 +133,6 @@ class users extends Controller
             'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
             'role_id' => 'required|string',
             'status' => 'required|in:0,1',
-            'area_id' => 'required|string',
         ]);
 
         $role = RoleModel::findOrFail($request->role_id);
@@ -164,7 +142,6 @@ class users extends Controller
             'ape_pat' => $request->ape_pat,
             'ape_mat' => $request->ape_mat,
             'email' => $request->email,
-            'area_id' => new ObjectId($request->area_id),
             'role_id' => new ObjectId($role->getKey()),
             'status' => (int) $request->status,
         ];
@@ -179,7 +156,6 @@ class users extends Controller
             'ape_mat' => (string) ($user->ape_mat ?? ''),
             'email' => (string) ($user->email ?? ''),
             'role_id' => $user->role_id ? (string) $user->role_id : '',
-            'area_id' => $user->area_id ? (string) $user->area_id : '',
             'status' => (int) ($user->status ?? 1),
         ];
 
@@ -192,12 +168,11 @@ class users extends Controller
             'ape_mat' => (string) ($user->ape_mat ?? ''),
             'email' => (string) ($user->email ?? ''),
             'role_id' => $user->role_id ? (string) $user->role_id : '',
-            'area_id' => $user->area_id ? (string) $user->area_id : '',
             'status' => (int) ($user->status ?? 1),
         ];
 
         $cambios = [];
-        foreach (['name', 'ape_pat', 'ape_mat', 'email', 'role_id', 'area_id', 'status'] as $key) {
+        foreach (['name', 'ape_pat', 'ape_mat', 'email', 'role_id', 'status'] as $key) {
             if ($before[$key] !== $after[$key]) {
                 $cambios[$key] = [
                     'antes' => $before[$key],
@@ -215,7 +190,6 @@ class users extends Controller
             'ape_mat' => 'Apellido materno',
             'email' => 'Correo',
             'role_id' => 'Rol',
-            'area_id' => 'Área',
             'status' => 'Estado',
         ];
 
@@ -231,19 +205,6 @@ class users extends Controller
                 $m = RoleModel::find(new ObjectId($id));
 
                 return $m ? (string) $m->role : $id;
-            } catch (\Throwable $e) {
-                return $id;
-            }
-        };
-
-        $areaDisplay = static function (?string $id): string {
-            if ($id === null || $id === '') {
-                return '—';
-            }
-            try {
-                $m = DependenciesModel::find(new ObjectId($id));
-
-                return $m ? (string) $m->name : $id;
             } catch (\Throwable $e) {
                 return $id;
             }
@@ -267,9 +228,6 @@ class users extends Controller
             } elseif ($key === 'role_id') {
                 $antes = $roleDisplay((string) $antes);
                 $después = $roleDisplay((string) $después);
-            } elseif ($key === 'area_id') {
-                $antes = $areaDisplay((string) $antes);
-                $después = $areaDisplay((string) $después);
             } else {
                 $antes = (string) $antes;
                 $después = (string) $después;
@@ -298,10 +256,6 @@ class users extends Controller
         $newRoleId = $user->role_id ? (string) $user->role_id : '';
         if ($before['role_id'] !== $newRoleId) {
             $highlightDisplayKeys[] = 'role';
-        }
-        $newAreaId = $user->area_id ? (string) $user->area_id : '';
-        if ($before['area_id'] !== $newAreaId) {
-            $highlightDisplayKeys[] = 'area';
         }
         if ($before['status'] !== (int) ($user->status ?? 1)) {
             $highlightDisplayKeys[] = 'status';

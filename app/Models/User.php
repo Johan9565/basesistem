@@ -24,7 +24,6 @@ class User extends Authenticatable
         'name',
         'ape_pat',
         'ape_mat',
-        'area_id',
         'email',
         'password',
         'role_id',
