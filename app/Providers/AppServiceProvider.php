@@ -22,7 +22,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Vite::prefetch(concurrency: 3);
+        \Laravel\Sanctum\Sanctum::usePersonalAccessTokenModel(\App\Models\PersonalAccessToken::class);
+
+        Vite::prefetch(3);
 
         View::composer('app', function ($view) {
             $doc = ComponentThemeModel::first();

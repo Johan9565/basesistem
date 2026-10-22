@@ -35,4 +35,27 @@ return [
         ],
     ],
 
+    'assistant' => [
+        'url' => env('ASSISTANT_AI_URL', env('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')),
+        'key' => env('ASSISTANT_AI_KEY', env('DEEPSEEK_API_KEY', '')),
+        'model' => env('ASSISTANT_AI_MODEL', env('DEEPSEEK_MODEL', 'deepseek-chat')),
+    ],
+
+    'deepgram' => [
+        'key' => env('DEEPGRAM_API_KEY', ''),
+        'model' => env('DEEPGRAM_MODEL', 'nova-3'),
+        'language' => env('DEEPGRAM_LANGUAGE', 'es'),
+    ],
+
+    'evolution' => [
+        'base_url' => env('EVOLUTION_BASE_URL', 'http://evolution-api:8080'),
+        'api_key'  => env('EVOLUTION_API_KEY', ''),
+        'instance' => env('EVOLUTION_INSTANCE_NAME', 'default'),
+    ],
+
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN', ''),
+        'chat_id'   => env('TELEGRAM_DEFAULT_CHAT_ID', ''),
+    ],
+
 ];

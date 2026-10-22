@@ -254,6 +254,17 @@ onUnmounted(() => {
                                         {{ modulo.name }}
                                     </NavLink>
                                 </template>
+
+                                <NavLink
+                                    :href="route('assistant.workspace')"
+                                    :active="route().current('assistant.workspace')"
+                                    class="inline-flex items-center gap-1.5"
+                                >
+                                    <svg class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    </svg>
+                                    Asistente
+                                </NavLink>
                             </div>
                         </div>
 
