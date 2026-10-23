@@ -34,6 +34,41 @@ class AssistantController extends Controller
     }
 
     /**
+     * GET|POST /api/v1/assistant/status
+     * Used by mobile apps to verify token and assistant connection status.
+     */
+    public function status(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'status'  => 'unauthenticated',
+                'message' => 'No autenticado.',
+                'action'  => 'unauthenticated',
+            ], 401);
+        }
+
+        $userData = [
+            'id'    => (string) ($user->_id ?? $user->id),
+            'name'  => $user->name,
+            'email' => $user->email,
+        ];
+
+        return response()->json([
+            'success' => true,
+            'status'  => 'online',
+            'data'    => [
+                'status' => 'online',
+                'user'   => $userData,
+            ],
+            'user'    => $userData,
+            'message' => 'Conexión exitosa con el asistente.',
+            'action'  => 'status',
+        ]);
+    }
+
+    /**
      * POST /api/v1/assistant/interact
      */
     public function interact(Request $request): JsonResponse
