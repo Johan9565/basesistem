@@ -18,6 +18,8 @@ Route::get('/', function () {
     ]);
 });
 
+use App\Http\Controllers\Whatsapp\WhatsappAssistantController;
+
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
@@ -25,6 +27,16 @@ Route::get('/dashboard', function () {
 Route::get('/assistant', function () {
     return Inertia::render('Assistant/Workspace');
 })->middleware(['auth', 'verified', 'permission:assistant.workspace'])->name('assistant.workspace');
+
+Route::middleware(['auth', 'verified', 'permission:whatsapp.assistant'])->prefix('whatsapp')->name('whatsapp.')->group(function () {
+    Route::get('/', [WhatsappAssistantController::class, 'index'])->name('assistant');
+    Route::post('/instance', [WhatsappAssistantController::class, 'storeInstance'])->name('instance.store');
+    Route::get('/qr', [WhatsappAssistantController::class, 'getQrCode'])->name('qr');
+    Route::post('/settings', [WhatsappAssistantController::class, 'updateSettings'])->name('settings.update');
+    Route::post('/disconnect', [WhatsappAssistantController::class, 'disconnect'])->name('disconnect');
+    Route::delete('/instance', [WhatsappAssistantController::class, 'deleteInstance'])->name('instance.destroy');
+    Route::post('/test-message', [WhatsappAssistantController::class, 'testMessage'])->name('test-message');
+});
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

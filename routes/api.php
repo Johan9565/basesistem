@@ -22,3 +22,6 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
 
     Route::patch('/reminders/{id}/complete', [AssistantController::class, 'completeReminder'])->name('reminders.complete');
 });
+
+Route::post('/evolution/webhook', [\App\Http\Controllers\Api\EvolutionWebhookController::class, 'handle'])
+    ->name('evolution.webhook');

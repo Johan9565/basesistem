@@ -37,6 +37,13 @@ class ModulesAndPermissionsSeeder extends Seeder
                 'module'      => 'assistant.workspace',
             ],
             [
+                'name'        => 'whatsapp',
+                'description' => 'Apartado Asistente WhatsApp',
+                'status'      => 1,
+                'icon'        => '<i class="fab fa-whatsapp"></i>',
+                'module'      => 'whatsapp.assistant',
+            ],
+            [
                 'name'        => 'administracion',
                 'description' => 'Apartado administración',
                 'status'      => 1,
@@ -85,6 +92,14 @@ class ModulesAndPermissionsSeeder extends Seeder
                 'order_index' => 2,
                 'status'      => 1,
                 'icon'        => '<svg class="h-4 w-4 text-primary inline-block mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>',
+            ],
+            [
+                'name'        => 'WhatsApp',
+                'route'       => 'whatsapp.assistant',
+                'relation'    => 'NULL',
+                'order_index' => 3,
+                'status'      => 1,
+                'icon'        => '<svg class="h-4 w-4 text-emerald-500 inline-block mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>',
             ],
             [
                 'name'        => 'Administración',
@@ -138,10 +153,11 @@ class ModulesAndPermissionsSeeder extends Seeder
             'status'      => 1,
         ]);
 
-        // 5. Actualizar o crear rol usuario con permisos básicos (dashboard y asistente)
+        // 5. Actualizar o crear rol usuario con permisos básicos (dashboard, asistente y whatsapp)
         $userPermList = collect([
             $savedPermissions['dashboard'],
             $savedPermissions['assistant.workspace'],
+            $savedPermissions['whatsapp.assistant'],
         ])->map(fn($p) => [
             'id'   => (string) $p->id,
             'name' => $p->name,

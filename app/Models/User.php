@@ -64,6 +64,11 @@ class User extends Authenticatable
         return $this->belongsTo(RoleModel::class, 'role_id');
     }
 
+    public function whatsappInstance()
+    {
+        return $this->hasOne(WhatsappInstance::class, 'user_id');
+    }
+
     public function hasPermission(string $permission): bool
     {
         $role = $this->role_data()->first();

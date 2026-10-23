@@ -32,6 +32,9 @@ class PermissionsAndModulesTest extends TestCase
         $this->assertTrue(PermissionsModel::where('module', 'users')->exists());
         $this->assertTrue(PermissionsModel::where('module', 'roles')->exists());
 
+        $this->assertTrue(ModulesModel::where('route', 'whatsapp.assistant')->exists());
+        $this->assertTrue(PermissionsModel::where('module', 'whatsapp.assistant')->exists());
+
         // Verify obsolete permissions are removed
         $this->assertFalse(PermissionsModel::whereIn('module', ['components', 'dependencies', 'userpage', 'businesscard'])->exists());
     }
@@ -46,6 +49,19 @@ class PermissionsAndModulesTest extends TestCase
         ]);
 
         $response = $this->actingAs($user)->get('/assistant');
+        $response->assertOk();
+    }
+
+    public function test_user_with_permission_can_access_whatsapp(): void
+    {
+        $this->seed(ModulesAndPermissionsSeeder::class);
+
+        $role = RoleModel::where('name', 'super-admin')->first();
+        $user = User::factory()->create([
+            'role_id' => (string) $role->id,
+        ]);
+
+        $response = $this->actingAs($user)->get('/whatsapp');
         $response->assertOk();
     }
 
@@ -64,5 +80,8 @@ class PermissionsAndModulesTest extends TestCase
 
         $response = $this->actingAs($user)->get('/assistant');
         $response->assertRedirect('/dashboard');
+
+        $responseWa = $this->actingAs($user)->get('/whatsapp');
+        $responseWa->assertRedirect('/dashboard');
     }
 }

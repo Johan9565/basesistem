@@ -48,9 +48,11 @@ return [
     ],
 
     'evolution' => [
-        'base_url' => env('EVOLUTION_BASE_URL', 'http://evolution-api:8080'),
-        'api_key'  => env('EVOLUTION_API_KEY', ''),
-        'instance' => env('EVOLUTION_INSTANCE_NAME', 'default'),
+        'base_url'       => env('EVOLUTION_BASE_URL', 'http://evolution-api:8080'),
+        'api_key'        => env('EVOLUTION_API_KEY', ''),
+        'instance'       => env('EVOLUTION_INSTANCE_NAME', 'default'),
+        'webhook_url'    => env('EVOLUTION_WEBHOOK_URL', 'http://laravel.test/api/evolution/webhook'),
+        'webhook_secret' => env('EVOLUTION_WEBHOOK_SECRET', ''),
     ],
 
     'telegram' => [
