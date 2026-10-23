@@ -3,6 +3,7 @@ import ProfileImageCropModal from '@/Components/ProfileImageCropModal.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { PROFILE_HIGHLIGHT_FIELDS_EVENT } from '@/composables/useNotificacionToUser';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
+import ApiTokenManager from './Partials/ApiTokenManager.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
@@ -14,6 +15,14 @@ const props = defineProps({
         type: String,
     },
     profileDisplay: {
+        type: Object,
+        default: null,
+    },
+    tokens: {
+        type: Array,
+        default: () => [],
+    },
+    newToken: {
         type: Object,
         default: null,
     },
@@ -193,7 +202,7 @@ function onCropApplied(file) {
         />
 
         <section class="py-8 my-auto sm:py-10">
-            <div class="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div class="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 space-y-8 sm:space-y-10">
                 <div class="grid grid-cols-1 items-start gap-8 lg:grid-cols-2 lg:gap-10">
                     <!-- Columna: perfil -->
                     <div :class="cardClass">
@@ -420,6 +429,11 @@ function onCropApplied(file) {
                             <UpdatePasswordForm embedded />
                         </div>
                     </div>
+                </div>
+
+                <!-- Sección: Tokens de Acceso Personal (API) -->
+                <div :class="cardClass">
+                    <ApiTokenManager :tokens="props.tokens" :new-token="props.newToken" />
                 </div>
             </div>
         </section>

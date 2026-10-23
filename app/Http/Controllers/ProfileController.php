@@ -31,6 +31,45 @@ class ProfileController extends Controller
             $bannerUrl = Storage::disk('public')->url($user->profile_banner_path);
         }
 
+        $tokens = $user->tokens()
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($token) {
+                $lastUsed = null;
+                if (! empty($token->last_used_at)) {
+                    $lastUsed = $token->last_used_at instanceof \Carbon\CarbonInterface
+                        ? $token->last_used_at->locale('es')->diffForHumans()
+                        : \Carbon\Carbon::parse($token->last_used_at)->locale('es')->diffForHumans();
+                }
+
+                $createdAt = null;
+                if (! empty($token->created_at)) {
+                    $createdAt = $token->created_at instanceof \Carbon\CarbonInterface
+                        ? $token->created_at->locale('es')->isoFormat('D MMM YYYY, HH:mm')
+                        : \Carbon\Carbon::parse($token->created_at)->locale('es')->isoFormat('D MMM YYYY, HH:mm');
+                }
+
+                $expiresAtFormatted = 'Nunca';
+                $isExpired = false;
+                if (! empty($token->expires_at)) {
+                    $expCarbon = $token->expires_at instanceof \Carbon\CarbonInterface
+                        ? $token->expires_at
+                        : \Carbon\Carbon::parse($token->expires_at);
+                    $expiresAtFormatted = $expCarbon->locale('es')->isoFormat('D MMM YYYY, HH:mm');
+                    $isExpired = $expCarbon->isPast();
+                }
+
+                return [
+                    'id' => (string) $token->_id,
+                    'name' => $token->name ?? 'Token',
+                    'abilities' => $token->abilities ?? ['*'],
+                    'last_used_at' => $lastUsed ?? 'Nunca',
+                    'created_at' => $createdAt,
+                    'expires_at' => $expiresAtFormatted,
+                    'is_expired' => $isExpired,
+                ];
+            });
+
         return Inertia::render('Profile/Edit', [
             'mustVerifyEmail' => $user instanceof MustVerifyEmail,
             'status' => session('status'),
@@ -44,6 +83,8 @@ class ProfileController extends Controller
                 'avatar_url' => $avatarUrl,
                 'banner_url' => $bannerUrl,
             ],
+            'tokens' => $tokens,
+            'newToken' => session('newToken'),
         ]);
     }
 
@@ -125,4 +166,64 @@ class ProfileController extends Controller
 
         return Redirect::to('/');
     }
+
+    /**
+     * Generate a new personal access token for the user.
+     */
+    public function storeToken(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'expiration' => ['nullable', 'string', 'in:never,7,30,60,90,365'],
+        ], [
+            'name.required' => 'El nombre del token es obligatorio.',
+            'name.max' => 'El nombre no puede superar los 255 caracteres.',
+        ]);
+
+        $expiresAt = match ($validated['expiration'] ?? 'never') {
+            '7' => now()->addDays(7),
+            '30' => now()->addDays(30),
+            '60' => now()->addDays(60),
+            '90' => now()->addDays(90),
+            '365' => now()->addYear(),
+            default => null,
+        };
+
+        $user = $request->user();
+        $token = $user->createToken(
+            name: $validated['name'],
+            abilities: ['*'],
+            expiresAt: $expiresAt,
+        );
+
+        return Redirect::route('profile.edit')->with([
+            'newToken' => [
+                'name' => $token->accessToken->name,
+                'plainTextToken' => $token->plainTextToken,
+                'expires_at' => $expiresAt ? $expiresAt->locale('es')->isoFormat('D MMM YYYY, HH:mm') : 'Nunca',
+            ],
+            'status' => 'Token de API generado exitosamente.',
+        ]);
+    }
+
+    /**
+     * Revoke a specific personal access token.
+     */
+    public function destroyToken(Request $request, string $id): RedirectResponse
+    {
+        $request->user()->tokens()->where('_id', $id)->delete();
+
+        return Redirect::route('profile.edit')->with('status', 'Token de API revocado exitosamente.');
+    }
+
+    /**
+     * Revoke all personal access tokens for the user.
+     */
+    public function destroyAllTokens(Request $request): RedirectResponse
+    {
+        $request->user()->tokens()->delete();
+
+        return Redirect::route('profile.edit')->with('status', 'Todos los tokens de API han sido revocados.');
+    }
 }
+

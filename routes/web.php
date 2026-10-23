@@ -44,6 +44,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/profile/avatar', [ProfileController::class, 'updateAvatar'])->name('profile.avatar');
     Route::post('/profile/banner', [ProfileController::class, 'updateBanner'])->name('profile.banner');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::post('/profile/tokens', [ProfileController::class, 'storeToken'])->name('profile.tokens.store');
+    Route::delete('/profile/tokens/all', [ProfileController::class, 'destroyAllTokens'])->name('profile.tokens.destroy-all');
+    Route::delete('/profile/tokens/{id}', [ProfileController::class, 'destroyToken'])->name('profile.tokens.destroy');
 });
 Route::middleware(['auth', 'permission:administration'])->group(function () {
     Route::middleware(['auth', 'permission:users'])->group(function () {
