@@ -61,6 +61,23 @@ class EvolutionWebhookController extends Controller
             $phone = $this->extractPhone($message);
             $text = $this->extractText($message);
 
+            $messageKey = data_get($message, 'key');
+
+            // Si es un audio o nota de voz de WhatsApp, transcribirlo
+            if ($text === '' && $this->isAudioMessage($message)) {
+                $text = $this->transcribeAudioMessage($message, $instanceName, $evolution, $orchestrator);
+
+                if ($text === '') {
+                    $evolution->sendHumanizedMessage(
+                        $instanceName,
+                        $phone,
+                        '🎙️ He recibido tu nota de voz, pero no fue posible transcribirla claramente. ¿Podrías enviarla de nuevo o escribirme tu consulta?',
+                        $messageKey
+                    );
+                    continue;
+                }
+            }
+
             if ($phone === '' || $text === '') {
                 continue;
             }
@@ -77,7 +94,7 @@ class EvolutionWebhookController extends Controller
                 $replyText = $replyData['message'] ?? 'Mensaje procesado por tu asistente.';
 
                 if (trim($replyText) !== '') {
-                    $evolution->sendTextMessage($instanceName, $phone, $replyText);
+                    $evolution->sendHumanizedMessage($instanceName, $phone, $replyText, $messageKey);
                 }
             } catch (Throwable $e) {
                 Log::error('Evolution webhook processing error', [
@@ -152,4 +169,98 @@ class EvolutionWebhookController extends Controller
 
         return '';
     }
+
+    /**
+     * Determina si el mensaje recibido es una nota de voz o archivo de audio.
+     */
+    protected function isAudioMessage(array $message): bool
+    {
+        $type = (string) data_get($message, 'messageType', '');
+        if (in_array($type, ['audioMessage', 'audio', 'ptt'], true)) {
+            return true;
+        }
+
+        return data_get($message, 'message.audioMessage') !== null;
+    }
+
+    /**
+     * Descarga el audio desde Evolution API y lo transcribe con Groq Whisper / Deepgram.
+     */
+    protected function transcribeAudioMessage(
+        array $message,
+        string $instanceName,
+        EvolutionApiService $evolution,
+        AssistantOrchestratorService $orchestrator
+    ): string {
+        $transcribeEnabled = filter_var(
+            env('WHATSAPP_TRANSCRIBE_AUDIO', true),
+            FILTER_VALIDATE_BOOLEAN
+        );
+
+        if (!$transcribeEnabled) {
+            Log::info('WhatsApp audio transcription disabled via WHATSAPP_TRANSCRIBE_AUDIO');
+            return '';
+        }
+
+        try {
+            $base64   = data_get($message, 'base64');
+            $mimetype = (string) (data_get($message, 'message.audioMessage.mimetype') ?: 'audio/ogg');
+
+            if (empty($base64)) {
+                $mediaData = $evolution->getBase64FromMediaMessage($instanceName, $message);
+                $base64    = data_get($mediaData, 'base64');
+                $mimetype  = (string) (data_get($mediaData, 'mimetype') ?: $mimetype);
+            }
+
+            if (empty($base64) || !is_string($base64)) {
+                Log::warning('Evolution audio message without base64 content', [
+                    'instance' => $instanceName,
+                    'key'      => data_get($message, 'key'),
+                ]);
+                return '';
+            }
+
+            if (str_contains($base64, ',')) {
+                $parts = explode(',', $base64);
+                $base64 = $parts[1] ?? $base64;
+            }
+
+            $binary = base64_decode($base64);
+            if ($binary === false || strlen($binary) === 0) {
+                Log::warning('Evolution audio base64 decode failed');
+                return '';
+            }
+
+            $ext = 'ogg';
+            if (str_contains($mimetype, 'mp4') || str_contains($mimetype, 'm4a')) {
+                $ext = 'm4a';
+            } elseif (str_contains($mimetype, 'mp3') || str_contains($mimetype, 'mpeg')) {
+                $ext = 'mp3';
+            } elseif (str_contains($mimetype, 'wav')) {
+                $ext = 'wav';
+            }
+
+            $tmpFile = tempnam(sys_get_temp_dir(), 'wa_voice_') . '.' . $ext;
+            file_put_contents($tmpFile, $binary);
+
+            try {
+                $transcription = $orchestrator->transcribeAudio($tmpFile);
+                Log::info('WhatsApp audio voice note transcribed', [
+                    'instance'      => $instanceName,
+                    'transcription' => $transcription,
+                ]);
+                return trim($transcription);
+            } finally {
+                if (file_exists($tmpFile)) {
+                    @unlink($tmpFile);
+                }
+            }
+        } catch (Throwable $e) {
+            Log::error('WhatsApp audio transcription exception: ' . $e->getMessage(), [
+                'instance' => $instanceName,
+            ]);
+            return '';
+        }
+    }
 }
+

@@ -47,6 +47,12 @@ return [
         'language' => env('DEEPGRAM_LANGUAGE', 'es'),
     ],
 
+    'groq' => [
+        'api_key' => env('GROQ_API_KEY', ''),
+        'whisper_url' => env('GROQ_WHISPER_URL', 'https://api.groq.com/openai/v1/audio/transcriptions'),
+        'whisper_model' => env('GROQ_WHISPER_MODEL', 'whisper-large-v3-turbo'),
+    ],
+
     'evolution' => [
         'base_url'       => env('EVOLUTION_BASE_URL', 'http://evolution-api:8080'),
         'api_key'        => env('EVOLUTION_API_KEY', ''),

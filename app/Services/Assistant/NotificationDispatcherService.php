@@ -74,7 +74,7 @@ class NotificationDispatcherService
     }
 
     /**
-     * Send message via WhatsApp (Evolution API).
+     * Send message via WhatsApp (Evolution API) with anti-ban and humanized chunking.
      */
     public function sendWhatsApp(?string $number, string $message): bool
     {
@@ -83,31 +83,19 @@ class NotificationDispatcherService
             return false;
         }
 
-        $baseUrl  = rtrim((string) config('services.evolution.base_url', 'http://evolution-api:8080'), '/');
-        $apiKey   = (string) config('services.evolution.api_key', '');
         $instance = (string) config('services.evolution.instance', 'default');
-
         $cleanNumber = preg_replace('/\D+/', '', $number);
-        $url = "{$baseUrl}/message/sendText/{$instance}";
 
         try {
-            $response = Http::retry(2, 400)
-                ->timeout(15)
-                ->withHeaders([
-                    'apikey'       => $apiKey,
-                    'Content-Type' => 'application/json',
-                ])
-                ->post($url, [
-                    'number' => $cleanNumber,
-                    'text'   => $message,
-                ]);
+            /** @var \App\Services\Whatsapp\EvolutionApiService $evolution */
+            $evolution = app(\App\Services\Whatsapp\EvolutionApiService::class);
+            $results = $evolution->sendHumanizedMessage($instance, $cleanNumber, $message);
 
-            if ($response->successful()) {
+            if (!empty($results)) {
                 Log::info("NotificationDispatcher: WhatsApp enviado con éxito a [{$cleanNumber}].");
                 return true;
             }
 
-            Log::error("NotificationDispatcher: Error enviando WhatsApp ({$response->status()}): " . $response->body());
             return false;
         } catch (\Throwable $e) {
             Log::error("NotificationDispatcher: Excepción al enviar WhatsApp: " . $e->getMessage());

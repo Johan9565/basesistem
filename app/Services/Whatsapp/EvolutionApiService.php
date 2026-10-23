@@ -74,7 +74,7 @@ class EvolutionApiService
             Log::error('Evolution createInstance failed', [
                 'instance' => $name,
                 'error'    => $e->getMessage(),
-                'response' => $e->response?->json(),
+                'response' => $e->response ? $e->response->json() : null,
             ]);
 
             throw new RuntimeException('Error al crear instancia en Evolution API: ' . $e->getMessage(), 0, $e);
@@ -232,5 +232,140 @@ class EvolutionApiService
     {
         $phone = preg_replace('/@.+$/', '', $phone) ?? $phone;
         return preg_replace('/\D+/', '', $phone) ?? $phone;
+    }
+
+    /**
+     * Descarga y obtiene el contenido multimedia en base64 desde Evolution API.
+     *
+     * @param string $name Nombre de la instancia
+     * @param array $message Mensaje completo recibido por webhook
+     * @return array<string, mixed>|null
+     */
+    public function getBase64FromMediaMessage(string $name, array $message): ?array
+    {
+        try {
+            $payload = [
+                'message' => [
+                    'key'     => data_get($message, 'key', []),
+                    'message' => data_get($message, 'message', []),
+                ],
+                'convertToMp4' => false,
+            ];
+
+            $response = $this->http(60)
+                ->post("/chat/getBase64FromMediaMessage/{$name}", $payload);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                return is_array($data) ? $data : null;
+            }
+
+            Log::warning('Evolution getBase64FromMediaMessage error response', [
+                'instance' => $name,
+                'status'   => $response->status(),
+                'body'     => $response->body(),
+            ]);
+
+            return null;
+        } catch (Throwable $e) {
+            Log::error('Evolution getBase64FromMediaMessage exception: ' . $e->getMessage(), [
+                'instance' => $name,
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Emite el estado de presencia ("composing", "recording", "available", "paused") en WhatsApp.
+     *
+     * @param string $name Nombre de la instancia
+     * @param string $phone Número telefónico
+     * @param string $presence "composing"|"recording"|"available"|"paused"
+     * @param int $delay Duración en milisegundos
+     * @return array<string, mixed>
+     */
+    public function sendPresence(string $name, string $phone, string $presence = 'composing', int $delay = 1200): array
+    {
+        $number = $this->normalizePhone($phone);
+
+        try {
+            $response = $this->http(15)
+                ->post("/chat/sendPresence/{$name}", [
+                    'number'   => $number,
+                    'presence' => $presence,
+                    'delay'    => $delay,
+                ])
+                ->json();
+
+            return is_array($response) ? $response : [];
+        } catch (Throwable $e) {
+            Log::debug('Evolution sendPresence failed', [
+                'instance' => $name,
+                'phone'    => $number,
+                'presence' => $presence,
+                'error'    => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+    }
+
+    /**
+     * Marca un mensaje entrante como leído en WhatsApp (Read Receipt / doble check azul).
+     *
+     * @param string $name Nombre de la instancia
+     * @param array $messageKey Clave del mensaje {id, remoteJid, fromMe}
+     * @return array<string, mixed>
+     */
+    public function markMessageAsRead(string $name, array $messageKey): array
+    {
+        $id = data_get($messageKey, 'id');
+        $remoteJid = data_get($messageKey, 'remoteJid');
+
+        if (!$id || !$remoteJid) {
+            return [];
+        }
+
+        try {
+            $response = $this->http(15)
+                ->post("/chat/markMessageAsRead/{$name}", [
+                    'readMessages' => [
+                        [
+                            'id'        => $id,
+                            'fromMe'    => false,
+                            'remoteJid' => $remoteJid,
+                        ],
+                    ],
+                ])
+                ->json();
+
+            return is_array($response) ? $response : [];
+        } catch (Throwable $e) {
+            Log::debug('Evolution markMessageAsRead failed', [
+                'instance' => $name,
+                'id'       => $id,
+                'error'    => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+    }
+
+    /**
+     * Despacha un mensaje aplicando el pipeline humanizado anti-baneo.
+     *
+     * @param string $name Nombre de la instancia
+     * @param string $phone Número de teléfono
+     * @param string $text Texto saliente
+     * @param array|null $messageKey Clave del mensaje original para marcar lectura
+     * @return array<int, array<string, mixed>>
+     */
+    public function sendHumanizedMessage(string $name, string $phone, string $text, ?array $messageKey = null): array
+    {
+        /** @var WhatsAppAntiBanPipeline $pipeline */
+        $pipeline = app(WhatsAppAntiBanPipeline::class);
+
+        return $pipeline->sendHumanizedResponse($name, $phone, $text, $messageKey);
     }
 }

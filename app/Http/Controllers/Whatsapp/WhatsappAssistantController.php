@@ -15,9 +15,15 @@ use Throwable;
 
 class WhatsappAssistantController extends Controller
 {
-    public function __construct(
-        protected EvolutionApiService $evolution
-    ) {}
+    /**
+     * @var EvolutionApiService
+     */
+    protected $evolution;
+
+    public function __construct(EvolutionApiService $evolution)
+    {
+        $this->evolution = $evolution;
+    }
 
     /**
      * Muestra la vista principal del Asistente de WhatsApp personal.
@@ -70,7 +76,7 @@ class WhatsappAssistantController extends Controller
                 'profile_pic_url' => $instance->profile_pic_url,
                 'system_prompt'   => $instance->system_prompt ?? '',
                 'enabled'         => (bool) ($instance->enabled ?? true),
-                'updated_at'      => $instance->updated_at?->toIso8601String(),
+                'updated_at'      => $instance->updated_at ? $instance->updated_at->toIso8601String() : null,
             ] : null,
             'qrCode' => $qrCode,
         ]);
@@ -231,7 +237,7 @@ class WhatsappAssistantController extends Controller
         ]);
 
         try {
-            $this->evolution->sendTextMessage(
+            $this->evolution->sendHumanizedMessage(
                 $instance->instance_name,
                 $validated['phone'],
                 $validated['message']
