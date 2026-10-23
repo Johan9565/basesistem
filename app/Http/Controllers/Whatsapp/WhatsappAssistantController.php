@@ -142,7 +142,16 @@ class WhatsappAssistantController extends Controller
                 ]);
             }
 
-            $connectRes = $this->evolution->connect($instance->instance_name);
+            try {
+                $connectRes = $this->evolution->connect($instance->instance_name);
+            } catch (Throwable $connectError) {
+                if (str_contains($connectError->getMessage(), 'does not exist') || str_contains($connectError->getMessage(), '404')) {
+                    $this->evolution->createInstance($instance->instance_name);
+                    $connectRes = $this->evolution->connect($instance->instance_name);
+                } else {
+                    throw $connectError;
+                }
+            }
             $qr = $this->extractQr($connectRes);
             $pairingCode = data_get($connectRes, 'pairingCode');
 
