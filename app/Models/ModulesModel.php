@@ -18,6 +18,7 @@ class ModulesModel extends Model
         'status',
         'relation',
         'order_index',
-        'name'
+        'name',
+        'icon',
     ];
 }

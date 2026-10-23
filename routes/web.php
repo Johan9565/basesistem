@@ -24,7 +24,7 @@ Route::get('/dashboard', function () {
 
 Route::get('/assistant', function () {
     return Inertia::render('Assistant/Workspace');
-})->middleware(['auth', 'verified'])->name('assistant.workspace');
+})->middleware(['auth', 'verified', 'permission:assistant.workspace'])->name('assistant.workspace');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
