@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessAssistantMessage;
+use App\Models\AssistantMessage;
 use App\Models\WhatsappInstance;
 use App\Services\Assistant\AssistantOrchestratorService;
-use App\Services\Whatsapp\EvolutionApiService;
+use App\Services\Evolution\EvolutionApiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -13,29 +15,24 @@ use Throwable;
 
 class EvolutionWebhookController extends Controller
 {
+    /**
+     * Maneja webhooks entrantes de Evolution API de forma desacoplada y asíncrona.
+     * Guarda el mensaje con status 'received', despacha el Job a la cola y responde HTTP 202 de inmediato.
+     */
     public function handle(
         Request $request,
         EvolutionApiService $evolution,
         AssistantOrchestratorService $orchestrator
     ): JsonResponse {
-        $secret = (string) config('services.evolution.webhook_secret');
-        if ($secret !== '') {
-            $providedSecret = (string) $request->header('X-Evolution-Secret', $request->header('x-evolution-secret'));
-            if ($providedSecret !== $secret) {
-                Log::warning('Evolution webhook invalid secret attempt');
-                return response()->json(['error' => 'Unauthorized'], 401);
-            }
-        }
-
         $payload = $request->all();
-        $event = (string) ($payload['event'] ?? '');
 
-        // Solo procesamos mensajes entrantes
-        if ($event !== '' && !in_array($event, ['messages.upsert', 'MESSAGES_UPSERT'], true)) {
-            return response()->json(['ok' => true, 'ignored' => true]);
-        }
+        $instanceName = (string) (
+            $payload['instance']
+            ?? $payload['data']['instance']
+            ?? $request->route('instance')
+            ?? ''
+        );
 
-        $instanceName = (string) ($payload['instance'] ?? $payload['instanceName'] ?? '');
         if ($instanceName === '') {
             return response()->json(['ok' => true, 'ignored' => true, 'reason' => 'no_instance']);
         }
@@ -52,6 +49,7 @@ class EvolutionWebhookController extends Controller
 
         $data = $payload['data'] ?? $payload;
         $messages = $this->normalizeMessages($data);
+        $queuedMessages = [];
 
         foreach ($messages as $message) {
             if ($this->shouldSkip($message)) {
@@ -59,8 +57,7 @@ class EvolutionWebhookController extends Controller
             }
 
             $phone = $this->extractPhone($message);
-            $text = $this->extractText($message);
-
+            $text  = $this->extractText($message);
             $messageKey = data_get($message, 'key');
 
             // Si es un audio o nota de voz de WhatsApp, transcribirlo
@@ -71,7 +68,7 @@ class EvolutionWebhookController extends Controller
                     $evolution->sendHumanizedMessage(
                         $instanceName,
                         $phone,
-                        '🎙️ He recibido tu nota de voz, pero no fue posible transcribirla claramente. ¿Podrías enviarla de nuevo o escribirme tu consulta?',
+                        'He recibido tu nota de voz, pero no fue posible transcribirla claramente. ¿Podrías enviarla de nuevo o escribirme tu consulta?',
                         $messageKey
                     );
                     continue;
@@ -82,30 +79,34 @@ class EvolutionWebhookController extends Controller
                 continue;
             }
 
-            try {
-                // Interactuar con el asistente del usuario
-                $customPrompt = $instance->system_prompt ? "Instrucciones de WhatsApp para este usuario: " . $instance->system_prompt . "\n" : "";
-                $history = [];
-                if ($customPrompt !== '') {
-                    $history[] = ['role' => 'system', 'content' => $customPrompt];
-                }
+            // Guardar en base de datos con status 'received' y despachar Job desacoplado
+            $assistantMessage = AssistantMessage::create([
+                'user_id'     => (string) $user->id,
+                'channel'     => 'whatsapp',
+                'direction'   => 'inbound',
+                'prompt'      => $text,
+                'status'      => 'received',
+                'retry_count' => 0,
+                'metadata'    => [
+                    'instance_name' => $instanceName,
+                    'phone'         => $phone,
+                    'message_key'   => $messageKey,
+                    'system_prompt' => $instance->system_prompt ?? null,
+                ],
+            ]);
 
-                $replyData = $orchestrator->interact($user, $text, $history);
-                $replyText = $replyData['message'] ?? 'Mensaje procesado por tu asistente.';
+            ProcessAssistantMessage::dispatch((string) $assistantMessage->id);
 
-                if (trim($replyText) !== '') {
-                    $evolution->sendHumanizedMessage($instanceName, $phone, $replyText, $messageKey);
-                }
-            } catch (Throwable $e) {
-                Log::error('Evolution webhook processing error', [
-                    'instance' => $instanceName,
-                    'phone'    => $phone,
-                    'error'    => $e->getMessage(),
-                ]);
-            }
+            $queuedMessages[] = (string) ($assistantMessage->id ?? $assistantMessage->_id);
         }
 
-        return response()->json(['ok' => true]);
+        return response()->json([
+            'ok'             => true,
+            'status'         => 'queued',
+            'queued_count'   => count($queuedMessages),
+            'tracking_ids'   => $queuedMessages,
+            'message'        => 'Mensajes recibidos y encolados para procesamiento asíncrono.',
+        ], 202);
     }
 
     protected function normalizeMessages(mixed $data): array
@@ -265,4 +266,3 @@ class EvolutionWebhookController extends Controller
         }
     }
 }
-

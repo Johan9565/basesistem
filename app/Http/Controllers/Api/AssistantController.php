@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessAssistantMessage;
+use App\Models\AssistantMessage;
+use App\Models\CalendarEvent;
 use App\Models\Reminder;
 use App\Services\Assistant\AssistantOrchestratorService;
+use App\Services\GoogleCalendar\GoogleCalendarService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -70,12 +74,15 @@ class AssistantController extends Controller
 
     /**
      * POST /api/v1/assistant/interact
+     * Asynchronously receives prompt, stores in DB with status 'received',
+     * dispatches queue job and returns HTTP 202 immediately.
      */
     public function interact(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'prompt'               => 'required|string|max:5000',
             'conversation_history' => 'sometimes|array',
+            'conversation_id'      => 'nullable|string',
         ]);
 
         $user = $request->user();
@@ -83,25 +90,42 @@ class AssistantController extends Controller
             return $this->jsonResponse(false, null, 'No autenticado.', 'unauthenticated', 401);
         }
 
-        $result = $this->orchestrator->interact(
-            $user,
-            $validated['prompt'],
-            $validated['conversation_history'] ?? []
-        );
+        $assistantMessage = AssistantMessage::create([
+            'user_id'     => (string) $user->id,
+            'channel'     => 'app',
+            'direction'   => 'inbound',
+            'prompt'      => $validated['prompt'],
+            'status'      => 'received',
+            'retry_count' => 0,
+            'metadata'    => [
+                'conversation_history' => $validated['conversation_history'] ?? [],
+                'conversation_id'      => $request->input('conversation_id'),
+            ],
+        ]);
 
-        $status = ($result['success'] ?? false) ? 200 : 422;
+        // Despachar a la cola de forma completamente asíncrona
+        ProcessAssistantMessage::dispatch((string) $assistantMessage->id);
 
-        return $this->jsonResponse(
-            $result['success'] ?? false,
-            $result['data'] ?? null,
-            $result['message'] ?? '',
-            $result['action'] ?? 'unknown',
-            $status
-        );
+        $trackingId = (string) ($assistantMessage->id ?? $assistantMessage->_id);
+
+        return response()->json([
+            'success' => true,
+            'status'  => 'received',
+            'data'    => [
+                'id'              => $trackingId,
+                'tracking_id'     => $trackingId,
+                'status'          => 'received',
+                'prompt'          => $validated['prompt'],
+                'conversation_id' => $request->input('conversation_id'),
+            ],
+            'message' => 'Mensaje recibido y en cola de procesamiento.',
+            'action'  => 'queued',
+        ], 202);
     }
 
     /**
      * POST /api/v1/assistant/voice
+     * Transcribes voice note, persists with status 'received', dispatches job and returns HTTP 202.
      */
     public function voice(Request $request): JsonResponse
     {
@@ -138,8 +162,8 @@ class AssistantController extends Controller
             $transcription = $this->orchestrator->transcribeAudio($audioInput);
         } catch (\Throwable $e) {
             Log::error('Audio transcription error: ' . $e->getMessage(), [
-                'user_id' => $user->id ?? $user->_id ?? null,
-                'is_file' => $request->hasFile('audio'),
+                'user_id'   => $user->id ?? $user->_id ?? null,
+                'is_file'   => $request->hasFile('audio'),
                 'file_name' => $request->hasFile('audio') ? $request->file('audio')->getClientOriginalName() : null,
                 'mime_type' => $request->hasFile('audio') ? $request->file('audio')->getClientMimeType() : null,
             ]);
@@ -158,19 +182,75 @@ class AssistantController extends Controller
             $history = json_decode($history, true) ?: [];
         }
 
-        $result = $this->orchestrator->interact($user, $transcription, (array) $history);
-
-        return $this->jsonResponse(
-            $result['success'] ?? false,
-            [
-                'execution'     => $result['data'] ?? null,
-                'transcription' => $transcription,
-                'reply'         => $result['data']['reply'] ?? ($result['message'] ?? null),
+        $assistantMessage = AssistantMessage::create([
+            'user_id'     => (string) $user->id,
+            'channel'     => 'app',
+            'direction'   => 'inbound',
+            'prompt'      => $transcription,
+            'status'      => 'received',
+            'retry_count' => 0,
+            'metadata'    => [
+                'transcription'        => $transcription,
+                'conversation_history' => (array) $history,
             ],
-            $result['message'] ?? '',
-            $result['action'] ?? 'voice_interaction',
-            ($result['success'] ?? false) ? 200 : 422
-        );
+        ]);
+
+        ProcessAssistantMessage::dispatch((string) $assistantMessage->id);
+
+        $trackingId = (string) ($assistantMessage->id ?? $assistantMessage->_id);
+
+        return response()->json([
+            'success' => true,
+            'status'  => 'received',
+            'data'    => [
+                'id'            => $trackingId,
+                'tracking_id'   => $trackingId,
+                'status'        => 'received',
+                'transcription' => $transcription,
+                'reply'         => null,
+            ],
+            'message' => 'Audio transcrito y en cola de procesamiento.',
+            'action'  => 'queued',
+        ], 202);
+    }
+
+    /**
+     * GET /api/v1/assistant/messages/{id}
+     * Consult message processing status for polling.
+     */
+    public function getMessageStatus(Request $request, string $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            return $this->jsonResponse(false, null, 'No autenticado.', 'unauthenticated', 401);
+        }
+
+        $message = AssistantMessage::where('user_id', (string) $user->id)
+            ->where(function ($q) use ($id) {
+                $q->where('_id', $id)->orWhere('id', $id);
+            })
+            ->first();
+
+        if (!$message) {
+            return $this->jsonResponse(false, null, 'Mensaje no encontrado.', 'not_found', 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                'id'            => (string) ($message->id ?? $message->_id),
+                'tracking_id'   => (string) ($message->id ?? $message->_id),
+                'status'        => $message->status,
+                'prompt'        => $message->prompt,
+                'reply'         => $message->reply,
+                'action'        => $message->action,
+                'error_message' => $message->error_message,
+                'created_at'    => $message->created_at?->toIso8601String(),
+                'updated_at'    => $message->updated_at?->toIso8601String(),
+            ],
+            'message' => 'Estado del mensaje obtenido con éxito.',
+            'action'  => 'message_status',
+        ]);
     }
 
     /**
@@ -204,15 +284,10 @@ class AssistantController extends Controller
         }
 
         $reminder = Reminder::where('user_id', (string) $user->id)
-            ->where('_id', $id)
+            ->where(function ($q) use ($id) {
+                $q->where('_id', $id)->orWhere('id', $id);
+            })
             ->first();
-
-        if (!$reminder) {
-            // Also try with standard id column
-            $reminder = Reminder::where('user_id', (string) $user->id)
-                ->where('id', $id)
-                ->first();
-        }
 
         if (!$reminder) {
             return $this->jsonResponse(
@@ -267,7 +342,7 @@ class AssistantController extends Controller
     /**
      * GET /api/v1/assistant/google-calendar/settings
      */
-    public function getGoogleCalendarSettings(Request $request, \App\Services\GoogleCalendar\GoogleCalendarService $googleService): JsonResponse
+    public function getGoogleCalendarSettings(Request $request, GoogleCalendarService $googleService): JsonResponse
     {
         $user = $request->user();
         if (!$user) {
@@ -294,7 +369,7 @@ class AssistantController extends Controller
     /**
      * POST /api/v1/assistant/google-calendar/settings
      */
-    public function saveGoogleCalendarSettings(Request $request, \App\Services\GoogleCalendar\GoogleCalendarService $googleService): JsonResponse
+    public function saveGoogleCalendarSettings(Request $request, GoogleCalendarService $googleService): JsonResponse
     {
         $user = $request->user();
         if (!$user) {
@@ -329,7 +404,7 @@ class AssistantController extends Controller
     /**
      * POST /api/v1/assistant/google-calendar/sync
      */
-    public function syncGoogleCalendar(Request $request, \App\Services\GoogleCalendar\GoogleCalendarService $googleService): JsonResponse
+    public function syncGoogleCalendar(Request $request, GoogleCalendarService $googleService): JsonResponse
     {
         $user = $request->user();
         if (!$user) {
@@ -359,7 +434,7 @@ class AssistantController extends Controller
     /**
      * POST /api/v1/assistant/google-calendar/test
      */
-    public function testGoogleCalendar(Request $request, \App\Services\GoogleCalendar\GoogleCalendarService $googleService): JsonResponse
+    public function testGoogleCalendar(Request $request, GoogleCalendarService $googleService): JsonResponse
     {
         $user = $request->user();
         if (!$user) {
@@ -380,7 +455,7 @@ class AssistantController extends Controller
     /**
      * POST /api/v1/assistant/events
      */
-    public function storeEvent(Request $request, \App\Services\GoogleCalendar\GoogleCalendarService $googleService): JsonResponse
+    public function storeEvent(Request $request, GoogleCalendarService $googleService): JsonResponse
     {
         $user = $request->user();
         if (!$user) {
@@ -401,7 +476,7 @@ class AssistantController extends Controller
             ? Carbon::parse($validated['end_time'], $tz)
             : (clone $start)->addHour();
 
-        $event = \App\Models\CalendarEvent::create([
+        $event = CalendarEvent::create([
             'user_id'     => (string) $user->id,
             'title'       => $validated['title'],
             'start_time'  => $start,
@@ -435,7 +510,7 @@ class AssistantController extends Controller
             return $this->jsonResponse(false, null, 'No autenticado.', 'unauthenticated', 401);
         }
 
-        $event = \App\Models\CalendarEvent::where('user_id', (string) $user->id)
+        $event = CalendarEvent::where('user_id', (string) $user->id)
             ->where(function ($q) use ($id) {
                 $q->where('_id', $id)->orWhere('id', $id);
             })
