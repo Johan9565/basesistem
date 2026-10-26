@@ -34,6 +34,41 @@ class AssistantController extends Controller
     }
 
     /**
+     * GET|POST /api/v1/assistant/status
+     * Used by mobile apps to verify token and assistant connection status.
+     */
+    public function status(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'status'  => 'unauthenticated',
+                'message' => 'No autenticado.',
+                'action'  => 'unauthenticated',
+            ], 401);
+        }
+
+        $userData = [
+            'id'    => (string) ($user->_id ?? $user->id),
+            'name'  => $user->name,
+            'email' => $user->email,
+        ];
+
+        return response()->json([
+            'success' => true,
+            'status'  => 'online',
+            'data'    => [
+                'status' => 'online',
+                'user'   => $userData,
+            ],
+            'user'    => $userData,
+            'message' => 'Conexión exitosa con el asistente.',
+            'action'  => 'status',
+        ]);
+    }
+
+    /**
      * POST /api/v1/assistant/interact
      */
     public function interact(Request $request): JsonResponse
@@ -70,22 +105,44 @@ class AssistantController extends Controller
      */
     public function voice(Request $request): JsonResponse
     {
-        $request->validate([
-            'audio'                => 'required|file|max:20480', // up to 20MB
-            'conversation_history' => 'sometimes',
-        ]);
+        $audioInput = null;
+
+        if ($request->hasFile('audio')) {
+            $request->validate([
+                'audio'                => 'required|file|max:20480', // up to 20MB
+                'conversation_history' => 'sometimes',
+            ]);
+            $audioInput = $request->file('audio');
+        } elseif ($request->filled('audio')) {
+            $request->validate([
+                'audio'                => 'required|string',
+                'conversation_history' => 'sometimes',
+            ]);
+            $audioInput = $request->input('audio');
+        } else {
+            return $this->jsonResponse(
+                false,
+                null,
+                'El parámetro "audio" es requerido (archivo multipart o string Base64).',
+                'validation_error',
+                422
+            );
+        }
 
         $user = $request->user();
         if (!$user) {
             return $this->jsonResponse(false, null, 'No autenticado.', 'unauthenticated', 401);
         }
 
-        $audioFile = $request->file('audio');
-
         try {
-            $transcription = $this->orchestrator->transcribeAudio($audioFile);
+            $transcription = $this->orchestrator->transcribeAudio($audioInput);
         } catch (\Throwable $e) {
-            Log::error('Audio transcription error: ' . $e->getMessage());
+            Log::error('Audio transcription error: ' . $e->getMessage(), [
+                'user_id' => $user->id ?? $user->_id ?? null,
+                'is_file' => $request->hasFile('audio'),
+                'file_name' => $request->hasFile('audio') ? $request->file('audio')->getClientOriginalName() : null,
+                'mime_type' => $request->hasFile('audio') ? $request->file('audio')->getClientMimeType() : null,
+            ]);
 
             return $this->jsonResponse(
                 false,

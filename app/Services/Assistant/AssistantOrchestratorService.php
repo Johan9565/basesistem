@@ -848,33 +848,90 @@ SYS;
      */
     public function transcribeAudio($file): string
     {
-        $realPath = $file instanceof UploadedFile ? $file->getRealPath() : $file;
-        $fileName = $file instanceof UploadedFile ? ($file->getClientOriginalName() ?: 'audio.m4a') : basename($file);
-        $rawMime  = $file instanceof UploadedFile 
-            ? ($file->getMimeType() ?: 'audio/m4a') 
-            : (function_exists('mime_content_type') && file_exists($realPath) ? (mime_content_type($realPath) ?: 'audio/m4a') : 'audio/m4a');
-
-        if (!file_exists($realPath) || filesize($realPath) === 0) {
-            throw new \InvalidArgumentException("El archivo de audio no existe o está vacío (0 bytes) en: {$realPath}");
-        }
-
-        // Si ffmpeg está disponible y el audio no es un MP3 o WAV nativo (ej. OGG Opus de WhatsApp o WebM de navegador),
-        // convertirlo a MP3 estandarizado (16kHz mono) para máxima compatibilidad con todos los motores de transcripción.
-        $convertedTmpFile = null;
-        if ($this->isFfmpegAvailable() && !preg_match('/\.(mp3|wav)$/i', $fileName)) {
-            $convertedPath = $this->convertAudioToMp3($realPath);
-            if ($convertedPath !== null) {
-                $realPath = $convertedPath;
-                $fileName = 'audio.mp3';
-                $rawMime  = 'audio/mpeg';
-                $convertedTmpFile = $convertedPath;
-            }
-        }
+        $cleanupFiles = [];
 
         try {
+            $realPath = null;
+            $fileName = 'audio.m4a';
+            $rawMime  = 'audio/m4a';
+
+            if ($file instanceof UploadedFile) {
+                $realPath = $file->getRealPath();
+                $fileName = $file->getClientOriginalName() ?: 'audio.m4a';
+                $rawMime  = $file->getClientMimeType() ?: ($file->getMimeType() ?: 'audio/m4a');
+            } elseif (is_string($file)) {
+                $isPath = file_exists($file) 
+                    || str_starts_with($file, '/') 
+                    || str_starts_with($file, './') 
+                    || str_starts_with($file, '../') 
+                    || preg_match('/\.(m4a|mp3|ogg|opus|wav|webm|aac|flac|3gp|amr|pcm|raw)$/i', $file);
+
+                if ($isPath) {
+                    if (!file_exists($file)) {
+                        throw new \InvalidArgumentException("El archivo de audio no existe en: {$file}");
+                    }
+                    $realPath = $file;
+                    $fileName = basename($file);
+                    $rawMime  = function_exists('mime_content_type') ? (mime_content_type($file) ?: 'audio/m4a') : 'audio/m4a';
+                } else {
+                    // Posible Base64 o string binario directo
+                    $tmp = tempnam(sys_get_temp_dir(), 'voice_raw_');
+                    $cleanupFiles[] = $tmp;
+                    file_put_contents($tmp, $file);
+                    $realPath = $tmp;
+                    $fileName = 'audio.m4a';
+                    $rawMime  = 'audio/m4a';
+                }
+            } else {
+                throw new \InvalidArgumentException("Tipo de archivo de audio no soportado.");
+            }
+
+            if (!file_exists($realPath) || filesize($realPath) === 0) {
+                throw new \InvalidArgumentException("El archivo de audio no existe o está vacío (0 bytes) en: {$realPath}");
+            }
+
+            // Inspeccionar contenido: ¿Es Base64?
             $fileContents = file_get_contents($realPath);
             if (empty($fileContents)) {
                 throw new \InvalidArgumentException("El contenido del audio está vacío tras la lectura.");
+            }
+
+            $decodedBinary = null;
+            if (preg_match('/^data:([a-zA-Z0-9_\-\/]+);base64,(.+)$/s', trim($fileContents), $matches)) {
+                $decoded = base64_decode($matches[2], true);
+                if ($decoded !== false && strlen($decoded) > 0) {
+                    $decodedBinary = $decoded;
+                    $rawMime = $matches[1];
+                }
+            } elseif (strlen($fileContents) > 32 && !str_starts_with($fileContents, 'RIFF') && !str_starts_with($fileContents, 'ID3') && !str_starts_with($fileContents, 'OggS') && !str_contains(substr($fileContents, 0, 16), 'ftyp')) {
+                $cleaned = preg_replace('/\s+/', '', $fileContents);
+                if (preg_match('/^[A-Za-z0-9+\/]+=*$/', substr($cleaned, 0, 2048))) {
+                    $decoded = base64_decode($cleaned, true);
+                    if ($decoded !== false && strlen($decoded) > 0) {
+                        $decodedBinary = $decoded;
+                    }
+                }
+            }
+
+            if ($decodedBinary !== null) {
+                $tmpDecoded = tempnam(sys_get_temp_dir(), 'voice_b64_');
+                file_put_contents($tmpDecoded, $decodedBinary);
+                $cleanupFiles[] = $tmpDecoded;
+                $realPath = $tmpDecoded;
+                $fileContents = $decodedBinary;
+            }
+
+            // Si ffmpeg está disponible, convertirlo a MP3 estandarizado (16kHz mono) para máxima compatibilidad
+            // con todos los motores de transcripción (especialmente para audios de Android/WhatsApp).
+            if ($this->isFfmpegAvailable()) {
+                $convertedPath = $this->convertAudioToMp3($realPath, $fileName);
+                if ($convertedPath !== null) {
+                    $cleanupFiles[] = $convertedPath;
+                    $realPath = $convertedPath;
+                    $fileName = 'audio.mp3';
+                    $rawMime  = 'audio/mpeg';
+                    $fileContents = file_get_contents($realPath);
+                }
             }
 
             $cleanMime = $this->normalizeMimeType($fileName, $rawMime);
@@ -904,10 +961,12 @@ SYS;
                 }
             }
 
-            throw new \RuntimeException('No fue posible transcribir el archivo de audio. Verifique la clave de Groq, Deepgram o Whisper.');
+            throw new \RuntimeException('No fue posible transcribir el archivo de audio. Verifique que el audio contenga datos válidos o revise las claves de Groq y Deepgram.');
         } finally {
-            if ($convertedTmpFile !== null && file_exists($convertedTmpFile)) {
-                @unlink($convertedTmpFile);
+            foreach ($cleanupFiles as $f) {
+                if (file_exists($f)) {
+                    @unlink($f);
+                }
             }
         }
     }
@@ -926,32 +985,100 @@ SYS;
     }
 
     /**
-     * Convierte cualquier audio (WhatsApp Ogg Opus, WebM, etc.) a MP3 mono a 16kHz.
+     * Convierte cualquier audio (WhatsApp Ogg Opus, WebM, 3GP, AMR, PCM crudo de Android, etc.) a MP3 mono a 16kHz.
      */
-    protected function convertAudioToMp3(string $sourcePath): ?string
+    protected function convertAudioToMp3(string $sourcePath, string $originalFileName = ''): ?string
     {
         $tmp = tempnam(sys_get_temp_dir(), 'transcribe_conv_');
         $out = $tmp . '.mp3';
         @unlink($tmp);
 
-        $cmd = sprintf(
-            'ffmpeg -y -v error -i %s -vn -ar 16000 -ac 1 -c:a libmp3lame -b:a 64k %s 2>&1',
-            escapeshellarg($sourcePath),
-            escapeshellarg($out)
-        );
+        // Si el archivo original tenía extensión (m4a, 3gp, aac, etc.), 
+        // crear enlace/copia con esa extensión para que ffmpeg pueda deducir el demuxer
+        $ext = strtolower(pathinfo($originalFileName, PATHINFO_EXTENSION));
+        $inputPath = $sourcePath;
+        $tempInputWithExt = null;
 
-        @exec($cmd, $output, $exitCode);
-
-        if ($exitCode === 0 && file_exists($out) && filesize($out) > 0) {
-            return $out;
+        if (!empty($ext) && !str_ends_with(strtolower($sourcePath), '.' . $ext)) {
+            $tempInputWithExt = tempnam(sys_get_temp_dir(), 'transcribe_in_') . '.' . $ext;
+            if (@copy($sourcePath, $tempInputWithExt)) {
+                $inputPath = $tempInputWithExt;
+            }
         }
 
-        if (file_exists($out)) {
-            @unlink($out);
-        }
+        try {
+            // 1. Intento estándar de conversión de contenedor
+            $cmd = sprintf(
+                'ffmpeg -y -v error -i %s -vn -ar 16000 -ac 1 -c:a libmp3lame -b:a 64k %s 2>&1',
+                escapeshellarg($inputPath),
+                escapeshellarg($out)
+            );
+            $output = [];
+            @exec($cmd, $output, $exitCode);
 
-        Log::warning('Ffmpeg audio conversion failed: ' . implode("\n", (array) $output));
-        return null;
+            if ($exitCode === 0 && file_exists($out) && filesize($out) > 0) {
+                return $out;
+            }
+
+            // 2. Si falló, intentar como Raw PCM 16-bit LE a 16kHz mono (estándar de Android AudioRecord)
+            $cmdRaw16 = sprintf(
+                'ffmpeg -y -v error -f s16le -ar 16000 -ac 1 -i %s -vn -ar 16000 -ac 1 -c:a libmp3lame -b:a 64k %s 2>&1',
+                escapeshellarg($sourcePath),
+                escapeshellarg($out)
+            );
+            $outputRaw16 = [];
+            @exec($cmdRaw16, $outputRaw16, $exitCodeRaw16);
+
+            if ($exitCodeRaw16 === 0 && file_exists($out) && filesize($out) > 0) {
+                Log::info('Audio converted to MP3 using raw PCM (16kHz mono) demuxer.');
+                return $out;
+            }
+
+            // 3. Si falló, intentar como Raw PCM 16-bit LE a 44.1kHz mono (tasa de muestreo estándar de hardware Android)
+            $cmdRaw44 = sprintf(
+                'ffmpeg -y -v error -f s16le -ar 44100 -ac 1 -i %s -vn -ar 16000 -ac 1 -c:a libmp3lame -b:a 64k %s 2>&1',
+                escapeshellarg($sourcePath),
+                escapeshellarg($out)
+            );
+            $outputRaw44 = [];
+            @exec($cmdRaw44, $outputRaw44, $exitCodeRaw44);
+
+            if ($exitCodeRaw44 === 0 && file_exists($out) && filesize($out) > 0) {
+                Log::info('Audio converted to MP3 using raw PCM (44.1kHz mono) demuxer.');
+                return $out;
+            }
+
+            // 4. Si falló, intentar como Raw PCM 16-bit LE a 8kHz mono (telefonía / AMR)
+            $cmdRaw8 = sprintf(
+                'ffmpeg -y -v error -f s16le -ar 8000 -ac 1 -i %s -vn -ar 16000 -ac 1 -c:a libmp3lame -b:a 64k %s 2>&1',
+                escapeshellarg($sourcePath),
+                escapeshellarg($out)
+            );
+            $outputRaw8 = [];
+            @exec($cmdRaw8, $outputRaw8, $exitCodeRaw8);
+
+            if ($exitCodeRaw8 === 0 && file_exists($out) && filesize($out) > 0) {
+                Log::info('Audio converted to MP3 using raw PCM (8kHz mono) demuxer.');
+                return $out;
+            }
+
+            if (file_exists($out)) {
+                @unlink($out);
+            }
+
+            Log::warning('Ffmpeg audio conversion failed: ' . implode("\n", (array) $output), [
+                'input_path'        => $sourcePath,
+                'original_name'     => $originalFileName,
+                'size_bytes'        => file_exists($sourcePath) ? filesize($sourcePath) : 0,
+                'first_bytes_hex'   => file_exists($sourcePath) ? bin2hex(substr((string) file_get_contents($sourcePath), 0, 64)) : '',
+                'first_bytes_ascii' => file_exists($sourcePath) ? preg_replace('/[^\x20-\x7E]/', '.', substr((string) file_get_contents($sourcePath), 0, 64)) : '',
+            ]);
+            return null;
+        } finally {
+            if ($tempInputWithExt !== null && file_exists($tempInputWithExt)) {
+                @unlink($tempInputWithExt);
+            }
+        }
     }
 
     /**
@@ -972,6 +1099,11 @@ SYS;
             'webm' => 'audio/webm',
             'flac' => 'audio/flac',
             'aac'  => 'audio/aac',
+            '3gp'  => 'audio/3gpp',
+            '3gpp' => 'audio/3gpp',
+            'amr'  => 'audio/amr',
+            'pcm'  => 'audio/wav',
+            'raw'  => 'audio/wav',
         ];
 
         if (isset($extensionMap[$ext])) {
@@ -1077,12 +1209,12 @@ SYS;
     }
 
     /**
-     * Transcribe con OpenAI Whisper como respaldo.
+     * Transcribe con OpenAI Whisper como respaldo si hay una clave de OpenAI configurada.
      */
     protected function transcribeWithWhisperFallback(string $fileContents, string $fileName): ?string
     {
         $whisperUrl = config('services.assistant.whisper_url', 'https://api.openai.com/v1/audio/transcriptions');
-        $whisperKey = config('services.assistant.whisper_key', config('services.assistant.key'));
+        $whisperKey = (string) config('services.assistant.whisper_key', env('OPENAI_API_KEY', ''));
 
         if (empty($whisperKey)) {
             return null;

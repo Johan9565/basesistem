@@ -144,4 +144,48 @@ class AudioTranscriptionServiceTest extends TestCase
             }
         }
     }
+
+    public function test_transcribe_audio_handles_raw_pcm_audio(): void
+    {
+        Config::set('services.transcription.driver', 'groq');
+        Config::set('services.groq.api_key', 'test_groq_key');
+
+        Http::fake([
+            'https://api.groq.com/openai/v1/audio/transcriptions' => Http::response([
+                'text' => 'Transcripción de audio PCM crudo exitosa.',
+            ], 200),
+        ]);
+
+        // Simular audio PCM crudo de 16-bit a 16kHz mono (sin cabecera WAV/RIFF)
+        $rawPcmData = str_repeat("\x00\x00\x10\x00\x20\x00", 2000); // 12,000 bytes
+        $tmp = tempnam(sys_get_temp_dir(), 'test_pcm_');
+        file_put_contents($tmp, $rawPcmData);
+
+        try {
+            $result = $this->service->transcribeAudio($tmp);
+            $this->assertEquals('Transcripción de audio PCM crudo exitosa.', $result);
+        } finally {
+            if (file_exists($tmp)) {
+                @unlink($tmp);
+            }
+        }
+    }
+
+    public function test_transcribe_audio_handles_base64_data_uri(): void
+    {
+        Config::set('services.transcription.driver', 'groq');
+        Config::set('services.groq.api_key', 'test_groq_key');
+
+        Http::fake([
+            'https://api.groq.com/openai/v1/audio/transcriptions' => Http::response([
+                'text' => 'Transcripción de Base64 exitosa.',
+            ], 200),
+        ]);
+
+        $audioContent = 'RIFF' . str_repeat('B', 100);
+        $base64Data = 'data:audio/wav;base64,' . base64_encode($audioContent);
+
+        $result = $this->service->transcribeAudio($base64Data);
+        $this->assertEquals('Transcripción de Base64 exitosa.', $result);
+    }
 }
