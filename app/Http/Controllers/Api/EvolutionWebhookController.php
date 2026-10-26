@@ -240,7 +240,9 @@ class EvolutionWebhookController extends Controller
                 $ext = 'wav';
             }
 
-            $tmpFile = tempnam(sys_get_temp_dir(), 'wa_voice_') . '.' . $ext;
+            $tmpBase = tempnam(sys_get_temp_dir(), 'wa_voice_');
+            $tmpFile = $tmpBase . '.' . $ext;
+            @unlink($tmpBase);
             file_put_contents($tmpFile, $binary);
 
             try {

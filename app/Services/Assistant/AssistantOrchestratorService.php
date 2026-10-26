@@ -850,110 +850,267 @@ SYS;
     {
         $realPath = $file instanceof UploadedFile ? $file->getRealPath() : $file;
         $fileName = $file instanceof UploadedFile ? ($file->getClientOriginalName() ?: 'audio.m4a') : basename($file);
-        $mime     = $file instanceof UploadedFile 
+        $rawMime  = $file instanceof UploadedFile 
             ? ($file->getMimeType() ?: 'audio/m4a') 
             : (function_exists('mime_content_type') && file_exists($realPath) ? (mime_content_type($realPath) ?: 'audio/m4a') : 'audio/m4a');
 
-        if (!file_exists($realPath)) {
-            throw new \InvalidArgumentException("El archivo de audio no existe en: {$realPath}");
+        if (!file_exists($realPath) || filesize($realPath) === 0) {
+            throw new \InvalidArgumentException("El archivo de audio no existe o está vacío (0 bytes) en: {$realPath}");
         }
 
-        $fileContents = file_get_contents($realPath);
+        // Si ffmpeg está disponible y el audio no es un MP3 o WAV nativo (ej. OGG Opus de WhatsApp o WebM de navegador),
+        // convertirlo a MP3 estandarizado (16kHz mono) para máxima compatibilidad con todos los motores de transcripción.
+        $convertedTmpFile = null;
+        if ($this->isFfmpegAvailable() && !preg_match('/\.(mp3|wav)$/i', $fileName)) {
+            $convertedPath = $this->convertAudioToMp3($realPath);
+            if ($convertedPath !== null) {
+                $realPath = $convertedPath;
+                $fileName = 'audio.mp3';
+                $rawMime  = 'audio/mpeg';
+                $convertedTmpFile = $convertedPath;
+            }
+        }
 
-        // 1. Groq Whisper (alta velocidad y precisión con whisper-large-v3-turbo)
+        try {
+            $fileContents = file_get_contents($realPath);
+            if (empty($fileContents)) {
+                throw new \InvalidArgumentException("El contenido del audio está vacío tras la lectura.");
+            }
+
+            $cleanMime = $this->normalizeMimeType($fileName, $rawMime);
+            $driver = (string) config('services.transcription.driver', 'groq');
+
+            // Determinar orden de proveedores según driver preferido
+            $providers = $driver === 'deepgram' 
+                ? ['deepgram', 'groq', 'whisper'] 
+                : ['groq', 'deepgram', 'whisper'];
+
+            foreach ($providers as $provider) {
+                $transcript = null;
+                switch ($provider) {
+                    case 'groq':
+                        $transcript = $this->transcribeWithGroq($fileContents, $fileName, $cleanMime);
+                        break;
+                    case 'deepgram':
+                        $transcript = $this->transcribeWithDeepgram($fileContents, $cleanMime);
+                        break;
+                    case 'whisper':
+                        $transcript = $this->transcribeWithWhisperFallback($fileContents, $fileName);
+                        break;
+                }
+
+                if (!empty($transcript)) {
+                    return $transcript;
+                }
+            }
+
+            throw new \RuntimeException('No fue posible transcribir el archivo de audio. Verifique la clave de Groq, Deepgram o Whisper.');
+        } finally {
+            if ($convertedTmpFile !== null && file_exists($convertedTmpFile)) {
+                @unlink($convertedTmpFile);
+            }
+        }
+    }
+
+    /**
+     * Verifica si la herramienta ffmpeg está instalada y ejecutable en el sistema.
+     */
+    protected function isFfmpegAvailable(): bool
+    {
+        static $available = null;
+        if ($available === null) {
+            $path = trim((string) @shell_exec('which ffmpeg 2>/dev/null'));
+            $available = !empty($path) && is_executable($path);
+        }
+        return $available;
+    }
+
+    /**
+     * Convierte cualquier audio (WhatsApp Ogg Opus, WebM, etc.) a MP3 mono a 16kHz.
+     */
+    protected function convertAudioToMp3(string $sourcePath): ?string
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'transcribe_conv_');
+        $out = $tmp . '.mp3';
+        @unlink($tmp);
+
+        $cmd = sprintf(
+            'ffmpeg -y -v error -i %s -vn -ar 16000 -ac 1 -c:a libmp3lame -b:a 64k %s 2>&1',
+            escapeshellarg($sourcePath),
+            escapeshellarg($out)
+        );
+
+        @exec($cmd, $output, $exitCode);
+
+        if ($exitCode === 0 && file_exists($out) && filesize($out) > 0) {
+            return $out;
+        }
+
+        if (file_exists($out)) {
+            @unlink($out);
+        }
+
+        Log::warning('Ffmpeg audio conversion failed: ' . implode("\n", (array) $output));
+        return null;
+    }
+
+    /**
+     * Normaliza el MIME type para Deepgram y otros proveedores, eliminando parámetros y formatos no soportados.
+     */
+    protected function normalizeMimeType(string $fileName, string $rawMime): string
+    {
+        $mime = trim(explode(';', $rawMime)[0]);
+        $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+
+        $extensionMap = [
+            'ogg'  => 'audio/ogg',
+            'opus' => 'audio/ogg',
+            'mp3'  => 'audio/mpeg',
+            'wav'  => 'audio/wav',
+            'm4a'  => 'audio/m4a',
+            'mp4'  => 'audio/mp4',
+            'webm' => 'audio/webm',
+            'flac' => 'audio/flac',
+            'aac'  => 'audio/aac',
+        ];
+
+        if (isset($extensionMap[$ext])) {
+            if (!str_starts_with($mime, 'audio/') || in_array($mime, ['application/ogg', 'video/ogg', 'application/octet-stream', 'text/plain'], true)) {
+                return $extensionMap[$ext];
+            }
+        }
+
+        if (in_array($mime, ['application/ogg', 'video/ogg'], true)) {
+            return 'audio/ogg';
+        }
+
+        if (!str_starts_with($mime, 'audio/')) {
+            return 'audio/wav';
+        }
+
+        return $mime;
+    }
+
+    /**
+     * Transcribe con Groq Whisper (whisper-large-v3-turbo).
+     */
+    protected function transcribeWithGroq(string $fileContents, string $fileName, string $mime): ?string
+    {
         $groqKey = (string) config('services.groq.api_key', env('GROQ_API_KEY', ''));
-        if (!empty($groqKey)) {
-            $url   = config('services.groq.whisper_url', 'https://api.groq.com/openai/v1/audio/transcriptions');
-            $model = config('services.groq.whisper_model', 'whisper-large-v3-turbo');
-
-            if (!preg_match('/\.(m4a|mp3|webm|mp4|mpga|wav|mpeg|ogg|flac)$/i', $fileName)) {
-                $ext = str_contains($mime, 'webm') ? 'webm' : (str_contains($mime, 'ogg') ? 'ogg' : (str_contains($mime, 'wav') ? 'wav' : 'm4a'));
-                $fileName = rtrim($fileName, '.') . '.' . $ext;
-            }
-
-            try {
-                $response = Http::withToken($groqKey)
-                    ->timeout(60)
-                    ->attach('file', $fileContents, $fileName)
-                    ->post($url, [
-                        'model'           => $model,
-                        'language'        => 'es',
-                        'response_format' => 'json',
-                    ]);
-
-                if ($response->successful()) {
-                    $text = (string) $response->json('text');
-                    if (!empty(trim($text))) {
-                        return trim($text);
-                    }
-                } else {
-                    Log::warning('Groq Whisper transcription failed, status: ' . $response->status(), [
-                        'body' => $response->body(),
-                    ]);
-                }
-            } catch (\Throwable $e) {
-                Log::warning('Groq Whisper exception: ' . $e->getMessage());
-            }
+        if (empty($groqKey)) {
+            return null;
         }
 
-        // 2. Deepgram
-        $deepgramKey = (string) config('services.deepgram.key');
+        $url   = config('services.groq.whisper_url', 'https://api.groq.com/openai/v1/audio/transcriptions');
+        $model = config('services.groq.whisper_model', 'whisper-large-v3-turbo');
 
-        if (!empty($deepgramKey)) {
-            $model    = config('services.deepgram.model', 'nova-3');
-            $language = config('services.deepgram.language', 'es');
+        if (!preg_match('/\.(m4a|mp3|webm|mp4|mpga|wav|mpeg|ogg|flac)$/i', $fileName)) {
+            $ext = str_contains($mime, 'webm') ? 'webm' : (str_contains($mime, 'ogg') ? 'ogg' : (str_contains($mime, 'wav') ? 'wav' : 'mp3'));
+            $fileName = rtrim($fileName, '.') . '.' . $ext;
+        }
 
-            $url = "https://api.deepgram.com/v1/listen?model={$model}&language={$language}&smart_format=true";
-
-            try {
-                $response = Http::withHeaders([
-                    'Authorization' => 'Token ' . $deepgramKey,
-                    'Content-Type'  => $mime,
-                ])
+        try {
+            $response = Http::withToken($groqKey)
                 ->timeout(60)
-                ->withBody($fileContents, $mime)
-                ->post($url);
+                ->attach('file', $fileContents, $fileName)
+                ->post($url, [
+                    'model'           => $model,
+                    'language'        => 'es',
+                    'response_format' => 'json',
+                ]);
 
-                if ($response->successful()) {
-                    $transcript = (string) $response->json('results.channels.0.alternatives.0.transcript');
-                    if (!empty(trim($transcript))) {
-                        return trim($transcript);
-                    }
-                } else {
-                    Log::warning('Deepgram transcription failed, status: ' . $response->status(), [
-                        'body' => $response->body(),
-                    ]);
+            if ($response->successful()) {
+                $text = (string) $response->json('text');
+                if (!empty(trim($text))) {
+                    return trim($text);
                 }
-            } catch (\Throwable $e) {
-                Log::warning('Deepgram exception: ' . $e->getMessage());
+            } else {
+                Log::warning('Groq Whisper transcription failed, status: ' . $response->status(), [
+                    'body' => $response->body(),
+                ]);
             }
+        } catch (\Throwable $e) {
+            Log::warning('Groq Whisper exception: ' . $e->getMessage());
         }
 
-        // 3. Fallback: OpenAI-compatible Whisper endpoint if configured
+        return null;
+    }
+
+    /**
+     * Transcribe con Deepgram (nova-3).
+     */
+    protected function transcribeWithDeepgram(string $fileContents, string $mime): ?string
+    {
+        $deepgramKey = (string) config('services.deepgram.key');
+        if (empty($deepgramKey)) {
+            return null;
+        }
+
+        $model    = config('services.deepgram.model', 'nova-3');
+        $language = config('services.deepgram.language', 'es');
+        $url      = "https://api.deepgram.com/v1/listen?model={$model}&language={$language}&smart_format=true";
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Token ' . $deepgramKey,
+                'Content-Type'  => $mime,
+            ])
+            ->timeout(60)
+            ->withBody($fileContents, $mime)
+            ->post($url);
+
+            if ($response->successful()) {
+                $transcript = (string) $response->json('results.channels.0.alternatives.0.transcript');
+                if (!empty(trim($transcript))) {
+                    return trim($transcript);
+                }
+            } else {
+                Log::warning('Deepgram transcription failed, status: ' . $response->status(), [
+                    'body' => $response->body(),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Deepgram exception: ' . $e->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Transcribe con OpenAI Whisper como respaldo.
+     */
+    protected function transcribeWithWhisperFallback(string $fileContents, string $fileName): ?string
+    {
         $whisperUrl = config('services.assistant.whisper_url', 'https://api.openai.com/v1/audio/transcriptions');
         $whisperKey = config('services.assistant.whisper_key', config('services.assistant.key'));
 
-        if (!empty($whisperKey)) {
-            try {
-                $response = Http::withToken($whisperKey)
-                    ->timeout(60)
-                    ->attach('file', $fileContents, $fileName)
-                    ->post($whisperUrl, [
-                        'model'    => config('services.assistant.whisper_model', 'whisper-1'),
-                        'language' => 'es',
-                    ]);
-
-                if ($response->successful()) {
-                    $text = (string) $response->json('text');
-                    if (!empty(trim($text))) {
-                        return trim($text);
-                    }
-                }
-            } catch (\Throwable $e) {
-                Log::warning('Whisper fallback exception: ' . $e->getMessage());
-            }
+        if (empty($whisperKey)) {
+            return null;
         }
 
-        throw new \RuntimeException('No fue posible transcribir el archivo de audio. Verifique la clave de Groq, Deepgram o Whisper.');
+        try {
+            $response = Http::withToken($whisperKey)
+                ->timeout(60)
+                ->attach('file', $fileContents, $fileName)
+                ->post($whisperUrl, [
+                    'model'    => config('services.assistant.whisper_model', 'whisper-1'),
+                    'language' => 'es',
+                ]);
+
+            if ($response->successful()) {
+                $text = (string) $response->json('text');
+                if (!empty(trim($text))) {
+                    return trim($text);
+                }
+            } else {
+                Log::warning('Whisper fallback failed, status: ' . $response->status(), [
+                    'body' => $response->body(),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Whisper fallback exception: ' . $e->getMessage());
+        }
+
+        return null;
     }
 }
