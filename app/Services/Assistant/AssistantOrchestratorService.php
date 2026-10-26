@@ -26,6 +26,34 @@ class AssistantOrchestratorService
     }
 
     /**
+     * Sanitiza el texto para síntesis de voz (TTS) y mensajería (WhatsApp),
+     * eliminando asteriscos de markdown, almohadillas, viñetas y caracteres especiales
+     * que arruinan la lectura por voz o generan lectura fonética indeseada.
+     */
+    public function cleanVoiceText(string $text): string
+    {
+        // 1. Eliminar encabezados markdown (# Encabezado -> Encabezado)
+        $text = preg_replace('/^#{1,6}\s+/m', '', $text);
+
+        // 2. Eliminar negritas y cursivas (**texto**, *texto*, __texto__, _texto_)
+        $text = preg_replace('/(\*\*|__)(.*?)\1/s', '$2', $text);
+        $text = preg_replace('/(\*|_)(.*?)\1/s', '$2', $text);
+
+        // 3. Eliminar viñetas de guion, asterisco o puntos de lista
+        $text = preg_replace('/^\s*[-*•]\s+/m', '', $text);
+
+        // 4. Reemplazar pipes o barras separadoras por puntos o espacios
+        $text = str_replace(' | ', '. ', $text);
+        $text = str_replace('|', ' ', $text);
+
+        // 5. Limpiar espacios horizontales redundantes y saltos excesivos
+        $text = preg_replace("/[ \t]+/", ' ', $text);
+        $text = preg_replace("/\n{3,}/", "\n\n", $text);
+
+        return trim($text);
+    }
+
+    /**
      * Interacts with LLM using tools and processes user prompt.
      *
      * @param User $user
@@ -102,7 +130,7 @@ class AssistantOrchestratorService
             return [
                 'success' => true,
                 'data'    => null,
-                'message' => $content,
+                'message' => $this->cleanVoiceText($content),
                 'action'  => 'conversation',
             ];
         } catch (\Throwable $e) {
@@ -133,6 +161,17 @@ IDENTIDAD Y ROLES (ESTRICTO):
 - IDENTIDAD DEL USUARIO: El usuario al que asistes se llama {$userName} (puedes llamarlo {$firstName}).
 - REGLA DE TRATO ABSOLUTA: NUNCA llames al usuario "Cami". Tú eres Cami; el usuario es {$firstName}. Si el usuario dice "Cami", "hola Cami", "¿estás ahí Cami?", te está llamando a TI por tu nombre.
 - CONVERSACIÓN Y SALUDOS: Ante saludos, cortesías o preguntas de presencia (ej. "hola", "hola Cami", "¿estás ahí?", "buenos días", "¿cómo estás?"), responde de manera directa, cordial, cálida y concisa. NO ejecutes herramientas ni búsquedas de base de datos para responder a un saludo o interacción cotidiana.
+
+REGLAS DE FORMATO Y ESTILO CONVERSACIONAL (VOZ Y TEXTO):
+- Escribe ÚNICAMENTE en texto plano conversacional, natural, limpio y fluido.
+- PROHIBIDO ABSOLUTAMENTE el uso de Markdown o caracteres especiales de formato:
+  * No uses asteriscos para negritas ni cursivas (nada de *texto* ni **texto**).
+  * No uses almohadillas (#), viñetas de guion (-) ni asteriscos (*) para listas.
+  * No uses barras verticales (|), barras inclinadas innecesarias (/) ni caracteres extraños.
+  * No uses emojis en listas ni símbolos especiales.
+- Para enumerar o listar pendientes:
+  * Si es una lista, usa números simples con punto y espacio: "1. Comprar pan de muerto. 2. Comprar un kilo de tomate." o redacta en lenguaje natural continuo: "Tienes pendiente comprar pan de muerto y comprar un kilo de tomate."
+- Tu respuesta será leída por un sintetizador de voz (TTS) y enviada por WhatsApp: cualquier símbolo, asterisco o formato roto arruina la pronunciación y la lectura auditiva.
 
 Zona horaria de referencia: America/Cancun.
 FECHA Y HORA ACTUAL DEL SISTEMA (ANCLA TEMPORAL ESTRICTA): {$nowIso}.
@@ -167,8 +206,8 @@ Tu función al recibir intenciones de memoria, compra o pendientes es clasificar
 
 3. POLÍTICA DE EJECUCIÓN Y RESPUESTA:
 - Ejecuta las acciones correspondientes (o llamadas a función) por cada ítem por separado.
-- Responde siempre confirmando de manera ultra concisa (máximo 1 o 2 líneas), sin explicaciones metodológicas:
-  * Ejemplo respuesta: "Anotados en pendientes: 1. Comprar paraguas | 2. Comprar impermeable."
+- Responde siempre confirmando de manera ultra concisa (máximo 1 o 2 líneas), en texto plano sin markdown ni barras verticales:
+  * Ejemplo respuesta: "Anotados en pendientes: 1. Comprar paraguas. 2. Comprar impermeable."
 
 MEMORIA, CONSULTA (RETRIEVAL) Y EJECUCIÓN DE HERRAMIENTAS:
 - BÚSQUEDA DE CITAS: Cuando el usuario consulte qué eventos, citas o reuniones tiene, o busque una cita específica -> invoca `search_calendar_events`.
@@ -178,13 +217,14 @@ MEMORIA, CONSULTA (RETRIEVAL) Y EJECUCIÓN DE HERRAMIENTAS:
   * Al responder con los resultados encontrados, INFORMA SIEMPRE de AMBAS categorías:
     1. Recordatorios programados con su fecha y hora.
     2. To-Dos, compras y tareas atemporales.
+  * Responde siempre en texto plano conversacional fluido o con numeración simple (ej. "1. Comprar pan de muerto. 2. Comprar tomates."). PROHIBIDO usar asteriscos, guiones de lista o markdown.
   * Si alguna de las categorías no tiene registros, indícalo claramente con naturalidad.
 - CREACIÓN DE CITAS: Cuando el usuario exprese la intención de agendar o programar -> invoca `create_calendar_event`.
 - CREACIÓN DE RECORDATORIOS: Cuando el usuario pida recordar una tarea o alarma con hora/fecha -> invoca `create_reminder`.
 - CREACIÓN DE NOTAS / PENDIENTES: Cuando el usuario pida guardar una nota o pendientes/compras sin hora -> invoca `create_workspace_note`.
 - CONSULTA DE AGENDA: Cuando el usuario pida la agenda global de un rango -> invoca `get_agenda`.
 
-Cuando recibas el resultado de una herramienta de búsqueda (retrieval), compila una respuesta clara, concisa, profesional, humana y estructurada citando la información exacta encontrada. Si no hay registros, indícaselo amablemente a {$firstName}.
+Cuando recibas el resultado de una herramienta de búsqueda (retrieval), compila una respuesta clara, concisa, profesional, humana y estructurada en texto plano sin markdown, citando la información exacta encontrada. Si no hay registros, indícaselo amablemente a {$firstName}.
 SYS;
     }
 
@@ -474,7 +514,7 @@ SYS;
         ];
 
         foreach ($toolCalls as $idx => $call) {
-            $fnName  = $call['function']['name'] ?? '';
+            $fnName = $call['function']['name'] ?? '';
             $rawArgs = $call['function']['arguments'] ?? '{}';
             $args    = json_decode($rawArgs, true) ?: [];
             $res     = $creationResults[$idx] ?? null;
@@ -492,31 +532,31 @@ SYS;
 
         $llmContent = trim((string) ($choice['message']['content'] ?? ''));
         if (!empty($llmContent)) {
-            $message = $llmContent;
+            $message = $this->cleanVoiceText($llmContent);
         } else {
             $summaryParts = [];
             if (!empty($actionsByType['notes'])) {
-                $items = array_map(fn($idx, $item) => ($idx + 1) . '. ' . $item, array_keys($actionsByType['notes']), $actionsByType['notes']);
-                $summaryParts[] = 'Anotados en pendientes: ' . implode(' | ', $items);
+                $items = array_map(fn($idx, $item) => ($idx + 1) . '. ' . rtrim($item, '.') . '.', array_keys($actionsByType['notes']), $actionsByType['notes']);
+                $summaryParts[] = 'Anotados en pendientes: ' . implode(' ', $items);
             }
             if (!empty($actionsByType['reminders'])) {
-                $items = array_map(fn($idx, $item) => ($idx + 1) . '. ' . $item, array_keys($actionsByType['reminders']), $actionsByType['reminders']);
-                $summaryParts[] = 'Recordatorios programados: ' . implode(' | ', $items);
+                $items = array_map(fn($idx, $item) => ($idx + 1) . '. ' . rtrim($item, '.') . '.', array_keys($actionsByType['reminders']), $actionsByType['reminders']);
+                $summaryParts[] = 'Recordatorios programados: ' . implode(' ', $items);
             }
             if (!empty($actionsByType['events'])) {
-                $items = array_map(fn($idx, $item) => ($idx + 1) . '. ' . $item, array_keys($actionsByType['events']), $actionsByType['events']);
-                $summaryParts[] = 'Citas agendadas: ' . implode(' | ', $items);
+                $items = array_map(fn($idx, $item) => ($idx + 1) . '. ' . rtrim($item, '.') . '.', array_keys($actionsByType['events']), $actionsByType['events']);
+                $summaryParts[] = 'Citas agendadas: ' . implode(' ', $items);
             }
 
             $message = !empty($summaryParts)
-                ? implode('. ', $summaryParts) . '.'
+                ? implode(' ', $summaryParts)
                 : 'Se procesaron ' . count($creationResults) . ' acciones correctamente.';
         }
 
         return [
             'success' => true,
             'data'    => array_map(fn($e) => $e['data'] ?? null, $creationResults),
-            'message' => $message,
+            'message' => $this->cleanVoiceText($message),
             'action'  => 'multiple_actions',
         ];
     }
@@ -549,7 +589,7 @@ SYS;
                     return [
                         'success' => true,
                         'data'    => $dataToReturn,
-                        'message' => trim($naturalContent),
+                        'message' => $this->cleanVoiceText(trim($naturalContent)),
                         'action'  => $primaryAction,
                     ];
                 }
@@ -563,19 +603,20 @@ SYS;
             Log::warning("Second turn retrieval exception: " . $e->getMessage());
         }
 
-        // Friendly fallback message if second turn fails - NEVER leak database technical logs!
+        // Friendly fallback message in plain conversational text for TTS & WhatsApp
         $fallbackMessage = $this->buildFriendlyRetrievalFallback($dataToReturn, $primaryAction);
 
         return [
             'success' => true,
             'data'    => $dataToReturn,
-            'message' => $fallbackMessage,
+            'message' => $this->cleanVoiceText($fallbackMessage),
             'action'  => $primaryAction,
         ];
     }
 
     /**
      * Generates a warm, user-friendly conversational fallback when second turn LLM is unavailable.
+     * Formats strictly in clean plain text suitable for TTS speech and WhatsApp messages.
      */
     protected function buildFriendlyRetrievalFallback(array $results, string $primaryAction): string
     {
@@ -587,21 +628,25 @@ SYS;
                 return 'No tienes pendientes ni recordatorios activos en este momento.';
             }
 
-            $lines = ['Aquí tienes tus pendientes:'];
+            $parts = ['Aquí tienes tus pendientes.'];
             if (!empty($scheduled)) {
-                $lines[] = "\n📅 Recordatorios programados:";
+                $parts[] = 'Recordatorios programados:';
+                $i = 1;
                 foreach ($scheduled as $r) {
-                    $when = !empty($r['scheduled_at']) ? " ({$r['scheduled_at']})" : '';
-                    $lines[] = "- {$r['title']}{$when}";
+                    $when = !empty($r['scheduled_at']) ? ' para el ' . $r['scheduled_at'] : '';
+                    $parts[] = "{$i}. {$r['title']}{$when}.";
+                    $i++;
                 }
             }
             if (!empty($todos)) {
-                $lines[] = "\n✅ To-Dos y tareas pendientes:";
+                $parts[] = 'To-Dos y tareas pendientes:';
+                $j = 1;
                 foreach ($todos as $t) {
-                    $lines[] = "- {$t['title']}";
+                    $parts[] = "{$j}. {$t['title']}.";
+                    $j++;
                 }
             }
-            return implode("\n", $lines);
+            return implode(' ', $parts);
         }
 
         if ($primaryAction === 'search_calendar_events') {
@@ -609,12 +654,15 @@ SYS;
             if ($count === 0) {
                 return 'No tienes eventos ni citas agendadas en el periodo solicitado.';
             }
-            $lines = ["Encontré {$count} evento(s) en tu calendario:"];
+            $parts = ["Encontré {$count} evento(s) en tu calendario:"];
+            $i = 1;
             foreach ($results as $e) {
                 $start = $e['start_time'] ?? '';
-                $lines[] = "- {$e['title']}" . ($start ? " ({$start})" : '');
+                $when = $start ? " el {$start}" : '';
+                $parts[] = "{$i}. {$e['title']}{$when}.";
+                $i++;
             }
-            return implode("\n", $lines);
+            return implode(' ', $parts);
         }
 
         if ($primaryAction === 'search_notes') {
@@ -622,11 +670,13 @@ SYS;
             if ($count === 0) {
                 return 'No encontré notas que coincidan con tu búsqueda.';
             }
-            $lines = ["Encontré {$count} nota(s) en tu espacio de trabajo:"];
+            $parts = ["Encontré {$count} nota(s) en tu espacio de trabajo:"];
+            $i = 1;
             foreach ($results as $n) {
-                $lines[] = "- {$n['title']}";
+                $parts[] = "{$i}. {$n['title']}.";
+                $i++;
             }
-            return implode("\n", $lines);
+            return implode(' ', $parts);
         }
 
         return 'He revisado tu información en el sistema.';
@@ -823,7 +873,7 @@ SYS;
         return [
             'success' => true,
             'data'    => $event,
-            'message' => "Evento '{$title}' agendado para el {$formattedDate}.",
+            'message' => "Evento {$title} agendado para el {$formattedDate}.",
             'action'  => 'create_calendar_event',
         ];
     }
@@ -859,7 +909,7 @@ SYS;
         return [
             'success' => true,
             'data'    => $reminder,
-            'message' => "Recordatorio '{$title}' programado para el {$formattedDate} (prioridad {$priority}).",
+            'message' => "Recordatorio {$title} programado para el {$formattedDate} con prioridad {$priority}.",
             'action'  => 'create_reminder',
         ];
     }
@@ -1133,8 +1183,6 @@ SYS;
         $out = $tmp . '.mp3';
         @unlink($tmp);
 
-        // Si el archivo original tenía extensión (m4a, 3gp, aac, etc.),
-        // crear enlace/copia con esa extensión para que ffmpeg pueda deducir el demuxer
         $ext = strtolower(pathinfo($originalFileName, PATHINFO_EXTENSION));
         $inputPath = $sourcePath;
         $tempInputWithExt = null;

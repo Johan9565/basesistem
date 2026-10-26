@@ -31,10 +31,10 @@ class AssistantTaskClassificationAndAtomicityTest extends TestCase
         $this->assertStringContainsString('Tipo "TODO"', $prompt);
         $this->assertStringContainsString('Tipo "RECORDATORIO_TEMPORAL"', $prompt);
         $this->assertStringContainsString('REGLA DE ATOMICIDAD (DESCOMPOSICIÓN ESTRICTA)', $prompt);
-        $this->assertStringContainsString('Anotados en pendientes: 1. Comprar paraguas | 2. Comprar impermeable.', $prompt);
+        $this->assertStringContainsString('Anotados en pendientes: 1. Comprar paraguas. 2. Comprar impermeable.', $prompt);
     }
 
-    public function test_system_prompt_includes_cami_identity_and_greeting_rule(): void
+    public function test_system_prompt_includes_voice_formatting_rules(): void
     {
         $user = new User();
         $user->name = 'Johan Alberto Chin';
@@ -45,10 +45,21 @@ class AssistantTaskClassificationAndAtomicityTest extends TestCase
 
         $prompt = $method->invoke($this->service, Carbon::now()->toIso8601String(), $user);
 
-        $this->assertStringContainsString('Te llamas Cami', $prompt);
-        $this->assertStringContainsString('Johan', $prompt);
-        $this->assertStringContainsString('NUNCA llames al usuario "Cami"', $prompt);
-        $this->assertStringContainsString('CONVERSACIÓN Y SALUDOS', $prompt);
+        $this->assertStringContainsString('REGLAS DE FORMATO Y ESTILO CONVERSACIONAL (VOZ Y TEXTO)', $prompt);
+        $this->assertStringContainsString('PROHIBIDO ABSOLUTAMENTE el uso de Markdown', $prompt);
+        $this->assertStringContainsString('sintetizador de voz (TTS)', $prompt);
+    }
+
+    public function test_clean_voice_text_strips_markdown_formatting_safely(): void
+    {
+        $rawWithMarkdown = "**Recordatorios:**\n- Revisar finanzas.\n- Comprar *pan de muerto* y tomates.";
+        $cleaned = $this->service->cleanVoiceText($rawWithMarkdown);
+
+        $this->assertStringNotContainsString('**', $cleaned);
+        $this->assertStringNotContainsString('*', $cleaned);
+        $this->assertStringNotContainsString('- ', $cleaned);
+        $this->assertStringContainsString('Recordatorios:', $cleaned);
+        $this->assertStringContainsString('pan de muerto', $cleaned);
     }
 
     public function test_tools_schema_supports_concise_workspace_notes(): void
@@ -139,6 +150,7 @@ class AssistantTaskClassificationAndAtomicityTest extends TestCase
         $this->assertStringNotContainsString('registros coincidentes', $fallback);
         $this->assertStringContainsString('Revisar reportes', $fallback);
         $this->assertStringContainsString('Comprar tomates', $fallback);
+        $this->assertStringNotContainsString('**', $fallback);
     }
 
     public function test_handle_tool_calls_executes_multiple_atomized_notes_and_formats_concise_response(): void
@@ -180,7 +192,7 @@ class AssistantTaskClassificationAndAtomicityTest extends TestCase
         );
 
         $this->assertTrue($result['success']);
-        $this->assertEquals('Anotados en pendientes: 1. Comprar paraguas | 2. Comprar impermeable.', $result['message']);
+        $this->assertEquals('Anotados en pendientes: 1. Comprar paraguas. 2. Comprar impermeable.', $result['message']);
         $this->assertCount(2, $result['data']);
 
         // Clean up created test notes
@@ -232,7 +244,7 @@ class AssistantTaskClassificationAndAtomicityTest extends TestCase
         );
 
         $this->assertTrue($result['success']);
-        $this->assertEquals('Recordatorios programados: 1. Comprar paraguas | 2. Comprar impermeable.', $result['message']);
+        $this->assertEquals('Recordatorios programados: 1. Comprar paraguas. 2. Comprar impermeable.', $result['message']);
         $this->assertCount(2, $result['data']);
 
         // Clean up created test reminders
