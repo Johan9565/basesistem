@@ -165,6 +165,7 @@ class AssistantController extends Controller
             [
                 'execution'     => $result['data'] ?? null,
                 'transcription' => $transcription,
+                'reply'         => $result['data']['reply'] ?? ($result['message'] ?? null),
             ],
             $result['message'] ?? '',
             $result['action'] ?? 'voice_interaction',

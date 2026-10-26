@@ -39,7 +39,7 @@ class AssistantOrchestratorService
             $nowInTz = Carbon::now($this->timezone);
             $nowIso  = $nowInTz->toIso8601String();
 
-            $systemPrompt = $this->buildSystemPrompt($nowIso);
+            $systemPrompt = $this->buildSystemPrompt($nowIso, $user);
 
             $messages = [
                 ['role' => 'system', 'content' => $systemPrompt],
@@ -120,12 +120,20 @@ class AssistantOrchestratorService
     }
 
     /**
-     * Build strict temporal system prompt with memory & retrieval instructions.
+     * Build strict temporal system prompt with identity, memory & retrieval instructions.
      */
-    protected function buildSystemPrompt(string $nowIso): string
+    protected function buildSystemPrompt(string $nowIso, ?User $user = null): string
     {
+        $userName = trim((string) ($user->name ?? 'Usuario'));
+        $firstName = !empty($userName) ? explode(' ', $userName)[0] : 'Usuario';
+
         return <<<SYS
-Eres un Asistente Personal Ejecutivo inteligente, proactivo y eficiente integrado en un Workspace.
+IDENTIDAD Y ROLES (ESTRICTO):
+- TU IDENTIDAD: Te llamas Cami. Eres la asistente personal ejecutiva inteligente, eficiente, empática y proactiva de {$firstName}.
+- IDENTIDAD DEL USUARIO: El usuario al que asistes se llama {$userName} (puedes llamarlo {$firstName}).
+- REGLA DE TRATO ABSOLUTA: NUNCA llames al usuario "Cami". Tú eres Cami; el usuario es {$firstName}. Si el usuario dice "Cami", "hola Cami", "¿estás ahí Cami?", te está llamando a TI por tu nombre.
+- CONVERSACIÓN Y SALUDOS: Ante saludos, cortesías o preguntas de presencia (ej. "hola", "hola Cami", "¿estás ahí?", "buenos días", "¿cómo estás?"), responde de manera directa, cordial, cálida y concisa. NO ejecutes herramientas ni búsquedas de base de datos para responder a un saludo o interacción cotidiana.
+
 Zona horaria de referencia: America/Cancun.
 FECHA Y HORA ACTUAL DEL SISTEMA (ANCLA TEMPORAL ESTRICTA): {$nowIso}.
 
@@ -164,14 +172,19 @@ Tu función al recibir intenciones de memoria, compra o pendientes es clasificar
 
 MEMORIA, CONSULTA (RETRIEVAL) Y EJECUCIÓN DE HERRAMIENTAS:
 - BÚSQUEDA DE CITAS: Cuando el usuario consulte qué eventos, citas o reuniones tiene, o busque una cita específica -> invoca `search_calendar_events`.
-- BÚSQUEDA DE NOTAS: Cuando el usuario pregunte sobre ideas, notas previas, acuerdos o apuntes -> invoca `search_notes`.
-- BÚSQUEDA DE RECORDATORIOS: Cuando el usuario consulte sus pendientes, recordatorios o tareas -> invoca `get_pending_reminders`.
+- BÚSQUEDA DE NOTAS: Cuando el usuario pregunte sobre ideas, notas previas, acuerdos o apuntes generales -> invoca `search_notes`.
+- BÚSQUEDA DE PENDIENTES Y TAREAS: Cuando el usuario consulte qué pendientes tiene, qué tareas tiene o qué tiene por hacer -> invoca `get_pending_reminders`.
+  * La herramienta `get_pending_reminders` recupera TANTO los recordatorios programados (con fecha/hora) como los To-Dos y tareas atemporales del workspace (listas de compra como tomates, pan de muerto, encargos, etc.).
+  * Al responder con los resultados encontrados, INFORMA SIEMPRE de AMBAS categorías:
+    1. Recordatorios programados con su fecha y hora.
+    2. To-Dos, compras y tareas atemporales.
+  * Si alguna de las categorías no tiene registros, indícalo claramente con naturalidad.
 - CREACIÓN DE CITAS: Cuando el usuario exprese la intención de agendar o programar -> invoca `create_calendar_event`.
 - CREACIÓN DE RECORDATORIOS: Cuando el usuario pida recordar una tarea o alarma con hora/fecha -> invoca `create_reminder`.
 - CREACIÓN DE NOTAS / PENDIENTES: Cuando el usuario pida guardar una nota o pendientes/compras sin hora -> invoca `create_workspace_note`.
 - CONSULTA DE AGENDA: Cuando el usuario pida la agenda global de un rango -> invoca `get_agenda`.
 
-Cuando recibas el resultado de una herramienta de búsqueda (retrieval), compila una respuesta clara, concisa, profesional y estructurada citando la información exacta encontrada. Si no hay registros, indícaselo amablemente.
+Cuando recibas el resultado de una herramienta de búsqueda (retrieval), compila una respuesta clara, concisa, profesional, humana y estructurada citando la información exacta encontrada. Si no hay registros, indícaselo amablemente a {$firstName}.
 SYS;
     }
 
@@ -251,16 +264,16 @@ SYS;
                         'properties' => [
                             'title' => [
                                 'type'        => 'string',
-                                'description' => 'Título de la nota o tarea pendiente.',
+                                'description' => 'Título conciso del To-Do o nota (ej. "Comprar paraguas").',
                             ],
                             'content' => [
                                 'type'        => 'string',
-                                'description' => 'Cuerpo o contenido detallado de la nota. Si se omite, se utiliza el título.',
+                                'description' => 'Cuerpo detallado de la nota (opcional). Si se omite se usará el título.',
                             ],
                             'tags' => [
                                 'type'        => 'array',
                                 'items'       => ['type' => 'string'],
-                                'description' => 'Lista de etiquetas o tags temáticos (ej: ["todo", "pendiente", "compras"]).',
+                                'description' => 'Etiquetas temáticas (ej. ["todo", "compras"]).',
                             ],
                         ],
                         'required'   => ['title'],
@@ -271,7 +284,7 @@ SYS;
                 'type' => 'function',
                 'function' => [
                     'name'        => 'get_agenda',
-                    'description' => 'Consulta citas y eventos del calendario dentro de un rango de fechas.',
+                    'description' => 'Obtiene la agenda completa (citas y recordatorios) del usuario en un rango de fechas.',
                     'parameters'  => [
                         'type'       => 'object',
                         'properties' => [
@@ -338,13 +351,13 @@ SYS;
                 'type' => 'function',
                 'function' => [
                     'name'        => 'get_pending_reminders',
-                    'description' => 'Recupera los recordatorios y tareas del usuario ordenados cronológicamente por su fecha programada.',
+                    'description' => 'Recupera todos los pendientes del usuario: tanto los recordatorios programados con fecha/hora como la lista de To-Dos y compras atemporales del workspace.',
                     'parameters'  => [
                         'type'       => 'object',
                         'properties' => [
                             'include_completed' => [
                                 'type'        => 'boolean',
-                                'description' => 'Si es true, incluye tanto pendientes como completados. Por defecto false (solo pendientes).',
+                                'description' => 'Si es true, incluye tanto pendientes como completados. Por defecto false (solo pendientes activos).',
                             ],
                         ],
                     ],
@@ -360,98 +373,120 @@ SYS;
     {
         $retrievalTools = ['search_calendar_events', 'search_notes', 'get_pending_reminders', 'get_agenda'];
 
-        // If any tool call is retrieval, execute second turn retrieval
-        foreach ($toolCalls as $call) {
-            $fnName = $call['function']['name'] ?? '';
-            if (in_array($fnName, $retrievalTools, true)) {
-                $rawArgs = $call['function']['arguments'] ?? '{}';
-                $args    = json_decode($rawArgs, true) ?: [];
+        $hasRetrieval = false;
+        $toolMessages = [];
+        $retrievalResults = [];
+        $creationResults = [];
+        $primaryAction = 'multiple_actions';
 
+        foreach ($toolCalls as $index => $call) {
+            $fnName  = $call['function']['name'] ?? '';
+            $callId  = $call['id'] ?? ('call_' . ($index + 1));
+            $rawArgs = $call['function']['arguments'] ?? '{}';
+            $args    = json_decode($rawArgs, true) ?: [];
+
+            if (in_array($fnName, $retrievalTools, true)) {
+                $hasRetrieval = true;
+                if ($primaryAction === 'multiple_actions') {
+                    $primaryAction = $fnName;
+                }
+
+                $resData = [];
                 switch ($fnName) {
                     case 'search_calendar_events':
-                        $results = $this->executeSearchCalendarEvents($user, $args);
-                        return $this->executeSecondTurnRetrieval($user, $messages, $endpoint, $choice, $call, $results, $fnName);
-
+                        $resData = $this->executeSearchCalendarEvents($user, $args);
+                        break;
                     case 'search_notes':
-                        $results = $this->executeSearchNotes($user, $args);
-                        return $this->executeSecondTurnRetrieval($user, $messages, $endpoint, $choice, $call, $results, $fnName);
-
+                        $resData = $this->executeSearchNotes($user, $args);
+                        break;
                     case 'get_pending_reminders':
-                        $results = $this->executeGetPendingReminders($user, $args);
-                        return $this->executeSecondTurnRetrieval($user, $messages, $endpoint, $choice, $call, $results, $fnName);
-
+                        $resData = $this->executeGetPendingReminders($user, $args);
+                        break;
                     case 'get_agenda':
-                        $results = $this->executeGetAgenda($user, $args);
-                        return $this->executeSecondTurnRetrieval($user, $messages, $endpoint, $choice, $call, $results['data'] ?? [], $fnName);
+                        $agendaRes = $this->executeGetAgenda($user, $args);
+                        $resData = $agendaRes['data'] ?? [];
+                        break;
                 }
+
+                $retrievalResults[$fnName] = $resData;
+
+                $toolMessages[] = [
+                    'role'         => 'tool',
+                    'tool_call_id' => $callId,
+                    'content'      => json_encode([
+                        'query_tool'    => $fnName,
+                        'results_count' => is_array($resData) ? count($resData) : 1,
+                        'records'       => $resData,
+                    ], JSON_UNESCAPED_UNICODE),
+                ];
+            } else {
+                // Creation tools
+                $actionResult = null;
+                switch ($fnName) {
+                    case 'create_calendar_event':
+                        $actionResult = $this->executeCreateCalendarEvent($user, $args);
+                        break;
+                    case 'create_reminder':
+                        $actionResult = $this->executeCreateReminder($user, $args);
+                        break;
+                    case 'create_workspace_note':
+                        $actionResult = $this->executeCreateWorkspaceNote($user, $args);
+                        break;
+                    default:
+                        $actionResult = [
+                            'success' => false,
+                            'data'    => null,
+                            'message' => "Acción desconocida solicitada: {$fnName}.",
+                            'action'  => 'unknown_action',
+                        ];
+                }
+
+                $creationResults[] = $actionResult;
+
+                $toolMessages[] = [
+                    'role'         => 'tool',
+                    'tool_call_id' => $callId,
+                    'content'      => json_encode([
+                        'action'  => $fnName,
+                        'success' => $actionResult['success'] ?? false,
+                        'message' => $actionResult['message'] ?? '',
+                    ], JSON_UNESCAPED_UNICODE),
+                ];
             }
+        }
+
+        // If any retrieval was called, LLM must synthesize the conversational response
+        if ($hasRetrieval) {
+            $dataToReturn = count($retrievalResults) === 1 ? reset($retrievalResults) : $retrievalResults;
+            return $this->executeSecondTurnRetrieval($user, $messages, $endpoint, $choice, $toolMessages, $dataToReturn, $primaryAction);
         }
 
         // Single creation tool call
-        if (count($toolCalls) === 1) {
-            $firstCall = $toolCalls[0];
-            $fnName    = $firstCall['function']['name'] ?? '';
-            $rawArgs   = $firstCall['function']['arguments'] ?? '{}';
-            $args      = json_decode($rawArgs, true) ?: [];
-
-            switch ($fnName) {
-                case 'create_calendar_event':
-                    return $this->executeCreateCalendarEvent($user, $args);
-
-                case 'create_reminder':
-                    return $this->executeCreateReminder($user, $args);
-
-                case 'create_workspace_note':
-                    return $this->executeCreateWorkspaceNote($user, $args);
-
-                default:
-                    return [
-                        'success' => false,
-                        'data'    => null,
-                        'message' => "Acción desconocida solicitada: {$fnName}.",
-                        'action'  => 'unknown_action',
-                    ];
-            }
+        if (count($creationResults) === 1) {
+            return $creationResults[0];
         }
 
         // Multiple creation tool calls (e.g. atomized To-Dos or Reminders)
-        $executed = [];
         $actionsByType = [
             'notes'     => [],
             'reminders' => [],
             'events'    => [],
         ];
 
-        foreach ($toolCalls as $call) {
+        foreach ($toolCalls as $idx => $call) {
             $fnName  = $call['function']['name'] ?? '';
             $rawArgs = $call['function']['arguments'] ?? '{}';
             $args    = json_decode($rawArgs, true) ?: [];
+            $res     = $creationResults[$idx] ?? null;
 
-            switch ($fnName) {
-                case 'create_workspace_note':
-                    $res = $this->executeCreateWorkspaceNote($user, $args);
-                    $executed[] = $res;
-                    if ($res['success'] ?? false) {
-                        $actionsByType['notes'][] = $res['data']->title ?? ($args['title'] ?? 'Pendiente');
-                    }
-                    break;
-
-                case 'create_reminder':
-                    $res = $this->executeCreateReminder($user, $args);
-                    $executed[] = $res;
-                    if ($res['success'] ?? false) {
-                        $title = $res['data']->title ?? ($args['title'] ?? 'Recordatorio');
-                        $actionsByType['reminders'][] = $title;
-                    }
-                    break;
-
-                case 'create_calendar_event':
-                    $res = $this->executeCreateCalendarEvent($user, $args);
-                    $executed[] = $res;
-                    if ($res['success'] ?? false) {
-                        $actionsByType['events'][] = $res['data']->title ?? ($args['title'] ?? 'Evento');
-                    }
-                    break;
+            if ($res && ($res['success'] ?? false)) {
+                if ($fnName === 'create_workspace_note') {
+                    $actionsByType['notes'][] = $res['data']->title ?? ($args['title'] ?? 'Pendiente');
+                } elseif ($fnName === 'create_reminder') {
+                    $actionsByType['reminders'][] = $res['data']->title ?? ($args['title'] ?? 'Recordatorio');
+                } elseif ($fnName === 'create_calendar_event') {
+                    $actionsByType['events'][] = $res['data']->title ?? ($args['title'] ?? 'Evento');
+                }
             }
         }
 
@@ -475,12 +510,12 @@ SYS;
 
             $message = !empty($summaryParts)
                 ? implode('. ', $summaryParts) . '.'
-                : 'Se procesaron ' . count($executed) . ' acciones correctamente.';
+                : 'Se procesaron ' . count($creationResults) . ' acciones correctamente.';
         }
 
         return [
             'success' => true,
-            'data'    => array_map(fn($e) => $e['data'] ?? null, $executed),
+            'data'    => array_map(fn($e) => $e['data'] ?? null, $creationResults),
             'message' => $message,
             'action'  => 'multiple_actions',
         ];
@@ -488,22 +523,17 @@ SYS;
 
     /**
      * Injects retrieved MongoDB data back into a second conversational turn with the LLM.
+     * Passes all tool responses to avoid OpenAI/DeepSeek 400 Bad Request error.
      */
-    protected function executeSecondTurnRetrieval(User $user, array $messages, string $endpoint, array $choice, array $firstCall, array $results, string $fnName): array
+    protected function executeSecondTurnRetrieval(User $user, array $messages, string $endpoint, array $choice, array $toolMessages, array $dataToReturn, string $primaryAction): array
     {
         try {
             $assistantMessage = $choice['message'] ?? [];
             $messages[] = $assistantMessage;
 
-            $messages[] = [
-                'role'         => 'tool',
-                'tool_call_id' => $firstCall['id'] ?? 'call_1',
-                'content'      => json_encode([
-                    'query_tool'    => $fnName,
-                    'results_count' => count($results),
-                    'records'       => $results,
-                ], JSON_UNESCAPED_UNICODE),
-            ];
+            foreach ($toolMessages as $tm) {
+                $messages[] = $tm;
+            }
 
             $secondResponse = Http::withToken($this->apiKey)
                 ->timeout(45)
@@ -518,24 +548,88 @@ SYS;
                 if (!empty(trim($naturalContent))) {
                     return [
                         'success' => true,
-                        'data'    => $results,
+                        'data'    => $dataToReturn,
                         'message' => trim($naturalContent),
-                        'action'  => $fnName,
+                        'action'  => $primaryAction,
                     ];
                 }
+            } else {
+                Log::error('Assistant second turn LLM error', [
+                    'status' => $secondResponse->status(),
+                    'body'   => $secondResponse->body(),
+                ]);
             }
         } catch (\Throwable $e) {
             Log::warning("Second turn retrieval exception: " . $e->getMessage());
         }
 
-        // Fallback message if second turn fails
-        $count = count($results);
+        // Friendly fallback message if second turn fails - NEVER leak database technical logs!
+        $fallbackMessage = $this->buildFriendlyRetrievalFallback($dataToReturn, $primaryAction);
+
         return [
             'success' => true,
-            'data'    => $results,
-            'message' => "Consulta realizada: se encontraron {$count} registros coincidentes.",
-            'action'  => $fnName,
+            'data'    => $dataToReturn,
+            'message' => $fallbackMessage,
+            'action'  => $primaryAction,
         ];
+    }
+
+    /**
+     * Generates a warm, user-friendly conversational fallback when second turn LLM is unavailable.
+     */
+    protected function buildFriendlyRetrievalFallback(array $results, string $primaryAction): string
+    {
+        if ($primaryAction === 'get_pending_reminders') {
+            $scheduled = $results['recordatorios_programados'] ?? [];
+            $todos     = $results['tareas_y_pendientes_atemporales'] ?? [];
+
+            if (empty($scheduled) && empty($todos)) {
+                return 'No tienes pendientes ni recordatorios activos en este momento.';
+            }
+
+            $lines = ['Aquí tienes tus pendientes:'];
+            if (!empty($scheduled)) {
+                $lines[] = "\n📅 Recordatorios programados:";
+                foreach ($scheduled as $r) {
+                    $when = !empty($r['scheduled_at']) ? " ({$r['scheduled_at']})" : '';
+                    $lines[] = "- {$r['title']}{$when}";
+                }
+            }
+            if (!empty($todos)) {
+                $lines[] = "\n✅ To-Dos y tareas pendientes:";
+                foreach ($todos as $t) {
+                    $lines[] = "- {$t['title']}";
+                }
+            }
+            return implode("\n", $lines);
+        }
+
+        if ($primaryAction === 'search_calendar_events') {
+            $count = count($results);
+            if ($count === 0) {
+                return 'No tienes eventos ni citas agendadas en el periodo solicitado.';
+            }
+            $lines = ["Encontré {$count} evento(s) en tu calendario:"];
+            foreach ($results as $e) {
+                $start = $e['start_time'] ?? '';
+                $lines[] = "- {$e['title']}" . ($start ? " ({$start})" : '');
+            }
+            return implode("\n", $lines);
+        }
+
+        if ($primaryAction === 'search_notes') {
+            $count = count($results);
+            if ($count === 0) {
+                return 'No encontré notas que coincidan con tu búsqueda.';
+            }
+            $lines = ["Encontré {$count} nota(s) en tu espacio de trabajo:"];
+            foreach ($results as $n) {
+                $lines[] = "- {$n['title']}";
+            }
+            return implode("\n", $lines);
+        }
+
+        return 'He revisado tu información en el sistema.';
     }
 
     /**
@@ -577,6 +671,7 @@ SYS;
 
     /**
      * Execute search_notes retrieval query.
+     * Matches tags across both BSON arrays and JSON strings.
      */
     protected function executeSearchNotes(User $user, array $args): array
     {
@@ -585,7 +680,10 @@ SYS;
 
         if (!empty($args['tag'])) {
             $tag = trim((string) $args['tag']);
-            $builder->where('tags', 'all', [$tag]);
+            $builder->where(function ($sub) use ($tag) {
+                $sub->where('tags', 'all', [$tag])
+                    ->orWhere('tags', 'regex', new \MongoDB\BSON\Regex($tag, 'i'));
+            });
         }
 
         if (!empty($args['query'])) {
@@ -599,11 +697,14 @@ SYS;
         $notes = $builder->orderBy('is_pinned', 'desc')->orderBy('created_at', 'desc')->limit(40)->get();
 
         return $notes->map(function ($n) {
+            $rawTags = $n->tags;
+            $tags = is_array($rawTags) ? $rawTags : (json_decode((string) $rawTags, true) ?: []);
+
             return [
                 'id'         => (string) ($n->id ?? $n->_id),
                 'title'      => $n->title,
                 'content'    => $n->content,
-                'tags'       => $n->tags ?? [],
+                'tags'       => $tags,
                 'is_pinned'  => (bool) $n->is_pinned,
                 'created_at' => $n->created_at ? $n->created_at->format('Y-m-d H:i') : null,
             ];
@@ -612,10 +713,13 @@ SYS;
 
     /**
      * Execute get_pending_reminders retrieval query.
+     * Retrieves BOTH scheduled reminders (con fecha/hora) AND atemporal workspace To-Dos / tasks.
      */
     protected function executeGetPendingReminders(User $user, array $args): array
     {
         $userId = (string) $user->id;
+
+        // 1. Scheduled Reminders
         $builder = Reminder::where('user_id', $userId);
 
         if (empty($args['include_completed'])) {
@@ -624,7 +728,7 @@ SYS;
 
         $reminders = $builder->orderBy('scheduled_at', 'asc')->limit(40)->get();
 
-        return $reminders->map(function ($r) {
+        $scheduledFormatted = $reminders->map(function ($r) {
             return [
                 'id'           => (string) ($r->id ?? $r->_id),
                 'title'        => $r->title,
@@ -632,8 +736,44 @@ SYS;
                 'status'       => $r->status,
                 'priority'     => $r->priority,
                 'channel'      => $r->channel,
+                'type'         => 'recordatorio_programado',
             ];
         })->all();
+
+        // 2. Atemporal To-Dos and tasks from WorkspaceNote
+        $notes = WorkspaceNote::where('user_id', $userId)
+            ->orderBy('is_pinned', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->limit(50)
+            ->get();
+
+        $todosFormatted = [];
+        foreach ($notes as $n) {
+            $rawTags = $n->tags;
+            if (is_string($rawTags)) {
+                $tags = json_decode($rawTags, true) ?: [$rawTags];
+            } elseif (is_array($rawTags)) {
+                $tags = $rawTags;
+            } else {
+                $tags = [];
+            }
+
+            $todosFormatted[] = [
+                'id'         => (string) ($n->id ?? $n->_id),
+                'title'      => $n->title,
+                'content'    => $n->content,
+                'tags'       => $tags,
+                'is_pinned'  => (bool) $n->is_pinned,
+                'created_at' => $n->created_at ? $n->created_at->format('Y-m-d H:i') : null,
+                'type'       => 'tarea_atemporal_todo',
+            ];
+        }
+
+        return [
+            'recordatorios_programados'       => $scheduledFormatted,
+            'tareas_y_pendientes_atemporales' => $todosFormatted,
+            'total_pendientes'                => count($scheduledFormatted) + count($todosFormatted),
+        ];
     }
 
     /**
@@ -1048,31 +1188,7 @@ SYS;
                 return $out;
             }
 
-            // 4. Si falló, intentar como Raw PCM 16-bit LE a 8kHz mono (telefonía / AMR)
-            $cmdRaw8 = sprintf(
-                'ffmpeg -y -v error -f s16le -ar 8000 -ac 1 -i %s -vn -ar 16000 -ac 1 -c:a libmp3lame -b:a 64k %s 2>&1',
-                escapeshellarg($sourcePath),
-                escapeshellarg($out)
-            );
-            $outputRaw8 = [];
-            @exec($cmdRaw8, $outputRaw8, $exitCodeRaw8);
-
-            if ($exitCodeRaw8 === 0 && file_exists($out) && filesize($out) > 0) {
-                Log::info('Audio converted to MP3 using raw PCM (8kHz mono) demuxer.');
-                return $out;
-            }
-
-            if (file_exists($out)) {
-                @unlink($out);
-            }
-
-            Log::warning('Ffmpeg audio conversion failed: ' . implode("\n", (array) $output), [
-                'input_path'        => $sourcePath,
-                'original_name'     => $originalFileName,
-                'size_bytes'        => file_exists($sourcePath) ? filesize($sourcePath) : 0,
-                'first_bytes_hex'   => file_exists($sourcePath) ? bin2hex(substr((string) file_get_contents($sourcePath), 0, 64)) : '',
-                'first_bytes_ascii' => file_exists($sourcePath) ? preg_replace('/[^\x20-\x7E]/', '.', substr((string) file_get_contents($sourcePath), 0, 64)) : '',
-            ]);
+            Log::warning('ffmpeg conversion to MP3 failed for both standard and raw PCM modes: ' . implode("\n", $output));
             return null;
         } finally {
             if ($tempInputWithExt !== null && file_exists($tempInputWithExt)) {
@@ -1082,73 +1198,57 @@ SYS;
     }
 
     /**
-     * Normaliza el MIME type para Deepgram y otros proveedores, eliminando parámetros y formatos no soportados.
+     * Normaliza y valida el Content-Type para los servicios de IA de transcripción.
      */
-    protected function normalizeMimeType(string $fileName, string $rawMime): string
+    protected function normalizeMimeType(string $fileName, string $detectedMime): string
     {
-        $mime = trim(explode(';', $rawMime)[0]);
         $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
 
         $extensionMap = [
-            'ogg'  => 'audio/ogg',
-            'opus' => 'audio/ogg',
+            'm4a'  => 'audio/m4a',
             'mp3'  => 'audio/mpeg',
             'wav'  => 'audio/wav',
-            'm4a'  => 'audio/m4a',
-            'mp4'  => 'audio/mp4',
+            'ogg'  => 'audio/ogg',
+            'opus' => 'audio/ogg',
             'webm' => 'audio/webm',
             'flac' => 'audio/flac',
             'aac'  => 'audio/aac',
-            '3gp'  => 'audio/3gpp',
-            '3gpp' => 'audio/3gpp',
+            '3gp'  => 'video/3gpp',
             'amr'  => 'audio/amr',
-            'pcm'  => 'audio/wav',
-            'raw'  => 'audio/wav',
         ];
 
         if (isset($extensionMap[$ext])) {
-            if (!str_starts_with($mime, 'audio/') || in_array($mime, ['application/ogg', 'video/ogg', 'application/octet-stream', 'text/plain'], true)) {
-                return $extensionMap[$ext];
-            }
+            return $extensionMap[$ext];
         }
 
-        if (in_array($mime, ['application/ogg', 'video/ogg'], true)) {
-            return 'audio/ogg';
+        if (str_starts_with($detectedMime, 'audio/') || in_array($detectedMime, ['video/mp4', 'video/3gpp', 'video/webm'])) {
+            return $detectedMime;
         }
 
-        if (!str_starts_with($mime, 'audio/')) {
-            return 'audio/wav';
-        }
-
-        return $mime;
+        return 'audio/m4a';
     }
 
     /**
-     * Transcribe con Groq Whisper (whisper-large-v3-turbo).
+     * Transcribe usando Groq Whisper (Whisper-large-v3-turbo).
      */
-    protected function transcribeWithGroq(string $fileContents, string $fileName, string $mime): ?string
+    protected function transcribeWithGroq(string $fileContents, string $fileName, string $mimeType): ?string
     {
-        $groqKey = (string) config('services.groq.api_key', env('GROQ_API_KEY', ''));
-        if (empty($groqKey)) {
+        $apiKey = (string) config('services.groq.api_key', env('GROQ_API_KEY', ''));
+        $url    = (string) config('services.groq.whisper_url', 'https://api.groq.com/openai/v1/audio/transcriptions');
+        $model  = (string) config('services.groq.whisper_model', 'whisper-large-v3-turbo');
+
+        if (empty($apiKey)) {
             return null;
         }
 
-        $url   = config('services.groq.whisper_url', 'https://api.groq.com/openai/v1/audio/transcriptions');
-        $model = config('services.groq.whisper_model', 'whisper-large-v3-turbo');
-
-        if (!preg_match('/\.(m4a|mp3|webm|mp4|mpga|wav|mpeg|ogg|flac)$/i', $fileName)) {
-            $ext = str_contains($mime, 'webm') ? 'webm' : (str_contains($mime, 'ogg') ? 'ogg' : (str_contains($mime, 'wav') ? 'wav' : 'mp3'));
-            $fileName = rtrim($fileName, '.') . '.' . $ext;
-        }
-
         try {
-            $response = Http::withToken($groqKey)
+            $response = Http::withToken($apiKey)
                 ->timeout(60)
-                ->attach('file', $fileContents, $fileName)
+                ->attach('file', $fileContents, $fileName, ['Content-Type' => $mimeType])
                 ->post($url, [
-                    'model'           => $model,
-                    'language'        => 'es',
-                    'response_format' => 'json',
+                    'model'       => $model,
+                    'language'    => 'es',
+                    'temperature' => '0',
                 ]);
 
             if ($response->successful()) {
@@ -1169,31 +1269,32 @@ SYS;
     }
 
     /**
-     * Transcribe con Deepgram (nova-3).
+     * Transcribe usando Deepgram Nova-3 API.
      */
-    protected function transcribeWithDeepgram(string $fileContents, string $mime): ?string
+    protected function transcribeWithDeepgram(string $fileContents, string $mimeType): ?string
     {
-        $deepgramKey = (string) config('services.deepgram.key');
-        if (empty($deepgramKey)) {
+        $apiKey = (string) config('services.deepgram.key', env('DEEPGRAM_API_KEY', ''));
+        if (empty($apiKey)) {
             return null;
         }
 
         $model    = config('services.deepgram.model', 'nova-3');
         $language = config('services.deepgram.language', 'es');
-        $url      = "https://api.deepgram.com/v1/listen?model={$model}&language={$language}&smart_format=true";
+
+        $url = "https://api.deepgram.com/v1/listen?model={$model}&language={$language}&smart_format=true&punctuate=true";
 
         try {
             $response = Http::withHeaders([
-                'Authorization' => 'Token ' . $deepgramKey,
-                'Content-Type'  => $mime,
+                'Authorization' => "Token {$apiKey}",
+                'Content-Type'  => $mimeType,
             ])
             ->timeout(60)
-            ->withBody($fileContents, $mime)
+            ->withBody($fileContents, $mimeType)
             ->post($url);
 
             if ($response->successful()) {
-                $transcript = (string) $response->json('results.channels.0.alternatives.0.transcript');
-                if (!empty(trim($transcript))) {
+                $transcript = $response->json('results.channels.0.alternatives.0.transcript');
+                if (!empty(trim((string) $transcript))) {
                     return trim($transcript);
                 }
             } else {
