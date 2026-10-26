@@ -53,6 +53,10 @@ return [
         'whisper_model' => env('GROQ_WHISPER_MODEL', 'whisper-large-v3-turbo'),
     ],
 
+    'transcription' => [
+        'driver' => env('WHATSAPP_TRANSCRIPTION_DRIVER', env('TRANSCRIPTION_DRIVER', 'groq')),
+    ],
+
     'evolution' => [
         'base_url'       => env('EVOLUTION_BASE_URL', 'http://evolution-api:8080'),
         'api_key'        => env('EVOLUTION_API_KEY', ''),
