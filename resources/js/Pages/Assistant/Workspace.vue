@@ -29,6 +29,74 @@ const lastMessage = ref(null);
 const lastSuccess = ref(true);
 const lastAction = ref('');
 
+// Tabs State
+const activeTab = ref('workspace'); // 'workspace' | 'conversations'
+
+// Conversations State
+const conversations = ref([]);
+const isConversationsLoading = ref(false);
+const conversationFilterChannel = ref('all'); // 'all' | 'app' | 'whatsapp'
+const conversationSearch = ref('');
+const copiedMessageId = ref(null);
+let searchDebounceTimeout = null;
+
+// Fetch Conversations History
+async function fetchConversations() {
+    isConversationsLoading.value = true;
+    try {
+        const params = {};
+        if (conversationFilterChannel.value && conversationFilterChannel.value !== 'all') {
+            params.channel = conversationFilterChannel.value;
+        }
+        if (conversationSearch.value.trim()) {
+            params.search = conversationSearch.value.trim();
+        }
+
+        const response = await axios.get('/api/v1/assistant/conversations', { params });
+        if (response.data && response.data.success) {
+            conversations.value = response.data.data || [];
+        }
+    } catch (error) {
+        console.error('Error al cargar conversaciones del asistente:', error);
+    } finally {
+        isConversationsLoading.value = false;
+    }
+}
+
+function handleChannelFilter(channel) {
+    if (conversationFilterChannel.value === channel) return;
+    conversationFilterChannel.value = channel;
+    fetchConversations();
+}
+
+function handleSearchInput() {
+    clearTimeout(searchDebounceTimeout);
+    searchDebounceTimeout = setTimeout(() => {
+        fetchConversations();
+    }, 350);
+}
+
+function clearSearch() {
+    conversationSearch.value = '';
+    fetchConversations();
+}
+
+async function copyToClipboard(text, id) {
+    if (!text) return;
+    try {
+        await navigator.clipboard.writeText(text);
+        copiedMessageId.value = id;
+        setTimeout(() => {
+            if (copiedMessageId.value === id) {
+                copiedMessageId.value = null;
+            }
+        }, 2000);
+    } catch (e) {
+        console.error('No se pudo copiar el texto:', e);
+    }
+}
+
+
 // Google Calendar Integration State
 const isConfigDialogOpen = ref(false);
 const isSyncing = ref(false);
@@ -180,6 +248,7 @@ async function syncGoogleCalendar() {
             lastAction.value = 'google_calendar_sync';
             calendarSettings.value.last_synced_at = response.data.data?.last_synced_at || new Date().toISOString();
             await fetchFeed();
+            await fetchConversations();
         }
     } catch (error) {
         console.error('Error al sincronizar con Google Calendar:', error);
@@ -393,6 +462,7 @@ function getActionName(action) {
 onMounted(() => {
     fetchFeed();
     fetchCalendarSettings();
+    fetchConversations();
 });
 </script>
 
@@ -470,6 +540,67 @@ onMounted(() => {
                         />
                     </div>
                 </header>
+
+                <!-- 2. TABS DE NAVEGACIÓN -->
+                <nav class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-surface-200 dark:border-surface-800 pb-2">
+                    <div class="inline-flex items-center p-1 rounded-xl bg-surface-100 dark:bg-surface-900 border border-surface-200 dark:border-surface-800 text-xs shadow-xs">
+                        <button
+                            type="button"
+                            @click="activeTab = 'workspace'"
+                            :class="[
+                                'flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer active:scale-95',
+                                activeTab === 'workspace'
+                                    ? 'bg-surface-0 dark:bg-surface-800 text-surface-900 dark:text-surface-0 shadow-xs'
+                                    : 'text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
+                            ]"
+                        >
+                            <i class="pi pi-th-large text-xs"></i>
+                            <span>Mi Espacio</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            @click="activeTab = 'conversations'"
+                            :class="[
+                                'flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer active:scale-95',
+                                activeTab === 'conversations'
+                                    ? 'bg-surface-0 dark:bg-surface-800 text-surface-900 dark:text-surface-0 shadow-xs'
+                                    : 'text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
+                            ]"
+                        >
+                            <i class="pi pi-comments text-xs"></i>
+                            <span>Conversaciones</span>
+                            <Tag
+                                v-if="conversations.length"
+                                :value="conversations.length"
+                                severity="secondary"
+                                rounded
+                                class="text-[10px] font-mono px-1.5 py-0.2"
+                            />
+                        </button>
+                    </div>
+
+                    <!-- Controles rápidos del tab de conversaciones -->
+                    <div v-if="activeTab === 'conversations'" class="flex items-center gap-2">
+                        <span class="text-xs text-surface-500 dark:text-surface-400 font-mono hidden sm:inline">
+                            {{ conversations.length }} {{ conversations.length === 1 ? 'conversación' : 'conversaciones' }}
+                        </span>
+                        <Button
+                            icon="pi pi-refresh"
+                            size="small"
+                            severity="secondary"
+                            variant="outlined"
+                            label="Actualizar"
+                            :loading="isConversationsLoading"
+                            @click="fetchConversations"
+                            class="!text-xs !border-surface-300 dark:!border-surface-700 !text-surface-600 dark:!text-surface-300"
+                        />
+                    </div>
+                </nav>
+
+                <!-- TAB 1: MI ESPACIO -->
+                <div v-show="activeTab === 'workspace'" class="space-y-6">
+
 
                 <!-- 2. OMNIBAR DE COMANDOS -->
                 <section class="space-y-3">
@@ -799,6 +930,260 @@ onMounted(() => {
                     </Card>
 
                 </main>
+
+                </div>
+                <!-- FIN TAB 1: MI ESPACIO -->
+
+                <!-- TAB 2: CONVERSACIONES -->
+                <div v-show="activeTab === 'conversations'" class="space-y-6">
+
+                    <!-- Filtros de Canal y Búsqueda -->
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-xl bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-800 shadow-xs">
+                        <!-- Filtros por Canal -->
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mr-1">Canal:</span>
+                            <button
+                                type="button"
+                                @click="handleChannelFilter('all')"
+                                :class="[
+                                    'px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer',
+                                    conversationFilterChannel === 'all'
+                                        ? 'bg-surface-900 text-surface-0 dark:bg-surface-100 dark:text-surface-950 shadow-xs'
+                                        : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
+                                ]"
+                            >
+                                Todas
+                            </button>
+
+                            <button
+                                type="button"
+                                @click="handleChannelFilter('app')"
+                                :class="[
+                                    'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer',
+                                    conversationFilterChannel === 'app'
+                                        ? 'bg-indigo-600 text-white shadow-xs'
+                                        : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
+                                ]"
+                            >
+                                <i class="pi pi-desktop text-[11px]"></i>
+                                <span>Web / App</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                @click="handleChannelFilter('whatsapp')"
+                                :class="[
+                                    'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer',
+                                    conversationFilterChannel === 'whatsapp'
+                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                        : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
+                                ]"
+                            >
+                                <i class="pi pi-whatsapp text-[11px]"></i>
+                                <span>WhatsApp</span>
+                            </button>
+                        </div>
+
+                        <!-- Buscador -->
+                        <div class="relative flex-1 sm:max-w-xs">
+                            <IconField class="w-full">
+                                <InputIcon class="pi pi-search text-surface-400 text-xs" />
+                                <InputText
+                                    v-model="conversationSearch"
+                                    type="text"
+                                    placeholder="Buscar en preguntas o respuestas..."
+                                    class="w-full !text-xs !py-1.5 !pl-8 !pr-8"
+                                    @input="handleSearchInput"
+                                    @keydown.enter.prevent="fetchConversations"
+                                />
+                            </IconField>
+                            <button
+                                v-if="conversationSearch"
+                                type="button"
+                                @click="clearSearch"
+                                class="absolute right-2.5 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-600 dark:hover:text-surface-200 cursor-pointer"
+                                aria-label="Limpiar búsqueda"
+                            >
+                                <i class="pi pi-times text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Omnibar Rápido dentro del Tab de Conversaciones -->
+                    <div class="relative rounded-xl bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-800 p-2 shadow-xs transition-shadow duration-150 focus-within:border-surface-400 dark:focus-within:border-surface-600 focus-within:shadow-sm">
+                        <div class="flex items-center gap-2">
+                            <IconField class="flex-1">
+                                <InputIcon class="pi pi-sparkles text-surface-400 dark:text-surface-500 text-sm" />
+                                <InputText
+                                    v-model="inputQuery"
+                                    type="text"
+                                    :disabled="isLoading"
+                                    placeholder="Conversa con tu asistente o envía una orden aquí..."
+                                    class="w-full !border-0 !bg-transparent !shadow-none !text-sm text-surface-900 dark:text-surface-100 placeholder:text-surface-400 dark:placeholder:text-surface-500 focus:!ring-0"
+                                    @keydown.enter.prevent="submitPrompt()"
+                                />
+                            </IconField>
+
+                            <Button
+                                label="Enviar"
+                                icon="pi pi-arrow-right"
+                                iconPos="right"
+                                size="small"
+                                :loading="isLoading"
+                                :disabled="isLoading || !inputQuery.trim()"
+                                @click="submitPrompt()"
+                                class="!px-3.5 !py-1.5 !text-xs !font-medium"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Estado de Carga -->
+                    <div v-if="isConversationsLoading" class="py-12 flex flex-col items-center justify-center text-center text-surface-400 dark:text-surface-500 space-y-3">
+                        <i class="pi pi-spin pi-spinner text-2xl text-surface-500"></i>
+                        <p class="text-xs font-medium">Cargando historial de conversaciones...</p>
+                    </div>
+
+                    <!-- Listado de Conversaciones -->
+                    <div v-else-if="conversations.length" class="space-y-4">
+                        <article
+                            v-for="conv in conversations"
+                            :key="conv.id"
+                            class="rounded-xl border border-surface-200 dark:border-surface-800 bg-surface-0 dark:bg-surface-900 p-4 shadow-xs hover:border-surface-300 dark:hover:border-surface-700 transition-all duration-150 space-y-3.5"
+                        >
+                            <!-- Cabecera de la Conversación -->
+                            <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-surface-100 dark:border-surface-800/80">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <!-- Badge de Canal -->
+                                    <span
+                                        v-if="conv.channel === 'whatsapp'"
+                                        class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                                    >
+                                        <i class="pi pi-whatsapp text-[11px]"></i>
+                                        <span>WhatsApp</span>
+                                    </span>
+                                    <span
+                                        v-else
+                                        class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
+                                    >
+                                        <i class="pi pi-desktop text-[11px]"></i>
+                                        <span>Web / App</span>
+                                    </span>
+
+                                    <!-- Tag de Acción Ejecutada -->
+                                    <Tag
+                                        :value="getActionName(conv.action)"
+                                        severity="secondary"
+                                        class="text-[10px] font-mono px-2 py-0.5"
+                                    />
+
+                                    <!-- Teléfono de WhatsApp si existe -->
+                                    <span v-if="conv.metadata?.phone" class="text-[11px] text-surface-400 font-mono">
+                                        • {{ conv.metadata.phone }}
+                                    </span>
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <!-- Status -->
+                                    <Tag
+                                        v-if="conv.status === 'failed'"
+                                        value="Fallido"
+                                        severity="danger"
+                                        rounded
+                                        class="text-[10px] px-2 py-0.5"
+                                    />
+                                    <Tag
+                                        v-else-if="conv.status === 'processing' || conv.status === 'received'"
+                                        value="En proceso"
+                                        severity="warn"
+                                        rounded
+                                        class="text-[10px] px-2 py-0.5"
+                                    />
+
+                                    <!-- Fecha / Hora -->
+                                    <span class="text-[11px] text-surface-400 dark:text-surface-500 font-mono">
+                                        {{ formatReminderDate(conv.created_at) }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Mensaje del Usuario (Prompt) -->
+                            <div class="flex items-start gap-3">
+                                <div class="w-7 h-7 rounded-full bg-surface-100 dark:bg-surface-800 flex items-center justify-center shrink-0 text-surface-600 dark:text-surface-300">
+                                    <i class="pi pi-user text-xs"></i>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-xs font-medium text-surface-500 dark:text-surface-400 mb-0.5">Tú</p>
+                                    <p class="text-sm font-normal text-surface-900 dark:text-surface-100 leading-relaxed break-words whitespace-pre-line">
+                                        {{ conv.prompt }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Respuesta del Asistente (Reply) -->
+                            <div class="rounded-lg bg-surface-50/80 dark:bg-surface-950/60 border border-surface-200/60 dark:border-surface-800/60 p-3.5 space-y-2">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-5 h-5 rounded-full bg-surface-200 dark:bg-surface-800 flex items-center justify-center text-surface-700 dark:text-surface-300">
+                                            <i class="pi pi-sparkles text-[10px] text-emerald-500"></i>
+                                        </div>
+                                        <span class="text-xs font-semibold text-surface-800 dark:text-surface-200">
+                                            Asistente
+                                        </span>
+                                    </div>
+
+                                    <!-- Botón de Copiar Respuesta -->
+                                    <button
+                                        v-if="conv.reply"
+                                        type="button"
+                                        @click="copyToClipboard(conv.reply, conv.id)"
+                                        class="inline-flex items-center gap-1 text-[11px] text-surface-400 hover:text-surface-700 dark:hover:text-surface-200 transition-colors cursor-pointer px-1.5 py-0.5 rounded hover:bg-surface-200/50 dark:hover:bg-surface-800/50"
+                                        title="Copiar respuesta"
+                                    >
+                                        <i :class="copiedMessageId === conv.id ? 'pi pi-check text-emerald-500' : 'pi pi-copy'"></i>
+                                        <span>{{ copiedMessageId === conv.id ? 'Copiado' : 'Copiar' }}</span>
+                                    </button>
+                                </div>
+
+                                <!-- Texto de la Respuesta -->
+                                <p v-if="conv.reply" class="text-xs sm:text-sm font-normal leading-relaxed text-surface-700 dark:text-surface-300 whitespace-pre-line break-words pl-7">
+                                    {{ conv.reply }}
+                                </p>
+
+                                <!-- Error si falló -->
+                                <div v-if="conv.error_message" class="mt-2 text-xs text-rose-500 flex items-center gap-1.5 pl-7">
+                                    <i class="pi pi-exclamation-triangle text-xs"></i>
+                                    <span>{{ conv.error_message }}</span>
+                                </div>
+                            </div>
+                        </article>
+                    </div>
+
+                    <!-- Estado Vacío -->
+                    <div
+                        v-else
+                        class="py-16 rounded-xl border border-dashed border-surface-200 dark:border-surface-800 flex flex-col items-center justify-center text-center text-surface-400 dark:text-surface-500 space-y-2"
+                    >
+                        <i class="pi pi-comments text-3xl mb-1 opacity-60"></i>
+                        <p class="text-sm font-medium text-surface-700 dark:text-surface-300">
+                            {{ conversationSearch ? 'No se encontraron conversaciones con ese criterio' : 'No hay conversaciones registradas aún' }}
+                        </p>
+                        <p class="text-xs text-surface-400 max-w-md">
+                            {{ conversationSearch ? 'Intenta buscar con otros términos o limpia el filtro.' : 'Envía un comando desde el Omnibar o interactúa a través de tu asistente de WhatsApp para ver tu historial aquí.' }}
+                        </p>
+                        <Button
+                            v-if="conversationSearch"
+                            label="Limpiar búsqueda"
+                            size="small"
+                            variant="outlined"
+                            severity="secondary"
+                            @click="clearSearch"
+                            class="!text-xs mt-2"
+                        />
+                    </div>
+
+                </div>
+                <!-- FIN TAB 2: CONVERSACIONES -->
+
 
             </div>
         </div>
