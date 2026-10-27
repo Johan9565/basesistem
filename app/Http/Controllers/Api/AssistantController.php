@@ -83,6 +83,7 @@ class AssistantController extends Controller
             'prompt'               => 'required|string|max:5000',
             'conversation_history' => 'sometimes|array',
             'conversation_id'      => 'nullable|string',
+            'channel'              => 'sometimes|string|in:app,mobile,web,whatsapp',
         ]);
 
         $user = $request->user();
@@ -90,9 +91,11 @@ class AssistantController extends Controller
             return $this->jsonResponse(false, null, 'No autenticado.', 'unauthenticated', 401);
         }
 
+        $channel = $request->input('channel', 'app');
+
         $assistantMessage = AssistantMessage::create([
-            'user_id'     => (string) $user->id,
-            'channel'     => 'app',
+            'user_id'     => (string) ($user->_id ?? $user->id),
+            'channel'     => $channel,
             'direction'   => 'inbound',
             'prompt'      => $validated['prompt'],
             'status'      => 'received',
@@ -110,13 +113,16 @@ class AssistantController extends Controller
             $validated['conversation_history'] ?? []
         );
 
-        $replyText = $result['message'] ?? 'Mensaje procesado correctamente.';
-        $action    = $result['action'] ?? 'conversation';
+        $displayText = $result['display_text'] ?? $result['message'] ?? 'Mensaje procesado correctamente.';
+        $speechText  = $result['speech_text'] ?? $displayText;
+        $action      = $result['action'] ?? 'conversation';
 
         $assistantMessage->update([
-            'status' => ($result['success'] ?? false) ? 'completed' : 'failed',
-            'reply'  => $replyText,
-            'action' => $action,
+            'status'       => ($result['success'] ?? false) ? 'completed' : 'failed',
+            'reply'        => $displayText,
+            'display_text' => $displayText,
+            'speech_text'  => $speechText,
+            'action'       => $action,
         ]);
 
         try {
@@ -131,15 +137,20 @@ class AssistantController extends Controller
             'success' => $result['success'] ?? true,
             'status'  => 'completed',
             'data'    => [
-                'id'              => $trackingId,
-                'tracking_id'     => $trackingId,
-                'status'          => 'completed',
-                'prompt'          => $validated['prompt'],
-                'reply'           => $replyText,
-                'conversation_id' => $request->input('conversation_id'),
-                'action'          => $action,
+                'id'                  => $trackingId,
+                'tracking_id'         => $trackingId,
+                'status'              => 'completed',
+                'prompt'              => $validated['prompt'],
+                'reply'               => $displayText,
+                'display_text'        => $displayText,
+                'speech_text'         => $speechText,
+                'conversation_id'     => $request->input('conversation_id'),
+                'action'              => $action,
+                'categories_detected' => $result['categories_detected'] ?? [],
+                'atomic_tasks_count'  => $result['atomic_tasks_count'] ?? 0,
+                'prioritized_summary' => $result['prioritized_summary'] ?? null,
             ],
-            'message' => $replyText,
+            'message' => $displayText,
             'action'  => $action,
         ], ($result['success'] ?? false) ? 200 : 422);
     }
@@ -219,13 +230,16 @@ class AssistantController extends Controller
         // Procesar la transcripción inmediatamente con el orquestador inteligente
         $result = $this->orchestrator->interact($user, $transcription, (array) $history);
 
-        $replyText = $result['message'] ?? 'Audio procesado correctamente.';
-        $action    = $result['action'] ?? 'voice_interaction';
+        $displayText = $result['display_text'] ?? $result['message'] ?? 'Audio procesado correctamente.';
+        $speechText  = $result['speech_text'] ?? $displayText;
+        $action      = $result['action'] ?? 'voice_interaction';
 
         $assistantMessage->update([
-            'status' => ($result['success'] ?? false) ? 'completed' : 'failed',
-            'reply'  => $replyText,
-            'action' => $action,
+            'status'       => ($result['success'] ?? false) ? 'completed' : 'failed',
+            'reply'        => $displayText,
+            'display_text' => $displayText,
+            'speech_text'  => $speechText,
+            'action'       => $action,
         ]);
 
         try {
@@ -240,14 +254,19 @@ class AssistantController extends Controller
             'success' => $result['success'] ?? true,
             'status'  => 'completed',
             'data'    => [
-                'id'            => $trackingId,
-                'tracking_id'   => $trackingId,
-                'status'        => 'completed',
-                'transcription' => $transcription,
-                'reply'         => $replyText,
-                'action'        => $action,
+                'id'                  => $trackingId,
+                'tracking_id'         => $trackingId,
+                'status'              => 'completed',
+                'transcription'       => $transcription,
+                'reply'               => $displayText,
+                'display_text'        => $displayText,
+                'speech_text'         => $speechText,
+                'action'              => $action,
+                'categories_detected' => $result['categories_detected'] ?? [],
+                'atomic_tasks_count'  => $result['atomic_tasks_count'] ?? 0,
+                'prioritized_summary' => $result['prioritized_summary'] ?? null,
             ],
-            'message' => $replyText,
+            'message' => $displayText,
             'action'  => $action,
         ], ($result['success'] ?? false) ? 200 : 422);
     }
@@ -280,7 +299,9 @@ class AssistantController extends Controller
                 'tracking_id'   => (string) ($message->id ?? $message->_id),
                 'status'        => $message->status,
                 'prompt'        => $message->prompt,
-                'reply'         => $message->reply,
+                'reply'         => $message->display_text ?? $message->reply,
+                'display_text'  => $message->display_text ?? $message->reply,
+                'speech_text'   => $message->speech_text ?? $message->reply,
                 'action'        => $message->action,
                 'error_message' => $message->error_message,
                 'created_at'    => $message->created_at?->toIso8601String(),
@@ -329,8 +350,12 @@ class AssistantController extends Controller
 
         $query = AssistantMessage::where('user_id', $userId);
 
-        if ($channel && in_array($channel, ['app', 'whatsapp'], true)) {
-            $query->where('channel', $channel);
+        if ($channel && in_array($channel, ['app', 'mobile', 'web', 'whatsapp'], true)) {
+            if ($channel === 'mobile' || $channel === 'app') {
+                $query->whereIn('channel', ['app', 'mobile']);
+            } else {
+                $query->where('channel', $channel);
+            }
         }
 
         if ($search && is_string($search) && trim($search) !== '') {
@@ -351,7 +376,9 @@ class AssistantController extends Controller
                 'channel'       => $msg->channel ?? 'app',
                 'direction'     => $msg->direction ?? 'inbound',
                 'prompt'        => $msg->prompt,
-                'reply'         => $msg->reply,
+                'reply'         => $msg->display_text ?? $msg->reply,
+                'display_text'  => $msg->display_text ?? $msg->reply,
+                'speech_text'   => $msg->speech_text ?? $msg->reply,
                 'action'        => $msg->action ?? 'conversation',
                 'status'        => $msg->status ?? 'completed',
                 'metadata'      => $msg->metadata ?? [],

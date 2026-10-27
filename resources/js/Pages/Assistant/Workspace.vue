@@ -327,6 +327,7 @@ async function submitPrompt(customPrompt = null) {
     try {
         const response = await axios.post('/api/v1/assistant/interact', {
             prompt: promptText,
+            channel: 'web',
         });
 
         if (response.data) {
@@ -335,6 +336,7 @@ async function submitPrompt(customPrompt = null) {
             lastAction.value = response.data.action || 'conversation';
             inputQuery.value = '';
             await fetchFeed();
+            await fetchConversations();
         }
     } catch (error) {
         console.error('Error en interacción con el asistente:', error);
@@ -459,10 +461,30 @@ function getActionName(action) {
     }
 }
 
+function switchTab(tab) {
+    activeTab.value = tab;
+    if (tab === 'conversations') {
+        fetchConversations();
+    }
+}
+
 onMounted(() => {
     fetchFeed();
     fetchCalendarSettings();
     fetchConversations();
+
+    const echo = window.Echo;
+    const userId = page.props?.auth?.user?.id || page.props?.auth?.user?._id;
+    if (echo && userId) {
+        try {
+            echo.private(`assistant.${userId}`).listen('.assistant.message.processed', () => {
+                fetchConversations();
+                fetchFeed();
+            });
+        } catch (e) {
+            console.warn('Echo listener could not be established:', e);
+        }
+    }
 });
 </script>
 
@@ -546,7 +568,7 @@ onMounted(() => {
                     <div class="inline-flex items-center p-1 rounded-xl bg-surface-100 dark:bg-surface-900 border border-surface-200 dark:border-surface-800 text-xs shadow-xs">
                         <button
                             type="button"
-                            @click="activeTab = 'workspace'"
+                            @click="switchTab('workspace')"
                             :class="[
                                 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer active:scale-95',
                                 activeTab === 'workspace'
@@ -560,7 +582,7 @@ onMounted(() => {
 
                         <button
                             type="button"
-                            @click="activeTab = 'conversations'"
+                            @click="switchTab('conversations')"
                             :class="[
                                 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer active:scale-95',
                                 activeTab === 'conversations'
@@ -957,16 +979,30 @@ onMounted(() => {
 
                             <button
                                 type="button"
-                                @click="handleChannelFilter('app')"
+                                @click="handleChannelFilter('mobile')"
                                 :class="[
                                     'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer',
-                                    conversationFilterChannel === 'app'
+                                    conversationFilterChannel === 'mobile'
                                         ? 'bg-indigo-600 text-white shadow-xs'
                                         : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
                                 ]"
                             >
+                                <i class="pi pi-mobile text-[11px]"></i>
+                                <span>App Móvil</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                @click="handleChannelFilter('web')"
+                                :class="[
+                                    'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer',
+                                    conversationFilterChannel === 'web'
+                                        ? 'bg-sky-600 text-white shadow-xs'
+                                        : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
+                                ]"
+                            >
                                 <i class="pi pi-desktop text-[11px]"></i>
-                                <span>Web / App</span>
+                                <span>Web</span>
                             </button>
 
                             <button
@@ -1062,11 +1098,18 @@ onMounted(() => {
                                         <span>WhatsApp</span>
                                     </span>
                                     <span
-                                        v-else
+                                        v-else-if="conv.channel === 'mobile' || conv.channel === 'app'"
                                         class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
                                     >
+                                        <i class="pi pi-mobile text-[11px]"></i>
+                                        <span>App Móvil</span>
+                                    </span>
+                                    <span
+                                        v-else
+                                        class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20"
+                                    >
                                         <i class="pi pi-desktop text-[11px]"></i>
-                                        <span>Web / App</span>
+                                        <span>Web</span>
                                     </span>
 
                                     <!-- Tag de Acción Ejecutada -->

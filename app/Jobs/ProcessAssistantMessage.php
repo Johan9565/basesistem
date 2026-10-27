@@ -75,13 +75,16 @@ class ProcessAssistantMessage implements ShouldQueue
             // Interactuar con el orquestador inteligente del asistente
             $result = $orchestrator->interact($user, $prompt, $history);
 
-            $replyText = $result['message'] ?? 'Mensaje procesado correctamente.';
-            $action    = $result['action'] ?? 'conversation';
+            $displayText = $result['display_text'] ?? $result['message'] ?? 'Mensaje procesado correctamente.';
+            $speechText  = $result['speech_text'] ?? $displayText;
+            $action      = $result['action'] ?? 'conversation';
 
             $assistantMessage->update([
-                'status' => 'completed',
-                'reply'  => $replyText,
-                'action' => $action,
+                'status'       => 'completed',
+                'reply'        => $displayText,
+                'display_text' => $displayText,
+                'speech_text'  => $speechText,
+                'action'       => $action,
             ]);
 
             // Si proviene de WhatsApp, despachar respuesta por Evolution API

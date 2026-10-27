@@ -20,6 +20,8 @@ class AssistantMessage extends Model
         'direction',      // 'inbound' | 'outbound'
         'prompt',
         'reply',
+        'display_text',
+        'speech_text',
         'action',
         'status',         // 'received' | 'processing' | 'completed' | 'failed'
         'retry_count',
