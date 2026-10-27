@@ -312,6 +312,64 @@ class AssistantController extends Controller
     }
 
     /**
+     * GET /api/v1/assistant/conversations
+     * Retrieve assistant conversations/messages history for the authenticated user.
+     */
+    public function conversations(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            return $this->jsonResponse(false, null, 'No autenticado.', 'unauthenticated', 401);
+        }
+
+        $userId = (string) ($user->_id ?? $user->id);
+        $channel = $request->query('channel');
+        $search = $request->query('search');
+        $limit = min((int) ($request->query('limit', 50)), 100);
+
+        $query = AssistantMessage::where('user_id', $userId);
+
+        if ($channel && in_array($channel, ['app', 'whatsapp'], true)) {
+            $query->where('channel', $channel);
+        }
+
+        if ($search && is_string($search) && trim($search) !== '') {
+            $term = trim($search);
+            $query->where(function ($q) use ($term) {
+                $q->where('prompt', 'like', "%{$term}%")
+                  ->orWhere('reply', 'like', "%{$term}%");
+            });
+        }
+
+        $messages = $query->orderBy('created_at', 'desc')
+            ->limit($limit)
+            ->get();
+
+        $data = $messages->map(function ($msg) {
+            return [
+                'id'            => (string) ($msg->id ?? $msg->_id),
+                'channel'       => $msg->channel ?? 'app',
+                'direction'     => $msg->direction ?? 'inbound',
+                'prompt'        => $msg->prompt,
+                'reply'         => $msg->reply,
+                'action'        => $msg->action ?? 'conversation',
+                'status'        => $msg->status ?? 'completed',
+                'metadata'      => $msg->metadata ?? [],
+                'error_message' => $msg->error_message,
+                'created_at'    => $msg->created_at?->toIso8601String(),
+                'updated_at'    => $msg->updated_at?->toIso8601String(),
+            ];
+        });
+
+        return $this->jsonResponse(
+            true,
+            $data,
+            'Conversaciones obtenidas con éxito.',
+            'conversations'
+        );
+    }
+
+    /**
      * PATCH /api/v1/reminders/{id}/complete
      */
     public function completeReminder(Request $request, string $id): JsonResponse

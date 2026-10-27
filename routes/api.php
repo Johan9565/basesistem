@@ -38,6 +38,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/voice', [AssistantController::class, 'voice'])->name('voice');
         Route::get('/messages/{id}', [AssistantController::class, 'getMessageStatus'])->name('messages.status');
         Route::get('/feed', [AssistantController::class, 'feed'])->name('feed');
+        Route::get('/conversations', [AssistantController::class, 'conversations'])->name('conversations');
         Route::get('/agenda', [AssistantController::class, 'agenda'])->name('agenda');
         Route::post('/events', [AssistantController::class, 'storeEvent'])->name('events.store');
         Route::delete('/events/{id}', [AssistantController::class, 'destroyEvent'])->name('events.destroy');
