@@ -103,24 +103,45 @@ class AssistantController extends Controller
             ],
         ]);
 
-        // Despachar a la cola de forma completamente asíncrona
-        ProcessAssistantMessage::dispatch((string) $assistantMessage->id);
+        // Procesar inmediatamente con el orquestador inteligente
+        $result = $this->orchestrator->interact(
+            $user,
+            $validated['prompt'],
+            $validated['conversation_history'] ?? []
+        );
+
+        $replyText = $result['message'] ?? 'Mensaje procesado correctamente.';
+        $action    = $result['action'] ?? 'conversation';
+
+        $assistantMessage->update([
+            'status' => ($result['success'] ?? false) ? 'completed' : 'failed',
+            'reply'  => $replyText,
+            'action' => $action,
+        ]);
+
+        try {
+            broadcast(new \App\Events\AssistantMessageProcessed($assistantMessage))->toOthers();
+        } catch (\Throwable $be) {
+            Log::warning('Assistant interact broadcast error: ' . $be->getMessage());
+        }
 
         $trackingId = (string) ($assistantMessage->id ?? $assistantMessage->_id);
 
         return response()->json([
-            'success' => true,
-            'status'  => 'received',
+            'success' => $result['success'] ?? true,
+            'status'  => 'completed',
             'data'    => [
                 'id'              => $trackingId,
                 'tracking_id'     => $trackingId,
-                'status'          => 'received',
+                'status'          => 'completed',
                 'prompt'          => $validated['prompt'],
+                'reply'           => $replyText,
                 'conversation_id' => $request->input('conversation_id'),
+                'action'          => $action,
             ],
-            'message' => 'Mensaje recibido y en cola de procesamiento.',
-            'action'  => 'queued',
-        ], 202);
+            'message' => $replyText,
+            'action'  => $action,
+        ], ($result['success'] ?? false) ? 200 : 422);
     }
 
     /**
@@ -195,23 +216,40 @@ class AssistantController extends Controller
             ],
         ]);
 
-        ProcessAssistantMessage::dispatch((string) $assistantMessage->id);
+        // Procesar la transcripción inmediatamente con el orquestador inteligente
+        $result = $this->orchestrator->interact($user, $transcription, (array) $history);
+
+        $replyText = $result['message'] ?? 'Audio procesado correctamente.';
+        $action    = $result['action'] ?? 'voice_interaction';
+
+        $assistantMessage->update([
+            'status' => ($result['success'] ?? false) ? 'completed' : 'failed',
+            'reply'  => $replyText,
+            'action' => $action,
+        ]);
+
+        try {
+            broadcast(new \App\Events\AssistantMessageProcessed($assistantMessage))->toOthers();
+        } catch (\Throwable $be) {
+            Log::warning('Assistant voice broadcast error: ' . $be->getMessage());
+        }
 
         $trackingId = (string) ($assistantMessage->id ?? $assistantMessage->_id);
 
         return response()->json([
-            'success' => true,
-            'status'  => 'received',
+            'success' => $result['success'] ?? true,
+            'status'  => 'completed',
             'data'    => [
                 'id'            => $trackingId,
                 'tracking_id'   => $trackingId,
-                'status'        => 'received',
+                'status'        => 'completed',
                 'transcription' => $transcription,
-                'reply'         => null,
+                'reply'         => $replyText,
+                'action'        => $action,
             ],
-            'message' => 'Audio transcrito y en cola de procesamiento.',
-            'action'  => 'queued',
-        ], 202);
+            'message' => $replyText,
+            'action'  => $action,
+        ], ($result['success'] ?? false) ? 200 : 422);
     }
 
     /**
