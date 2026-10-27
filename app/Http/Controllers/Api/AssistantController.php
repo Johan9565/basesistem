@@ -322,7 +322,45 @@ class AssistantController extends Controller
             return $this->jsonResponse(false, null, 'No autenticado.', 'unauthenticated', 401);
         }
 
+        // Auto-heal route cache if stale in production
+        try {
+            if (app()->routesAreCached() && file_exists(app()->getCachedRoutesPath())) {
+                @unlink(app()->getCachedRoutesPath());
+            }
+        } catch (\Throwable $e) {
+            // Ignore if filesystem permission prevents unlinking
+        }
+
         $feed = $this->orchestrator->getFeed($user);
+
+        // Include recent conversations directly in feed for high resilience
+        $userId = (string) ($user->_id ?? $user->id);
+        $recentMessages = AssistantMessage::where(function ($q) use ($userId, $user) {
+            $q->where('user_id', $userId)
+              ->orWhere('user_id', (string) $user->id);
+        })
+        ->orderBy('created_at', 'desc')
+        ->limit(50)
+        ->get()
+        ->map(function ($msg) {
+            return [
+                'id'            => (string) ($msg->id ?? $msg->_id),
+                'channel'       => $msg->channel ?? 'app',
+                'direction'     => $msg->direction ?? 'inbound',
+                'prompt'        => $msg->prompt,
+                'reply'         => $msg->display_text ?? $msg->reply,
+                'display_text'  => $msg->display_text ?? $msg->reply,
+                'speech_text'   => $msg->speech_text ?? $msg->reply,
+                'action'        => $msg->action ?? 'conversation',
+                'status'        => $msg->status ?? 'completed',
+                'metadata'      => $msg->metadata ?? [],
+                'error_message' => $msg->error_message,
+                'created_at'    => $msg->created_at?->toIso8601String(),
+                'updated_at'    => $msg->updated_at?->toIso8601String(),
+            ];
+        });
+
+        $feed['conversations'] = $recentMessages;
 
         return $this->jsonResponse(
             true,
@@ -343,12 +381,24 @@ class AssistantController extends Controller
             return $this->jsonResponse(false, null, 'No autenticado.', 'unauthenticated', 401);
         }
 
+        // Auto-heal route cache if stale in production
+        try {
+            if (app()->routesAreCached() && file_exists(app()->getCachedRoutesPath())) {
+                @unlink(app()->getCachedRoutesPath());
+            }
+        } catch (\Throwable $e) {
+            // Ignore
+        }
+
         $userId = (string) ($user->_id ?? $user->id);
         $channel = $request->query('channel');
         $search = $request->query('search');
         $limit = min((int) ($request->query('limit', 50)), 100);
 
-        $query = AssistantMessage::where('user_id', $userId);
+        $query = AssistantMessage::where(function ($q) use ($userId, $user) {
+            $q->where('user_id', $userId)
+              ->orWhere('user_id', (string) $user->id);
+        });
 
         if ($channel && in_array($channel, ['app', 'mobile', 'web', 'whatsapp'], true)) {
             if ($channel === 'mobile' || $channel === 'app') {

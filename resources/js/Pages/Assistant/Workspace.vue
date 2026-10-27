@@ -57,7 +57,26 @@ async function fetchConversations() {
             conversations.value = response.data.data || [];
         }
     } catch (error) {
-        console.error('Error al cargar conversaciones del asistente:', error);
+        console.warn('Endpoint /conversations falló o aún en caché de rutas, recurriendo a feed:', error);
+        try {
+            const feedResp = await axios.get('/api/v1/assistant/feed');
+            if (feedResp.data?.data?.conversations) {
+                let msgs = feedResp.data.data.conversations;
+                if (conversationFilterChannel.value && conversationFilterChannel.value !== 'all') {
+                    msgs = msgs.filter(m => {
+                        if (conversationFilterChannel.value === 'mobile') return m.channel === 'mobile' || m.channel === 'app';
+                        return m.channel === conversationFilterChannel.value;
+                    });
+                }
+                if (conversationSearch.value.trim()) {
+                    const term = conversationSearch.value.trim().toLowerCase();
+                    msgs = msgs.filter(m => (m.prompt && m.prompt.toLowerCase().includes(term)) || (m.reply && m.reply.toLowerCase().includes(term)));
+                }
+                conversations.value = msgs;
+            }
+        } catch (e2) {
+            console.error('Error total al cargar conversaciones:', e2);
+        }
     } finally {
         isConversationsLoading.value = false;
     }
@@ -143,6 +162,9 @@ async function fetchFeed() {
             events.value = response.data.data.events || [];
             reminders.value = response.data.data.reminders || [];
             notes.value = response.data.data.notes || [];
+            if (response.data.data.conversations && (!conversations.value.length || conversationFilterChannel.value === 'all')) {
+                conversations.value = response.data.data.conversations;
+            }
         }
     } catch (error) {
         console.error('Error al cargar feed del asistente:', error);
