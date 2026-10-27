@@ -42,15 +42,63 @@ class AssistantOrchestratorService
         // 3. Eliminar viñetas de guion, asterisco o puntos de lista
         $text = preg_replace('/^\s*[-*•]\s+/m', '', $text);
 
-        // 4. Reemplazar pipes o barras separadoras por puntos o espacios
+        // 4. Eliminar enlaces markdown [texto](url) -> texto
+        $text = preg_replace('/\[(.*?)\]\(.*?\)/', '$1', $text);
+        $text = str_replace(['[', ']'], '', $text);
+
+        // 5. Reemplazar pipes o barras separadoras por puntos o espacios
         $text = str_replace(' | ', '. ', $text);
         $text = str_replace('|', ' ', $text);
 
-        // 5. Limpiar espacios horizontales redundantes y saltos excesivos
+        // 6. Limpiar espacios horizontales redundantes y saltos excesivos
         $text = preg_replace("/[ \t]+/", ' ', $text);
         $text = preg_replace("/\n{3,}/", "\n\n", $text);
 
         return trim($text);
+    }
+
+    /**
+     * Parses the LLM content for dual output format (display_text vs speech_text)
+     * Supports JSON responses, markdown blocks with JSON, or conversational fallback.
+     */
+    public function parseDualOutput(string $content, string $fallbackAction = 'conversation'): array
+    {
+        $trimmed = trim($content);
+
+        // Check for markdown code blocks containing json
+        if (preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $trimmed, $matches)) {
+            $jsonStr = $matches[1];
+        } elseif (str_starts_with($trimmed, '{') && str_ends_with($trimmed, '}')) {
+            $jsonStr = $trimmed;
+        } else {
+            $jsonStr = null;
+        }
+
+        if ($jsonStr) {
+            $decoded = json_decode($jsonStr, true);
+            if (is_array($decoded) && (isset($decoded['display_text']) || isset($decoded['speech_text']))) {
+                $displayText = (string) ($decoded['display_text'] ?? $decoded['reply'] ?? $trimmed);
+                $speechText = (string) ($decoded['speech_text'] ?? $this->cleanVoiceText($displayText));
+
+                return [
+                    'display_text'        => $displayText,
+                    'speech_text'         => $this->cleanVoiceText($speechText),
+                    'action'              => (string) ($decoded['action'] ?? $fallbackAction),
+                    'categories_detected' => (array) ($decoded['categories_detected'] ?? []),
+                    'atomic_tasks_count'  => (int) ($decoded['atomic_tasks_count'] ?? 0),
+                    'prioritized_summary' => $decoded['prioritized_summary'] ?? null,
+                ];
+            }
+        }
+
+        return [
+            'display_text'        => $trimmed,
+            'speech_text'         => $this->cleanVoiceText($trimmed),
+            'action'              => $fallbackAction,
+            'categories_detected' => [],
+            'atomic_tasks_count'  => 0,
+            'prioritized_summary' => null,
+        ];
     }
 
     /**
@@ -126,12 +174,18 @@ class AssistantOrchestratorService
 
             // Ordinary conversation text
             $content = $message['content'] ?? 'No recibí respuesta del asistente.';
+            $parsed = $this->parseDualOutput($content, 'conversation');
 
             return [
-                'success' => true,
-                'data'    => null,
-                'message' => $this->cleanVoiceText($content),
-                'action'  => 'conversation',
+                'success'             => true,
+                'data'                => null,
+                'message'             => $parsed['display_text'],
+                'display_text'        => $parsed['display_text'],
+                'speech_text'         => $parsed['speech_text'],
+                'action'              => $parsed['action'],
+                'categories_detected' => $parsed['categories_detected'],
+                'atomic_tasks_count'  => $parsed['atomic_tasks_count'],
+                'prioritized_summary' => $parsed['prioritized_summary'],
             ];
         } catch (\Throwable $e) {
             Log::error('Assistant interact exception: ' . $e->getMessage(), [
@@ -157,21 +211,10 @@ class AssistantOrchestratorService
 
         return <<<SYS
 IDENTIDAD Y ROLES (ESTRICTO):
-- TU IDENTIDAD: Te llamas Cami. Eres la asistente personal ejecutiva inteligente, eficiente, empática y proactiva de {$firstName}.
+- TU IDENTIDAD: Te llamas Cami. Eres la asistente personal ejecutiva inteligente, eficiente, técnica y proactiva de {$firstName}.
 - IDENTIDAD DEL USUARIO: El usuario al que asistes se llama {$userName} (puedes llamarlo {$firstName}).
 - REGLA DE TRATO ABSOLUTA: NUNCA llames al usuario "Cami". Tú eres Cami; el usuario es {$firstName}. Si el usuario dice "Cami", "hola Cami", "¿estás ahí Cami?", te está llamando a TI por tu nombre.
-- CONVERSACIÓN Y SALUDOS: Ante saludos, cortesías o preguntas de presencia (ej. "hola", "hola Cami", "¿estás ahí?", "buenos días", "¿cómo estás?"), responde de manera directa, cordial, cálida y concisa. NO ejecutes herramientas ni búsquedas de base de datos para responder a un saludo o interacción cotidiana.
-
-REGLAS DE FORMATO Y ESTILO CONVERSACIONAL (VOZ Y TEXTO):
-- Escribe ÚNICAMENTE en texto plano conversacional, natural, limpio y fluido.
-- PROHIBIDO ABSOLUTAMENTE el uso de Markdown o caracteres especiales de formato:
-  * No uses asteriscos para negritas ni cursivas (nada de *texto* ni **texto**).
-  * No uses almohadillas (#), viñetas de guion (-) ni asteriscos (*) para listas.
-  * No uses barras verticales (|), barras inclinadas innecesarias (/) ni caracteres extraños.
-  * No uses emojis en listas ni símbolos especiales.
-- Para enumerar o listar pendientes:
-  * Si es una lista, usa números simples con punto y espacio: "1. Comprar pan de muerto. 2. Comprar un kilo de tomate." o redacta en lenguaje natural continuo: "Tienes pendiente comprar pan de muerto y comprar un kilo de tomate."
-- Tu respuesta será leída por un sintetizador de voz (TTS) y enviada por WhatsApp: cualquier símbolo, asterisco o formato roto arruina la pronunciación y la lectura auditiva.
+- CONVERSACIÓN Y SALUDOS: Ante saludos, cortesías o preguntas de presencia (ej. "hola", "hola Cami", "¿estás ahí?", "buenos días", "¿cómo estás?"), responde de manera directa, cordial, cálida y concisa. NO ejecutes herramientas ni búsquedas de base de datos para responder a un saludo cotidiano.
 
 Zona horaria de referencia: America/Cancun.
 FECHA Y HORA ACTUAL DEL SISTEMA (ANCLA TEMPORAL ESTRICTA): {$nowIso}.
@@ -182,49 +225,76 @@ REGLAS TEMPORALES Y OPERATIVAS ESTRICTAS:
 3. DURACIÓN POR DEFECTO: Si el usuario no indica hora de fin o duración para una cita, debe ser exactamente de 1 hora después de la hora de inicio.
 4. FORMATO DE FECHA/HORA: Todos los parámetros temporales en tool calls deben expresarse en formato ISO 8601 estricto SIN sufijo de offset (ejemplo: YYYY-MM-DDTHH:mm:ss).
 
-MÓDULO: CLASIFICACIÓN Y DIVISIÓN DE TAREAS / RECORDATORIOS:
-Tu función al recibir intenciones de memoria, compra o pendientes es clasificarlas y atomizarlas antes de cualquier acción o llamada a herramienta (tools).
+FASE 1: REGLAS DE NEGOCIO Y MODELO MENTAL (MÓDULO: CLASIFICACIÓN Y DIVISIÓN DE TAREAS / RECORDATORIOS):
+1. MATRIZ DE DECISIÓN (TIPO DE REGISTRO) Y DESCOMPOSICIÓN ATÓMICA DE TAREAS:
+   - Tipo "TODO" (Lista de pendientes/notas):
+     * Criterio: Solicitudes de compra, tareas pendientes, encargos o recordatorios SIN hora/fecha específica ("recuérdame comprar...", "tengo que hacer...", "anota que debo...").
+     * Destino: Invoca `create_workspace_note` para guardarlo en pendientes con tag 'todo'.
+   - Tipo "RECORDATORIO_TEMPORAL" (Alarma / Calendario):
+     * Criterio: Solicitudes que incluyan una referencia temporal explícita o relativa medible ("a las 5:00 pm", "mañana a las 9 am", "el viernes", "en 2 horas").
+     * Destino: Invoca `create_reminder` (o `create_calendar_event` si es reunión/cita formal) con su fecha/hora programada.
+   - REGLA DE ATOMICIDAD (DESCOMPOSICIÓN ESTRICTA):
+     * Jamás crees un solo registro para múltiples objetos o acciones.
+     * Si el mensaje contiene conjunciones ("y", "e"), comas o listas implícitas de cosas por adquirir o realizar:
+       - Divide cada elemento en una entidad única, auto-contenida y concisa.
+       - Realiza una llamada a función (tool call) independiente para CADA elemento atomizado por separado.
+       - Ejemplo: Si el usuario pide comprar un paraguas y un impermeable, invoca `create_workspace_note` para "Comprar paraguas" y otro para "Comprar impermeable".
+       - Ejemplo confirmación concisa: "Anotados en pendientes: 1. Comprar paraguas. 2. Comprar impermeable."
 
-1. MATRIZ DE DECISIÓN (TIPO DE REGISTRO):
-- Tipo "TODO" (Lista de pendientes/notas):
-  * Criterio: Solicitudes de compra, tareas pendientes, encargos o recordatorios SIN hora/fecha específica ("recuérdame comprar...", "tengo que hacer...", "anota que debo...").
-  * Destino: Invoca `create_workspace_note` para guardarlo en pendientes con tag 'todo'.
-  
-- Tipo "RECORDATORIO_TEMPORAL" (Alarma / Calendario):
-  * Criterio: Solicitudes que incluyan una referencia temporal explícita o relativa medible ("a las 5:00 pm", "mañana a las 9 am", "el viernes", "en 2 horas").
-  * Destino: Invoca `create_reminder` (o `create_calendar_event` si es reunión/cita formal) con su fecha/hora programada.
+2. DEDUPLICACIÓN SEMÁNTICA:
+   - Identifica elementos redundantes o repetidos (ejemplo: "agregar función de mensajes" vs "poder enviar mensajes") y unifícalos automáticamente en una sola tarea limpia.
 
-2. REGLA DE ATOMICIDAD (DESCOMPOSICIÓN ESTRICTA):
-- Jamás crees un solo registro para múltiples objetos o acciones.
-- Si el mensaje contiene conjunciones ("y", "e"), comas (",") o listas implícitas de cosas por adquirir o realizar:
-  * Divide cada elemento en una entidad única, auto-contenida y concisa.
-  * Realiza una llamada a función (tool call) independiente para CADA elemento atomizado por separado.
-  * Ejemplo recibido: "recuérdame comprar un paraguas y un impermeable"
-  * Descomposición obligatoria:
-    - Tool call 1: `create_workspace_note` (title: "Comprar paraguas")
-    - Tool call 2: `create_workspace_note` (title: "Comprar impermeable")
+3. CATEGORIZACIÓN CONTEXTUAL IMPLÍCITA:
+   - Clasifica automáticamente cada entrada por contexto o dominio sin solicitar confirmación al usuario:
+     * Desarrollo/Tech: Código, bugs, deploys, APIs, refactor, arquitectura, bases de datos.
+     * Personal/Compras: Supermercado, farmacia, compras, salud, ejercicio.
+     * Casa/Admin: Finanzas, servicios, trámites, recibos, mantenimiento.
+     * General/Agenda: Citas, reuniones y acuerdos.
 
-3. POLÍTICA DE EJECUCIÓN Y RESPUESTA:
-- Ejecuta las acciones correspondientes (o llamadas a función) por cada ítem por separado.
-- Responde siempre confirmando de manera ultra concisa (máximo 1 o 2 líneas), en texto plano sin markdown ni barras verticales:
-  * Ejemplo respuesta: "Anotados en pendientes: 1. Comprar paraguas. 2. Comprar impermeable."
+FASE 2: PROACTIVIDAD Y SÍNTESIS:
+1. PRIORIZACIÓN INTELIGENTE:
+   - Al presentar la información, no muestres listas planas interminables. Agrupa los pendientes por su área de impacto o categoría.
+   - Si la cantidad de tareas supera 5 elementos, prioriza los 3 más relevantes del día y genera un resumen compacto del resto.
+2. CONTEXTUALIZACIÓN PROACTIVA:
+   - Si una tarea o recordatorio entrante se relaciona con especificaciones o notas técnicas guardadas previamente, asócialas en el contexto del registro sin generar ruido innecesario.
+
+FASE 3: SALIDA DUAL CONVERSACIONAL (VISUAL VS VOZ):
+El asistente debe devolver siempre una estructura con dos representaciones separadas del mismo mensaje:
+
+1. Formato Visual (display_text):
+   - Estructurado en Markdown limpio para pantallas (Dashboard Web y chat visual móvil).
+   - Saltos de línea obligatorios entre elementos.
+   - Uso de negritas para encabezados de categoría (ej. **Desarrollo/Tech**, **Personal/Compras**) y viñetas cortas (- ) para cada tarea.
+   - Sin números corridos en un solo párrafo.
+
+2. Formato Oral (speech_text para TTS):
+   - El formato oral TTS será solo para la aplicación móvil, que es donde el usuario habla en tiempo real con el sintetizador de voz (TTS).
+   - REGLAS DE FORMATO Y ESTILO CONVERSACIONAL (VOZ Y TEXTO):
+     * PROHIBIDO ABSOLUTAMENTE el uso de Markdown en speech_text (sin asteriscos, sin negritas, sin almohadillas).
+     * Prohibido el uso de viñetas, guiones, asteriscos, corchetes, números de lista ("1.", "2.") o URLs.
+   - Redacción en prosa fluida y natural utilizando comas y puntos estratégicos para pausas de respiración del sintetizador de voz (TTS).
+   - Agrupación por frases con conectores naturales (ej. "En desarrollo tienes pendiente...", "y de compras te falta...").
+   - Integración natural de acrónimos o términos técnicos en inglés, eliminando explicaciones entre paréntesis que rompan la cadencia hablada.
 
 MEMORIA, CONSULTA (RETRIEVAL) Y EJECUCIÓN DE HERRAMIENTAS:
-- BÚSQUEDA DE CITAS: Cuando el usuario consulte qué eventos, citas o reuniones tiene, o busque una cita específica -> invoca `search_calendar_events`.
-- BÚSQUEDA DE NOTAS: Cuando el usuario pregunte sobre ideas, notas previas, acuerdos o apuntes generales -> invoca `search_notes`.
-- BÚSQUEDA DE PENDIENTES Y TAREAS: Cuando el usuario consulte qué pendientes tiene, qué tareas tiene o qué tiene por hacer -> invoca `get_pending_reminders`.
-  * La herramienta `get_pending_reminders` recupera TANTO los recordatorios programados (con fecha/hora) como los To-Dos y tareas atemporales del workspace (listas de compra como tomates, pan de muerto, encargos, etc.).
-  * Al responder con los resultados encontrados, INFORMA SIEMPRE de AMBAS categorías:
-    1. Recordatorios programados con su fecha y hora.
-    2. To-Dos, compras y tareas atemporales.
-  * Responde siempre en texto plano conversacional fluido o con numeración simple (ej. "1. Comprar pan de muerto. 2. Comprar tomates."). PROHIBIDO usar asteriscos, guiones de lista o markdown.
-  * Si alguna de las categorías no tiene registros, indícalo claramente con naturalidad.
-- CREACIÓN DE CITAS: Cuando el usuario exprese la intención de agendar o programar -> invoca `create_calendar_event`.
-- CREACIÓN DE RECORDATORIOS: Cuando el usuario pida recordar una tarea o alarma con hora/fecha -> invoca `create_reminder`.
-- CREACIÓN DE NOTAS / PENDIENTES: Cuando el usuario pida guardar una nota o pendientes/compras sin hora -> invoca `create_workspace_note`.
-- CONSULTA DE AGENDA: Cuando el usuario pida la agenda global de un rango -> invoca `get_agenda`.
+- BÚSQUEDA DE CITAS: Cuando el usuario consulte qué eventos o citas tiene -> invoca `search_calendar_events`.
+- BÚSQUEDA DE NOTAS: Cuando el usuario pregunte sobre ideas o notas previas -> invoca `search_notes`.
+- BÚSQUEDA DE PENDIENTES Y TAREAS: Cuando el usuario consulte qué pendientes o tareas tiene -> invoca `get_pending_reminders`.
+  * La herramienta recupera TANTO los recordatorios programados (con fecha/hora) como los To-Dos y compras atemporales.
+  * Informa siempre de ambas categorías.
+- CREACIÓN DE CITAS: Cuando exprese intención de agendar -> invoca `create_calendar_event`.
+- CREACIÓN DE RECORDATORIOS: Cuando pida recordar algo con fecha/hora -> invoca `create_reminder`.
+- CREACIÓN DE NOTAS / PENDIENTES: Cuando pida guardar nota o pendientes sin hora -> invoca `create_workspace_note`.
+- CONSULTA DE AGENDA: Cuando pida la agenda de un rango -> invoca `get_agenda`.
 
-Cuando recibas el resultado de una herramienta de búsqueda (retrieval), compila una respuesta clara, concisa, profesional, humana y estructurada en texto plano sin markdown, citando la información exacta encontrada. Si no hay registros, indícaselo amablemente a {$firstName}.
+Cuando emitas tu respuesta conversacional final (o turno de resumen), puedes entregarla como objeto estructurado:
+{
+  "display_text": "...",
+  "speech_text": "...",
+  "action": "...",
+  "categories_detected": ["..."],
+  "atomic_tasks_count": 0
+}
 SYS;
     }
 
@@ -532,32 +602,62 @@ SYS;
 
         $llmContent = trim((string) ($choice['message']['content'] ?? ''));
         if (!empty($llmContent)) {
-            $message = $this->cleanVoiceText($llmContent);
+            $parsed = $this->parseDualOutput($llmContent, 'multiple_actions');
+            $displayText = $parsed['display_text'];
+            $speechText  = $parsed['speech_text'];
+            $categories  = $parsed['categories_detected'];
         } else {
             $summaryParts = [];
+            $displayParts = [];
+            $categories   = [];
+
             if (!empty($actionsByType['notes'])) {
+                $categories[] = 'Personal/Compras';
                 $items = array_map(fn($idx, $item) => ($idx + 1) . '. ' . rtrim($item, '.') . '.', array_keys($actionsByType['notes']), $actionsByType['notes']);
                 $summaryParts[] = 'Anotados en pendientes: ' . implode(' ', $items);
+                $noteLines = array_map(fn($item) => '- ' . rtrim($item, '.'), $actionsByType['notes']);
+                $displayParts[] = "**Personal/Compras:**
+" . implode("
+", $noteLines);
             }
             if (!empty($actionsByType['reminders'])) {
+                $categories[] = 'Casa/Admin';
                 $items = array_map(fn($idx, $item) => ($idx + 1) . '. ' . rtrim($item, '.') . '.', array_keys($actionsByType['reminders']), $actionsByType['reminders']);
                 $summaryParts[] = 'Recordatorios programados: ' . implode(' ', $items);
+                $remLines = array_map(fn($item) => '- ' . rtrim($item, '.'), $actionsByType['reminders']);
+                $displayParts[] = "**Casa/Admin:**
+" . implode("
+", $remLines);
             }
             if (!empty($actionsByType['events'])) {
+                $categories[] = 'General/Agenda';
                 $items = array_map(fn($idx, $item) => ($idx + 1) . '. ' . rtrim($item, '.') . '.', array_keys($actionsByType['events']), $actionsByType['events']);
                 $summaryParts[] = 'Citas agendadas: ' . implode(' ', $items);
+                $evLines = array_map(fn($item) => '- ' . rtrim($item, '.'), $actionsByType['events']);
+                $displayParts[] = "**Citas agendadas:**
+" . implode("
+", $evLines);
             }
 
-            $message = !empty($summaryParts)
+            $speechText = !empty($summaryParts)
                 ? implode(' ', $summaryParts)
                 : 'Se procesaron ' . count($creationResults) . ' acciones correctamente.';
+            $displayText = !empty($displayParts)
+                ? implode("
+
+", $displayParts)
+                : $speechText;
         }
 
         return [
-            'success' => true,
-            'data'    => array_map(fn($e) => $e['data'] ?? null, $creationResults),
-            'message' => $this->cleanVoiceText($message),
-            'action'  => 'multiple_actions',
+            'success'             => true,
+            'data'                => array_map(fn($e) => $e['data'] ?? null, $creationResults),
+            'message'             => $this->cleanVoiceText($speechText), // Backwards compatibility for exact unit test match
+            'display_text'        => $displayText,
+            'speech_text'         => $this->cleanVoiceText($speechText),
+            'action'              => 'multiple_actions',
+            'categories_detected' => $categories,
+            'atomic_tasks_count'  => count($creationResults),
         ];
     }
 
@@ -586,11 +686,17 @@ SYS;
             if ($secondResponse->successful()) {
                 $naturalContent = (string) $secondResponse->json('choices.0.message.content');
                 if (!empty(trim($naturalContent))) {
+                    $parsed = $this->parseDualOutput(trim($naturalContent), $primaryAction);
                     return [
-                        'success' => true,
-                        'data'    => $dataToReturn,
-                        'message' => $this->cleanVoiceText(trim($naturalContent)),
-                        'action'  => $primaryAction,
+                        'success'             => true,
+                        'data'                => $dataToReturn,
+                        'message'             => $parsed['display_text'],
+                        'display_text'        => $parsed['display_text'],
+                        'speech_text'         => $parsed['speech_text'],
+                        'action'              => $primaryAction,
+                        'categories_detected' => $parsed['categories_detected'],
+                        'atomic_tasks_count'  => $parsed['atomic_tasks_count'],
+                        'prioritized_summary' => $parsed['prioritized_summary'],
                     ];
                 }
             } else {
@@ -605,12 +711,18 @@ SYS;
 
         // Friendly fallback message in plain conversational text for TTS & WhatsApp
         $fallbackMessage = $this->buildFriendlyRetrievalFallback($dataToReturn, $primaryAction);
+        $cleanSpeech = $this->cleanVoiceText($fallbackMessage);
 
         return [
-            'success' => true,
-            'data'    => $dataToReturn,
-            'message' => $this->cleanVoiceText($fallbackMessage),
-            'action'  => $primaryAction,
+            'success'             => true,
+            'data'                => $dataToReturn,
+            'message'             => $cleanSpeech,
+            'display_text'        => $fallbackMessage,
+            'speech_text'         => $cleanSpeech,
+            'action'              => $primaryAction,
+            'categories_detected' => [],
+            'atomic_tasks_count'  => 0,
+            'prioritized_summary' => null,
         ];
     }
 

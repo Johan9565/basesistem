@@ -128,6 +128,13 @@ class AssistantConversationsEndpointTest extends TestCase
         $this->assertCount(1, $dataApp);
         $this->assertEquals('app', $dataApp[0]['channel']);
         $this->assertEquals('CONV_TEST Web interaction', $dataApp[0]['prompt']);
+
+        // Filter mobile (matches 'app' and 'mobile')
+        $responseMobile = $this->getJson('/api/v1/assistant/conversations?channel=mobile');
+        $responseMobile->assertOk();
+        $dataMobile = $responseMobile->json('data');
+        $this->assertCount(1, $dataMobile);
+        $this->assertEquals('app', $dataMobile[0]['channel']);
     }
 
     public function test_user_can_search_conversations(): void

@@ -250,4 +250,33 @@ class AssistantTaskClassificationAndAtomicityTest extends TestCase
         // Clean up created test reminders
         Reminder::where('user_id', (string) $user->id)->delete();
     }
+
+    public function test_parse_dual_output_extracts_structured_json(): void
+    {
+        $jsonPayload = json_encode([
+            'display_text'        => "**Desarrollo/Tech**\n- Revisar PR de auth",
+            'speech_text'         => "Tienes pendiente revisar el pull request de autenticacion.",
+            'action'              => 'multiple_actions',
+            'categories_detected' => ['Desarrollo/Tech'],
+            'atomic_tasks_count'  => 1,
+        ]);
+
+        $parsed = $this->service->parseDualOutput($jsonPayload);
+
+        $this->assertEquals("**Desarrollo/Tech**\n- Revisar PR de auth", $parsed['display_text']);
+        $this->assertEquals("Tienes pendiente revisar el pull request de autenticacion.", $parsed['speech_text']);
+        $this->assertEquals(['Desarrollo/Tech'], $parsed['categories_detected']);
+        $this->assertEquals(1, $parsed['atomic_tasks_count']);
+    }
+
+    public function test_parse_dual_output_falls_back_to_clean_speech_on_raw_markdown(): void
+    {
+        $raw = "**Recordatorio:**\n- Comprar pan de muerto";
+        $parsed = $this->service->parseDualOutput($raw);
+
+        $this->assertEquals($raw, $parsed['display_text']);
+        $this->assertStringNotContainsString('**', $parsed['speech_text']);
+        $this->assertStringNotContainsString('- ', $parsed['speech_text']);
+        $this->assertStringContainsString('Comprar pan de muerto', $parsed['speech_text']);
+    }
 }
