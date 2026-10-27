@@ -7,7 +7,7 @@ use App\Jobs\ProcessAssistantMessage;
 use App\Models\AssistantMessage;
 use App\Models\WhatsappInstance;
 use App\Services\Assistant\AssistantOrchestratorService;
-use App\Services\Evolution\EvolutionApiService;
+use App\Services\Whatsapp\EvolutionApiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -79,13 +79,13 @@ class EvolutionWebhookController extends Controller
                 continue;
             }
 
-            // Guardar en base de datos con status 'received' y despachar Job desacoplado
+            // Guardar en base de datos para trazabilidad
             $assistantMessage = AssistantMessage::create([
                 'user_id'     => (string) $user->id,
                 'channel'     => 'whatsapp',
                 'direction'   => 'inbound',
                 'prompt'      => $text,
-                'status'      => 'received',
+                'status'      => 'processing',
                 'retry_count' => 0,
                 'metadata'    => [
                     'instance_name' => $instanceName,
@@ -95,18 +95,48 @@ class EvolutionWebhookController extends Controller
                 ],
             ]);
 
-            ProcessAssistantMessage::dispatch((string) $assistantMessage->id);
+            try {
+                $customPrompt = $instance->system_prompt ? "Instrucciones de WhatsApp para este usuario: " . $instance->system_prompt . "\n" : "";
+                $history = [];
+                if ($customPrompt !== '') {
+                    $history[] = ['role' => 'system', 'content' => $customPrompt];
+                }
+
+                $replyData = $orchestrator->interact($user, $text, $history);
+                $replyText = $replyData['message'] ?? 'Mensaje procesado por tu asistente.';
+                $action    = $replyData['action'] ?? 'conversation';
+
+                $assistantMessage->update([
+                    'status' => 'completed',
+                    'reply'  => $replyText,
+                    'action' => $action,
+                ]);
+
+                if (trim($replyText) !== '') {
+                    $evolution->sendHumanizedMessage($instanceName, $phone, $replyText, $messageKey);
+                }
+            } catch (\Throwable $e) {
+                Log::error('Evolution webhook processing error: ' . $e->getMessage(), [
+                    'instance' => $instanceName,
+                    'phone'    => $phone,
+                ]);
+
+                $assistantMessage->update([
+                    'status'        => 'failed',
+                    'error_message' => $e->getMessage(),
+                ]);
+            }
 
             $queuedMessages[] = (string) ($assistantMessage->id ?? $assistantMessage->_id);
         }
 
         return response()->json([
             'ok'             => true,
-            'status'         => 'queued',
-            'queued_count'   => count($queuedMessages),
+            'status'         => 'processed',
+            'processed_count'=> count($queuedMessages),
             'tracking_ids'   => $queuedMessages,
-            'message'        => 'Mensajes recibidos y encolados para procesamiento asíncrono.',
-        ], 202);
+            'message'        => 'Mensajes procesados exitosamente.',
+        ], 200);
     }
 
     protected function normalizeMessages(mixed $data): array
