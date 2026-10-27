@@ -17,12 +17,18 @@ class AssistantOrchestratorService
     protected string $apiKey;
     protected string $model;
     protected string $timezone = 'America/Cancun';
+    protected IntentRouterService $intentRouter;
+    protected ModelRouterService $modelRouter;
 
-    public function __construct()
+    public function __construct(?IntentRouterService $intentRouter = null, ?ModelRouterService $modelRouter = null)
     {
-        $this->apiUrl = (string) config('services.assistant.url', 'https://api.deepseek.com');
-        $this->apiKey = (string) config('services.assistant.key', '');
-        $this->model  = (string) config('services.assistant.model', 'deepseek-chat');
+        $this->intentRouter = $intentRouter ?? app(IntentRouterService::class);
+        $this->modelRouter  = $modelRouter ?? app(ModelRouterService::class);
+
+        $defaultConfig = $this->modelRouter->getActiveModelConfig('write_intent');
+        $this->apiUrl = $defaultConfig['base_url'];
+        $this->apiKey = $defaultConfig['api_key'];
+        $this->model  = $defaultConfig['model'];
     }
 
     /**
@@ -109,7 +115,400 @@ class AssistantOrchestratorService
      * @param array $conversationHistory
      * @return array Standardized response: ['success' => bool, 'data' => mixed, 'message' => string, 'action' => string]
      */
+    /**
+     * Interacts with the appropriate pipeline using zero-latency Intent Routing.
+     *
+     * @param User $user
+     * @param string $prompt
+     * @param array $conversationHistory
+     * @return array Standardized response
+     */
     public function interact(User $user, string $prompt, array $conversationHistory = []): array
+    {
+        try {
+            $intent = $this->intentRouter->classify($prompt);
+            Log::info("Assistant routing decision", [
+                'user_id' => (string) ($user->_id ?? $user->id),
+                'route'   => $intent['route'],
+                'intent'  => $intent['inferred_intent'] ?? null,
+            ]);
+
+            if ($intent['route'] === 'read_intent') {
+                return $this->executeReadPipeline($user, $prompt, $intent);
+            }
+
+            if ($intent['route'] === 'write_intent') {
+                return $this->executeWritePipeline($user, $prompt, $intent);
+            }
+
+            return $this->executeReasoningFallback($user, $prompt, $conversationHistory);
+        } catch (\Throwable $e) {
+            Log::error('Assistant interact error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return [
+                'success'      => false,
+                'data'         => null,
+                'message'      => 'Lo siento, ocurrió un error al procesar tu solicitud: ' . $e->getMessage(),
+                'display_text' => 'Lo siento, ocurrió un error al procesar tu solicitud: ' . $e->getMessage(),
+                'speech_text'  => 'Lo siento, ocurrió un error al procesar tu solicitud.',
+                'action'       => 'error',
+            ];
+        }
+    }
+
+    /**
+     * READ PIPELINE (Ultra-low latency, pre-indexed DB context, dual visual/TTS output).
+     * Prohibido pasar datos crudos no indexados al modelo rápido.
+     */
+    public function executeReadPipeline(User $user, string $prompt, array $intent): array
+    {
+        $userId = (string) ($user->_id ?? $user->id);
+        $nowInTz = Carbon::now($this->timezone);
+
+        // 1. Pre-query Database: Pending Reminders
+        $reminders = Reminder::where('user_id', $userId)
+            ->where(function ($q) {
+                $q->whereNull('status')
+                  ->orWhere('status', '!=', 'completed');
+            })
+            ->orderBy('remind_at', 'asc')
+            ->limit(20)
+            ->get();
+
+        // 2. Pre-query Database: Atemporal Notes & Tasks
+        $notes = WorkspaceNote::where('user_id', $userId)
+            ->where(function ($q) {
+                $q->whereIn('tags', ['todo', 'pendiente'])
+                  ->orWhere('is_pinned', true);
+            })
+            ->orderBy('created_at', 'desc')
+            ->limit(20)
+            ->get();
+
+        // 3. Pre-query Database: Today Calendar Events
+        $startOfDay = Carbon::now($this->timezone)->startOfDay()->toIso8601String();
+        $endOfDay   = Carbon::now($this->timezone)->endOfDay()->toIso8601String();
+        $events = CalendarEvent::where('user_id', $userId)
+            ->where('start_time', '>=', $startOfDay)
+            ->where('start_time', '<=', $endOfDay)
+            ->orderBy('start_time', 'asc')
+            ->get();
+
+        // Construct clean structured context
+        $remindersList = [];
+        foreach ($reminders as $r) {
+            $remindersList[] = [
+                'id'        => (string) $r->_id,
+                'title'     => $r->title,
+                'remind_at' => $r->remind_at ? Carbon::parse($r->remind_at)->setTimezone($this->timezone)->format('d/m/Y H:i') : null,
+            ];
+        }
+
+        $notesList = [];
+        foreach ($notes as $n) {
+            $notesList[] = [
+                'id'       => (string) $n->_id,
+                'title'    => $n->title,
+                'content'  => $n->content,
+                'tags'     => $n->tags ?? [],
+                'category' => $this->inferCategoryFromTags((array) ($n->tags ?? [])),
+            ];
+        }
+
+        $eventsList = [];
+        foreach ($events as $ev) {
+            $eventsList[] = [
+                'id'         => (string) $ev->_id,
+                'title'      => $ev->title,
+                'start_time' => Carbon::parse($ev->start_time)->setTimezone($this->timezone)->format('H:i'),
+            ];
+        }
+
+        $contextJson = json_encode([
+            'usuario'               => $user->name,
+            'hora_actual'           => $nowInTz->format('d/m/Y H:i:s'),
+            'recordatorios_activos' => $remindersList,
+            'pendientes_y_tareas'   => $notesList,
+            'eventos_agenda_hoy'    => $eventsList,
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+        // 4. Call Fast Model (read_intent)
+        $modelConfig = $this->modelRouter->getActiveModelConfig('read_intent');
+        $endpoint = rtrim($modelConfig['base_url'], '/') . '/chat/completions';
+
+        $expectedAction = preg_match('/(pendientes|recordatorios|agenda|eventos|tareas|notas|hoy)/iu', $prompt) ? 'get_pending_reminders' : 'conversation';
+
+        $systemPrompt = "Eres Cami, la asistente ejecutiva personal de {$user->name}. " .
+            "Se te proporciona la información estructurada que YA FUE CONSULTADA de la base de datos del usuario. " .
+            "Tu función exclusiva es responder con ultra-baja latencia y máxima claridad para síntesis de voz (TTS) y pantalla móvil.\n\n" .
+            "REGLAS:\n" .
+            "1. NO inventes datos. Usa solo los datos provistos en la consulta estructurada.\n" .
+            "2. 'display_text': Markdown estructurado, limpio y elegante con viñetas y títulos en negrita.\n" .
+            "3. 'speech_text': Prosa natural, fluida, conversacional y cálida para voz TTS, SIN asteriscos, SIN viñetas, SIN caracteres especiales ni enlaces.\n" .
+            "4. Devuelve un JSON estricto con las claves: display_text, speech_text, action ('{$expectedAction}').\n\n" .
+            "DATOS CONSULTADOS:\n{$contextJson}";
+
+        try {
+            $response = Http::withToken($modelConfig['api_key'])
+                ->withHeaders((array) ($modelConfig['headers'] ?? []))
+                ->timeout(max(5, intval($modelConfig['timeout_ms'] / 1000)))
+                ->post($endpoint, [
+                    'model'           => $modelConfig['model'],
+                    'messages'        => [
+                        ['role' => 'system', 'content' => $systemPrompt],
+                        ['role' => 'user', 'content' => $prompt],
+                    ],
+                    'temperature'     => $modelConfig['temperature'] ?? 0.5,
+                    'max_tokens'      => $modelConfig['max_tokens'] ?? 1000,
+                    'response_format' => ['type' => 'json_object'],
+                ]);
+
+            if ($response->successful()) {
+                $content = $response->json('choices.0.message.content', '');
+                $defaultAction = preg_match('/(pendientes|recordatorios|agenda|eventos|tareas|notas|hoy)/iu', $prompt) ? 'get_pending_reminders' : 'conversation';
+                $parsed = $this->parseDualOutput($content, $defaultAction);
+
+                return [
+                    'success'             => true,
+                    'data'                => [
+                        'reminders' => $remindersList,
+                        'notes'     => $notesList,
+                        'events'    => $eventsList,
+                    ],
+                    'message'             => $parsed['display_text'],
+                    'display_text'        => $parsed['display_text'],
+                    'speech_text'         => $parsed['speech_text'],
+                    'action'              => ($expectedAction === 'conversation' ? 'conversation' : ($parsed['action'] ?? $expectedAction)),
+                    'categories_detected' => $parsed['categories_detected'],
+                    'atomic_tasks_count'  => count($remindersList) + count($notesList),
+                    'prioritized_summary' => $parsed['prioritized_summary'],
+                ];
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Read pipeline fast model failed, using deterministic local formatting', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $this->formatLocalReadFallback($user, $remindersList, $notesList, $eventsList, $prompt);
+    }
+
+    /**
+     * WRITE PIPELINE (Reasoning Model, forced strict JSON object schema, direct deterministic DB persistence).
+     */
+    public function executeWritePipeline(User $user, string $prompt, array $intent): array
+    {
+        $userId = (string) ($user->_id ?? $user->id);
+        $nowInTz = Carbon::now($this->timezone);
+        $modelConfig = $this->modelRouter->getActiveModelConfig('write_intent');
+        $endpoint = rtrim($modelConfig['base_url'], '/') . '/chat/completions';
+
+        $systemPrompt = "Eres el motor de razonamiento e ingesta estructurada de Cami. " .
+            "Tu tarea es descomponer atómicamente la solicitud del usuario en entidades independientes, deduplicar elementos repetidos y categorizarlos.\n" .
+            "Fecha actual de referencia: {$nowInTz->format('Y-m-d H:i:s')} ({$this->timezone}).\n\n" .
+            "Debes responder ÚNICAMENTE un JSON con esta estructura exacta:\n" .
+            "{\n" .
+            '  "entities": [\n' .
+            '    {\n' .
+            '      "type": "reminder" | "task" | "note" | "calendar_event",\n' .
+            '      "title": "string",\n' .
+            '      "content": "string",\n' .
+            '      "due_date": "YYYY-MM-DD" | null,\n' .
+            '      "time": "HH:MM" | null,\n' .
+            '      "category": "Desarrollo/Tech" | "Personal/Compras" | "Casa/Admin" | "General",\n' .
+            '      "tags": ["string"]\n' .
+            '    }\n' .
+            '  ],\n' .
+            '  "display_text": "Resumen elegante para la pantalla",\n' .
+            '  "speech_text": "Resumen fluido y limpio para el sintetizador de voz (TTS)"\n' .
+            "}";
+
+        try {
+            $response = Http::withToken($modelConfig['api_key'])
+                ->withHeaders((array) ($modelConfig['headers'] ?? []))
+                ->timeout(max(10, intval($modelConfig['timeout_ms'] / 1000)))
+                ->post($endpoint, [
+                    'model'           => $modelConfig['model'],
+                    'messages'        => [
+                        ['role' => 'system', 'content' => $systemPrompt],
+                        ['role' => 'user', 'content' => $prompt],
+                    ],
+                    'temperature'     => $modelConfig['temperature'] ?? 0.2,
+                    'max_tokens'      => $modelConfig['max_tokens'] ?? 2000,
+                    'response_format' => ['type' => 'json_object'],
+                ]);
+
+            if ($response->successful()) {
+                $content = $response->json('choices.0.message.content', '{}');
+                $decoded = json_decode($content, true);
+
+                if (is_array($decoded) && !empty($decoded['entities'])) {
+                    // Direct Backend Persistence
+                    $persistedEntities = [];
+                    foreach ($decoded['entities'] as $entity) {
+                        $type = strtolower($entity['type'] ?? 'task');
+                        $title = trim($entity['title'] ?? 'Pendiente');
+                        $body = trim($entity['content'] ?? $title);
+                        $category = $entity['category'] ?? 'General';
+                        $tags = (array) ($entity['tags'] ?? []);
+
+                        if ($type === 'reminder') {
+                            $remindAt = null;
+                            if (!empty($entity['due_date'])) {
+                                $time = $entity['time'] ?? '09:00';
+                                $remindAt = Carbon::parse("{$entity['due_date']} {$time}", $this->timezone);
+                            } else {
+                                $remindAt = Carbon::now($this->timezone)->addHour();
+                            }
+
+                            $created = Reminder::create([
+                                'user_id'   => $userId,
+                                'title'     => $title,
+                                'remind_at' => $remindAt,
+                                'status'    => 'pending',
+                            ]);
+                            $persistedEntities[] = ['type' => 'reminder', 'id' => (string) $created->_id, 'title' => $title];
+                        } elseif ($type === 'calendar_event') {
+                            $startTime = null;
+                            if (!empty($entity['due_date'])) {
+                                $time = $entity['time'] ?? '09:00';
+                                $startTime = Carbon::parse("{$entity['due_date']} {$time}", $this->timezone)->toIso8601String();
+                            } else {
+                                $startTime = Carbon::now($this->timezone)->addHours(2)->toIso8601String();
+                            }
+
+                            $created = CalendarEvent::create([
+                                'user_id'    => $userId,
+                                'title'      => $title,
+                                'start_time' => $startTime,
+                            ]);
+                            $persistedEntities[] = ['type' => 'calendar_event', 'id' => (string) $created->_id, 'title' => $title];
+                        } else {
+                            if (!in_array('todo', $tags) && $type === 'task') {
+                                $tags[] = 'todo';
+                                $tags[] = 'pendiente';
+                            }
+                            if (!empty($category)) {
+                                $catTag = strtolower(explode('/', $category)[0] ?? $category);
+                                $tags[] = $catTag;
+                            }
+                            $tags = array_values(array_unique($tags));
+
+                            $created = WorkspaceNote::create([
+                                'user_id'   => $userId,
+                                'title'     => $title,
+                                'content'   => $body,
+                                'tags'      => $tags,
+                                'is_pinned' => false,
+                            ]);
+                            $persistedEntities[] = ['type' => 'note', 'id' => (string) $created->_id, 'title' => $title];
+                        }
+                    }
+
+                    $displayText = $decoded['display_text'] ?? ("He registrado " . count($persistedEntities) . " pendientes exitosamente.");
+                    $speechText  = $decoded['speech_text'] ?? $this->cleanVoiceText($displayText);
+
+                    return [
+                        'success'             => true,
+                        'data'                => $persistedEntities,
+                        'message'             => $displayText,
+                        'display_text'        => $displayText,
+                        'speech_text'         => $this->cleanVoiceText($speechText),
+                        'action'              => 'create_multiple',
+                        'categories_detected' => array_values(array_unique(array_filter(array_column($decoded['entities'], 'category')))),
+                        'atomic_tasks_count'  => count($persistedEntities),
+                        'prioritized_summary' => null,
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error('Write pipeline failed, falling back to reasoning loop: ' . $e->getMessage());
+        }
+
+        return $this->executeReasoningFallback($user, $prompt, []);
+    }
+
+    /**
+     * Deterministic Local Fallback for read requests if external LLM has issues.
+     */
+    protected function formatLocalReadFallback(User $user, array $reminders, array $notes, array $events, string $prompt = ''): array
+    {
+        $lines = ["Hola {$user->name}, esto es lo que tienes pendiente:\n"];
+        $speechLines = ["Hola {$user->name}, esto es lo que tienes pendiente:"];
+
+        if (!empty($notes)) {
+            $lines[] = "**Tareas y Pendientes**";
+            foreach ($notes as $n) {
+                $lines[] = "- {$n['title']}";
+                $speechLines[] = $n['title'];
+            }
+            $lines[] = "";
+        }
+
+        if (!empty($reminders)) {
+            $lines[] = "**Recordatorios Programados**";
+            foreach ($reminders as $r) {
+                $timeStr = !empty($r['remind_at']) ? " ({$r['remind_at']})" : "";
+                $lines[] = "- {$r['title']}{$timeStr}";
+                $speechLines[] = $r['title'];
+            }
+            $lines[] = "";
+        }
+
+        if (!empty($events)) {
+            $lines[] = "**Agenda de Hoy**";
+            foreach ($events as $ev) {
+                $lines[] = "- {$ev['title']} a las {$ev['start_time']}";
+                $speechLines[] = "{$ev['title']} a las {$ev['start_time']}";
+            }
+        }
+
+        if (empty($notes) && empty($reminders) && empty($events)) {
+            $displayText = "Hola {$user->name}, no tienes pendientes ni recordatorios agendados por el momento.";
+            $speechText  = $displayText;
+        } else {
+            $displayText = trim(implode("\n", $lines));
+            $speechText  = implode(". ", $speechLines) . ".";
+        }
+
+        return [
+            'success'             => true,
+            'data'                => [
+                'reminders' => $reminders,
+                'notes'     => $notes,
+                'events'    => $events,
+            ],
+            'message'             => $displayText,
+            'display_text'        => $displayText,
+            'speech_text'         => $this->cleanVoiceText($speechText),
+            'action'              => (preg_match('/(pendientes|recordatorios|agenda|eventos|tareas|notas|hoy)/iu', $prompt) ? 'get_pending_reminders' : 'conversation'),
+            'categories_detected' => [],
+            'atomic_tasks_count'  => count($reminders) + count($notes),
+            'prioritized_summary' => null,
+        ];
+    }
+
+    protected function inferCategoryFromTags(array $tags): string
+    {
+        $tagsLower = array_map('strtolower', $tags);
+        if (array_intersect($tagsLower, ['tech', 'desarrollo', 'programacion', 'dev', 'codigo', 'shaders', 'webgpu'])) {
+            return 'Desarrollo/Tech';
+        }
+        if (array_intersect($tagsLower, ['compras', 'personal', 'salud', 'comida', 'casa', 'hogar'])) {
+            return 'Personal/Compras';
+        }
+        if (array_intersect($tagsLower, ['admin', 'pago', 'finanzas', 'factura', 'banco'])) {
+            return 'Casa/Admin';
+        }
+        return 'General';
+    }
+
+    /**
+     * REASONING FALLBACK (Full multi-turn tool calling loop with model router resolution).
+     */
+    public function executeReasoningFallback(User $user, string $prompt, array $conversationHistory = []): array
     {
         try {
             $nowInTz = Carbon::now($this->timezone);
@@ -132,21 +531,23 @@ class AssistantOrchestratorService
 
             $messages[] = ['role' => 'user', 'content' => $prompt];
 
-            $endpoint = rtrim($this->apiUrl, '/');
+            $modelConfig = $this->modelRouter->getActiveModelConfig('reasoning_fallback');
+            $endpoint = rtrim($modelConfig['base_url'], '/');
             if (!str_ends_with($endpoint, '/chat/completions')) {
                 $endpoint .= '/chat/completions';
             }
 
             $payload = [
-                'model'       => $this->model,
+                'model'       => $modelConfig['model'],
                 'messages'    => $messages,
                 'tools'       => $this->getToolsSchema(),
                 'tool_choice' => 'auto',
                 'temperature' => 0.2,
             ];
 
-            $response = Http::withToken($this->apiKey)
-                ->timeout(45)
+            $response = Http::withToken($modelConfig['api_key'])
+                ->withHeaders((array) ($modelConfig['headers'] ?? []))
+                ->timeout(max(10, intval($modelConfig['timeout_ms'] / 1000)))
                 ->post($endpoint, $payload);
 
             if (!$response->successful()) {
@@ -675,7 +1076,7 @@ SYS;
                 $messages[] = $tm;
             }
 
-            $secondResponse = Http::withToken($this->apiKey)
+            $secondResponse = Http::withToken($modelConfig['api_key'] ?? $this->apiKey)
                 ->timeout(45)
                 ->post($endpoint, [
                     'model'       => $this->model,

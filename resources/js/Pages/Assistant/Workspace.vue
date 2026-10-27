@@ -38,6 +38,151 @@ const isConversationsLoading = ref(false);
 const conversationFilterChannel = ref('all'); // 'all' | 'app' | 'whatsapp'
 const conversationSearch = ref('');
 const copiedMessageId = ref(null);
+
+// Model Router State
+const models = ref([]);
+const isModelsLoading = ref(false);
+const isModelDialogOpen = ref(false);
+const isSavingModel = ref(false);
+const testingModelId = ref(null);
+const modelTestResults = ref({});
+const modelActionMessage = ref(null);
+
+const editingModel = ref({
+    id: null,
+    alias: '',
+    role: 'write_intent',
+    base_url: 'https://api.deepseek.com',
+    api_key: '',
+    model: 'deepseek-chat',
+    temperature: 0.2,
+    timeout_ms: 30000,
+    max_tokens: null,
+    status: 'active',
+});
+
+async function fetchModels() {
+    isModelsLoading.value = true;
+    try {
+        const response = await axios.get('/api/v1/assistant/admin/models');
+        if (response.data && response.data.success) {
+            models.value = response.data.data || [];
+        }
+    } catch (e) {
+        console.error('Error al cargar modelos de IA:', e);
+    } finally {
+        isModelsLoading.value = false;
+    }
+}
+
+function openCreateModelDialog() {
+    editingModel.value = {
+        id: null,
+        alias: '',
+        role: 'write_intent',
+        base_url: 'https://api.deepseek.com',
+        api_key: '',
+        model: 'deepseek-chat',
+        temperature: 0.2,
+        timeout_ms: 30000,
+        max_tokens: null,
+        status: 'active',
+    };
+    isModelDialogOpen.value = true;
+}
+
+function openEditModelDialog(m) {
+    editingModel.value = {
+        id: m.id,
+        alias: m.alias,
+        role: m.role,
+        base_url: m.base_url,
+        api_key: '',
+        model: m.model,
+        temperature: m.temperature ?? 0.2,
+        timeout_ms: m.timeout_ms ?? 30000,
+        max_tokens: m.max_tokens ?? null,
+        status: m.status ?? 'active',
+    };
+    isModelDialogOpen.value = true;
+}
+
+async function saveModel() {
+    isSavingModel.value = true;
+    try {
+        const payload = { ...editingModel.value };
+        if (editingModel.value.id) {
+            await axios.put(`/api/v1/assistant/admin/models/${editingModel.value.id}`, payload);
+            modelActionMessage.value = { severity: 'success', text: `Modelo '${payload.alias}' actualizado exitosamente.` };
+        } else {
+            await axios.post('/api/v1/assistant/admin/models', payload);
+            modelActionMessage.value = { severity: 'success', text: `Modelo '${payload.alias}' creado exitosamente.` };
+        }
+        isModelDialogOpen.value = false;
+        await fetchModels();
+    } catch (e) {
+        modelActionMessage.value = { severity: 'error', text: e.response?.data?.message || 'Error al guardar modelo.' };
+    } finally {
+        isSavingModel.value = false;
+    }
+}
+
+async function activateModel(m) {
+    try {
+        await axios.post(`/api/v1/assistant/admin/models/${m.id}/activate`);
+        modelActionMessage.value = { severity: 'success', text: `Modelo '${m.alias}' activado para '${m.role}'.` };
+        await fetchModels();
+    } catch (e) {
+        modelActionMessage.value = { severity: 'error', text: 'Error al activar el modelo.' };
+    }
+}
+
+async function deleteModel(m) {
+    if (!confirm(`¿Eliminar la configuración del modelo '${m.alias}'?`)) return;
+    try {
+        await axios.delete(`/api/v1/assistant/admin/models/${m.id}`);
+        modelActionMessage.value = { severity: 'info', text: `Modelo '${m.alias}' eliminado.` };
+        await fetchModels();
+    } catch (e) {
+        modelActionMessage.value = { severity: 'error', text: 'Error al eliminar el modelo.' };
+    }
+}
+
+async function testModelConnection(m) {
+    testingModelId.value = m.id;
+    try {
+        const response = await axios.post('/api/v1/assistant/admin/models/test', { model_id: m.id });
+        modelTestResults.value[m.id] = {
+            success: response.data.success,
+            latency: response.data.data?.latency_ms,
+            message: response.data.message,
+        };
+    } catch (e) {
+        modelTestResults.value[m.id] = {
+            success: false,
+            message: e.response?.data?.message || 'Error de conexión',
+        };
+    } finally {
+        testingModelId.value = null;
+    }
+}
+
+async function testModalConnection() {
+    isSavingModel.value = true;
+    try {
+        const response = await axios.post('/api/v1/assistant/admin/models/test', {
+            base_url: editingModel.value.base_url,
+            api_key: editingModel.value.api_key,
+            model: editingModel.value.model,
+            timeout_ms: editingModel.value.timeout_ms,
+        });
+        alert(`Resultado de prueba: ${response.data.message} (${response.data.data?.latency_ms || 0} ms)`);
+    } catch (e) {
+        alert(`Error al probar: ${e.response?.data?.message || e.message}`);
+    } finally {
+        isSavingModel.value = false;
+    }
+}
 let searchDebounceTimeout = null;
 
 // Fetch Conversations History
@@ -86,6 +231,7 @@ function handleChannelFilter(channel) {
     if (conversationFilterChannel.value === channel) return;
     conversationFilterChannel.value = channel;
     fetchConversations();
+    fetchModels();
 }
 
 function handleSearchInput() {
@@ -487,6 +633,8 @@ function switchTab(tab) {
     activeTab.value = tab;
     if (tab === 'conversations') {
         fetchConversations();
+    } else if (tab === 'models') {
+        fetchModels();
     }
 }
 
@@ -617,6 +765,27 @@ onMounted(() => {
                             <Tag
                                 v-if="conversations.length"
                                 :value="conversations.length"
+                                severity="secondary"
+                                rounded
+                                class="text-[10px] font-mono px-1.5 py-0.2"
+                            />
+                        </button>
+
+                        <button
+                            type="button"
+                            @click="switchTab('models')"
+                            :class="[
+                                'flex items-center gap-2 px-3.5 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer active:scale-95',
+                                activeTab === 'models'
+                                    ? 'bg-surface-0 dark:bg-surface-800 text-surface-900 dark:text-surface-0 shadow-xs'
+                                    : 'text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100'
+                            ]"
+                        >
+                            <i class="pi pi-sliders-h text-xs"></i>
+                            <span>Model Router & IA</span>
+                            <Tag
+                                v-if="models.length"
+                                :value="models.length"
                                 severity="secondary"
                                 rounded
                                 class="text-[10px] font-mono px-1.5 py-0.2"
@@ -1249,6 +1418,216 @@ onMounted(() => {
                 </div>
                 <!-- FIN TAB 2: CONVERSACIONES -->
 
+                <!-- TAB 3: MODEL ROUTER & PROVEEDORES IA -->
+                <div v-show="activeTab === 'models'" class="space-y-6">
+
+                    <!-- Banner Informativo y Feedback -->
+                    <Message v-if="modelActionMessage" :severity="modelActionMessage.severity" :closable="true" @close="modelActionMessage = null">
+                        {{ modelActionMessage.text }}
+                    </Message>
+
+                    <!-- Header & Control Bar -->
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-800 shadow-xs">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h2 class="text-base font-semibold text-surface-900 dark:text-surface-0">
+                                    Enrutamiento Dinámico de Modelos (Model Router)
+                                </h2>
+                                <Tag value="Zero Downtime" severity="success" class="text-[10px] px-1.5" />
+                            </div>
+                            <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">
+                                Administra y conmuta en caliente los modelos de IA para ingesta de alta razón (Escritura) y síntesis ultra-rápida (Lectura/TTS) sin depender de variables .env fijas.
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <Button
+                                label="Recargar Caché"
+                                icon="pi pi-refresh"
+                                severity="secondary"
+                                variant="outlined"
+                                size="small"
+                                :loading="isModelsLoading"
+                                @click="fetchModels"
+                                class="!text-xs"
+                            />
+                            <Button
+                                label="Nuevo Modelo"
+                                icon="pi pi-plus"
+                                size="small"
+                                @click="openCreateModelDialog"
+                                class="!text-xs !bg-blue-600 hover:!bg-blue-700 !text-white"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Pipeline Role Matrix (3 Overview Cards) -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- Card 1: write_intent -->
+                        <div class="p-4 rounded-xl bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-800 shadow-xs space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+                                    <i class="pi pi-pencil text-xs"></i> write_intent
+                                </span>
+                                <Tag value="Alto Razonamiento" severity="info" class="text-[10px]" />
+                            </div>
+                            <div>
+                                <div class="text-sm font-bold text-surface-900 dark:text-surface-100">
+                                    {{ models.find(m => m.role === 'write_intent' && m.status === 'active')?.alias || 'DeepSeek-V3 / .env' }}
+                                </div>
+                                <div class="text-xs font-mono text-surface-500 truncate mt-0.5">
+                                    {{ models.find(m => m.role === 'write_intent' && m.status === 'active')?.model || 'deepseek-chat' }}
+                                </div>
+                            </div>
+                            <p class="text-[11px] text-surface-500 dark:text-surface-400">
+                                Descomposición atómica de recordatorios, deduplicación y categorización estricta JSON.
+                            </p>
+                        </div>
+
+                        <!-- Card 2: read_intent -->
+                        <div class="p-4 rounded-xl bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-800 shadow-xs space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                                    <i class="pi pi-bolt text-xs"></i> read_intent
+                                </span>
+                                <Tag value="Ultra-Speed TTS" severity="success" class="text-[10px]" />
+                            </div>
+                            <div>
+                                <div class="text-sm font-bold text-surface-900 dark:text-surface-100">
+                                    {{ models.find(m => m.role === 'read_intent' && m.status === 'active')?.alias || 'MiMo v2.6 Pro / Fallback' }}
+                                </div>
+                                <div class="text-xs font-mono text-surface-500 truncate mt-0.5">
+                                    {{ models.find(m => m.role === 'read_intent' && m.status === 'active')?.model || 'mimo-v2.6-pro-ultraspeed' }}
+                                </div>
+                            </div>
+                            <p class="text-[11px] text-surface-500 dark:text-surface-400">
+                                Mínimo Time-to-First-Token. Formatea registros pre-consultados en markdown y voz TTS limpia.
+                            </p>
+                        </div>
+
+                        <!-- Card 3: reasoning_fallback -->
+                        <div class="p-4 rounded-xl bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-800 shadow-xs space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                                    <i class="pi pi-compass text-xs"></i> reasoning_fallback
+                                </span>
+                                <Tag value="Multiturno & Tools" severity="warn" class="text-[10px]" />
+                            </div>
+                            <div>
+                                <div class="text-sm font-bold text-surface-900 dark:text-surface-100">
+                                    {{ models.find(m => m.role === 'reasoning_fallback' && m.status === 'active')?.alias || 'Fallback General / Tools' }}
+                                </div>
+                                <div class="text-xs font-mono text-surface-500 truncate mt-0.5">
+                                    {{ models.find(m => m.role === 'reasoning_fallback' && m.status === 'active')?.model || 'deepseek-chat' }}
+                                </div>
+                            </div>
+                            <p class="text-[11px] text-surface-500 dark:text-surface-400">
+                                Loop de herramientas interactivo para consultas ambiguas o instrucciones multimodales.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Configured Providers List -->
+                    <div class="rounded-xl bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-800 shadow-xs overflow-hidden">
+                        <div class="p-4 border-b border-surface-200 dark:border-surface-800 flex items-center justify-between">
+                            <h3 class="text-sm font-semibold text-surface-900 dark:text-surface-0">
+                                Proveedores Registrados en Base de Datos
+                            </h3>
+                            <span class="text-xs text-surface-400 font-mono">
+                                {{ models.length }} registrados
+                            </span>
+                        </div>
+
+                        <!-- Empty State -->
+                        <div v-if="models.length === 0 && !isModelsLoading" class="py-12 px-4 text-center">
+                            <i class="pi pi-server text-3xl text-surface-400 mb-2"></i>
+                            <h4 class="text-sm font-medium text-surface-900 dark:text-surface-0">No hay modelos personalizados configurados</h4>
+                            <p class="text-xs text-surface-500 max-w-md mx-auto mt-1 mb-4">
+                                El sistema actualmente está operando con los valores por defecto del archivo .env. Registra proveedores personalizados para habilitar el enrutamiento dinámico.
+                            </p>
+                            <Button label="Registrar Primer Modelo" icon="pi pi-plus" size="small" @click="openCreateModelDialog" class="!text-xs" />
+                        </div>
+
+                        <!-- Models Grid -->
+                        <div v-else class="divide-y divide-surface-100 dark:divide-surface-800">
+                            <div
+                                v-for="m in models"
+                                :key="m.id"
+                                class="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-surface-50 dark:hover:bg-surface-800/40 transition-colors"
+                            >
+                                <div class="space-y-1.5 min-w-0 flex-1">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="text-sm font-semibold text-surface-900 dark:text-surface-100">
+                                            {{ m.alias }}
+                                        </span>
+                                        <Tag
+                                            :value="m.status === 'active' ? 'ACTIVO' : (m.status === 'standby' ? 'STANDBY' : 'INACTIVO')"
+                                            :severity="m.status === 'active' ? 'success' : (m.status === 'standby' ? 'warn' : 'secondary')"
+                                            class="!text-[10px] !px-1.5"
+                                        />
+                                        <Tag
+                                            :value="m.role"
+                                            severity="secondary"
+                                            class="!text-[10px] font-mono !px-1.5"
+                                        />
+                                        <span v-if="modelTestResults[m.id]" class="text-[11px] font-mono flex items-center gap-1" :class="modelTestResults[m.id].success ? 'text-emerald-500' : 'text-red-500'">
+                                            <i :class="modelTestResults[m.id].success ? 'pi pi-bolt' : 'pi pi-exclamation-triangle'"></i>
+                                            {{ modelTestResults[m.id].latency ? `${modelTestResults[m.id].latency} ms` : modelTestResults[m.id].message }}
+                                        </span>
+                                    </div>
+
+                                    <div class="flex items-center gap-3 text-xs text-surface-500 dark:text-surface-400 font-mono flex-wrap">
+                                        <span><i class="pi pi-box text-[11px] mr-1"></i>{{ m.model }}</span>
+                                        <span><i class="pi pi-link text-[11px] mr-1"></i>{{ m.base_url }}</span>
+                                        <span><i class="pi pi-key text-[11px] mr-1"></i>{{ m.masked_api_key }}</span>
+                                        <span><i class="pi pi-sliders-v text-[11px] mr-1"></i>T: {{ m.temperature }}</span>
+                                        <span><i class="pi pi-clock text-[11px] mr-1"></i>{{ m.timeout_ms }}ms</span>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-1.5 shrink-0">
+                                    <Button
+                                        icon="pi pi-bolt"
+                                        label="Probar"
+                                        severity="secondary"
+                                        variant="outlined"
+                                        size="small"
+                                        :loading="testingModelId === m.id"
+                                        @click="testModelConnection(m)"
+                                        class="!text-xs !py-1"
+                                    />
+                                    <Button
+                                        v-if="m.status !== 'active'"
+                                        icon="pi pi-check"
+                                        label="Activar"
+                                        severity="success"
+                                        size="small"
+                                        @click="activateModel(m)"
+                                        class="!text-xs !py-1"
+                                    />
+                                    <Button
+                                        icon="pi pi-pencil"
+                                        severity="secondary"
+                                        text
+                                        size="small"
+                                        @click="openEditModelDialog(m)"
+                                        class="!text-xs"
+                                    />
+                                    <Button
+                                        icon="pi pi-trash"
+                                        severity="danger"
+                                        text
+                                        size="small"
+                                        @click="deleteModel(m)"
+                                        class="!text-xs"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <!-- FIN TAB 3: MODEL ROUTER & PROVEEDORES IA -->
+
 
             </div>
         </div>
@@ -1494,6 +1873,145 @@ onMounted(() => {
                 </div>
             </template>
         </Dialog>
+            <!-- DIALOGO: REGISTRAR / EDITAR MODELO IA -->
+        <Dialog
+            v-model:visible="isModelDialogOpen"
+            modal
+            :header="editingModel.id ? 'Editar Configuración de Modelo IA' : 'Registrar Nuevo Proveedor de IA'"
+            :style="{ width: '560px' }"
+            class="p-dialog-sm"
+        >
+            <div class="space-y-4 pt-2">
+                <!-- Alias & Rol -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-surface-700 dark:text-surface-300">Alias / Nombre</label>
+                        <InputText
+                            v-model="editingModel.alias"
+                            placeholder="ej. Ruta Rápida - TTS MiMo"
+                            class="w-full text-xs"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-surface-700 dark:text-surface-300">Rol del Modelo</label>
+                        <select
+                            v-model="editingModel.role"
+                            class="w-full text-xs rounded-md border border-surface-300 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 text-surface-900 dark:text-surface-100 p-2"
+                        >
+                            <option value="write_intent">write_intent (Escritura / Razonamiento)</option>
+                            <option value="read_intent">read_intent (Lectura / Ultra-Speed TTS)</option>
+                            <option value="reasoning_fallback">reasoning_fallback (Soporte / Multi-Turno)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Base URL -->
+                <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-surface-700 dark:text-surface-300">Base URL (OpenAI Specs Compatible)</label>
+                    <InputText
+                        v-model="editingModel.base_url"
+                        placeholder="https://api.deepseek.com o https://api.mimo.ai/v1"
+                        class="w-full font-mono text-xs"
+                    />
+                </div>
+
+                <!-- API Key -->
+                <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-surface-700 dark:text-surface-300">
+                        API Key (Cifrada en BD)
+                        <span v-if="editingModel.id" class="text-surface-400 font-normal">(Dejar vacío para conservar actual)</span>
+                    </label>
+                    <InputText
+                        v-model="editingModel.api_key"
+                        type="password"
+                        placeholder="sk-..."
+                        class="w-full font-mono text-xs"
+                    />
+                </div>
+
+                <!-- Nombre del Modelo & Temperatura -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-surface-700 dark:text-surface-300">Model ID</label>
+                        <InputText
+                            v-model="editingModel.model"
+                            placeholder="deepseek-chat o mimo-v2.6-pro-ultraspeed"
+                            class="w-full font-mono text-xs"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-surface-700 dark:text-surface-300">Temperatura (0.0 - 2.0)</label>
+                        <InputText
+                            v-model.number="editingModel.temperature"
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="2"
+                            class="w-full text-xs"
+                        />
+                    </div>
+                </div>
+
+                <!-- Timeout & Estado -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-surface-700 dark:text-surface-300">Timeout (ms)</label>
+                        <InputText
+                            v-model.number="editingModel.timeout_ms"
+                            type="number"
+                            step="1000"
+                            placeholder="30000"
+                            class="w-full text-xs"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-surface-700 dark:text-surface-300">Estado Inicial</label>
+                        <select
+                            v-model="editingModel.status"
+                            class="w-full text-xs rounded-md border border-surface-300 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 text-surface-900 dark:text-surface-100 p-2"
+                        >
+                            <option value="active">Activo (Activará de inmediato)</option>
+                            <option value="standby">Standby (Respaldo preparado)</option>
+                            <option value="inactive">Inactivo</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <template #footer>
+                <div class="flex items-center justify-between w-full pt-2">
+                    <Button
+                        label="Probar Conexión"
+                        icon="pi pi-bolt"
+                        severity="secondary"
+                        variant="outlined"
+                        size="small"
+                        :loading="isSavingModel"
+                        @click="testModalConnection"
+                        class="!text-xs"
+                    />
+                    <div class="flex items-center gap-2">
+                        <Button
+                            label="Cancelar"
+                            severity="secondary"
+                            text
+                            size="small"
+                            @click="isModelDialogOpen = false"
+                            class="!text-xs"
+                        />
+                        <Button
+                            label="Guardar"
+                            icon="pi pi-save"
+                            size="small"
+                            :loading="isSavingModel"
+                            @click="saveModel"
+                            class="!text-xs !bg-blue-600 hover:!bg-blue-700 !text-white"
+                        />
+                    </div>
+                </div>
+            </template>
+        </Dialog>
+
     </AuthenticatedLayout>
 </template>
 
