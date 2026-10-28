@@ -167,3 +167,4 @@ class AssistantEntityUpdateEndpointTest extends TestCase
             ]);
     }
 }
+
