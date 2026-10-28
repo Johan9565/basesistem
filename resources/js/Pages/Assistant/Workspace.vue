@@ -17,6 +17,7 @@ import Tag from 'primevue/tag';
 import Message from 'primevue/message';
 import Dialog from 'primevue/dialog';
 import Textarea from 'primevue/textarea';
+import EditItemModal from '@/Components/EditItemModal.vue';
 
 // State
 const inputQuery = ref('');
@@ -40,6 +41,62 @@ const isConversationsLoading = ref(false);
 const conversationFilterChannel = ref('all'); // 'all' | 'app' | 'whatsapp'
 const conversationSearch = ref('');
 const copiedMessageId = ref(null);
+
+// Edit Item Modal State
+const isEditModalOpen = ref(false);
+const editingItem = ref(null);
+const editingItemType = ref('task');
+
+function isTask(item) {
+    if (!item) return false;
+    const tags = Array.isArray(item.tags) ? item.tags : [];
+    return tags.some((t) => ['todo', 'pendiente', 'task'].includes(String(t).toLowerCase()));
+}
+
+function openEditModal(item, type = null) {
+    if (!item) return;
+    editingItem.value = { ...item };
+    if (type) {
+        editingItemType.value = type;
+    } else if (item.start_time) {
+        editingItemType.value = 'event';
+    } else if (item.scheduled_at) {
+        editingItemType.value = 'reminder';
+    } else if (isTask(item)) {
+        editingItemType.value = 'task';
+    } else {
+        editingItemType.value = 'note';
+    }
+    isEditModalOpen.value = true;
+}
+
+function handleEntitySaved({ type, id, data }) {
+    if (type === 'event') {
+        const idx = events.value.findIndex((e) => (e.id || e._id) === id);
+        if (idx !== -1) {
+            events.value[idx] = { ...events.value[idx], ...data };
+        }
+    } else if (type === 'reminder') {
+        const idx = reminders.value.findIndex((r) => (r.id || r._id) === id);
+        if (idx !== -1) {
+            reminders.value[idx] = { ...reminders.value[idx], ...data };
+        }
+    } else if (type === 'note' || type === 'task') {
+        const idx = notes.value.findIndex((n) => (n.id || n._id) === id);
+        if (idx !== -1) {
+            notes.value[idx] = { ...notes.value[idx], ...data };
+        } else {
+            const remIdx = reminders.value.findIndex((r) => (r.id || r._id) === id);
+            if (remIdx !== -1) {
+                reminders.value[remIdx] = { ...reminders.value[remIdx], ...data };
+            }
+        }
+    }
+
+    lastMessage.value = `Registro '${data?.title || 'actualizado'}' guardado correctamente.`;
+    lastSuccess.value = true;
+    lastAction.value = 'entity_updated';
+}
 
 // Model Router State
 const models = ref([]);
@@ -952,7 +1009,11 @@ onMounted(() => {
                                 >
                                     <div class="flex items-start justify-between gap-2">
                                         <div class="flex items-center gap-1.5">
-                                            <h3 class="text-xs font-medium text-surface-900 dark:text-surface-100 leading-snug">
+                                            <h3
+                                                @dblclick="openEditModal(event, 'event')"
+                                                class="text-xs font-medium text-surface-900 dark:text-surface-100 leading-snug cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                                                title="Doble clic para editar"
+                                            >
                                                 {{ event.title }}
                                             </h3>
                                             <span
@@ -970,6 +1031,14 @@ onMounted(() => {
                                                 severity="secondary"
                                                 class="font-mono text-[11px] shrink-0 font-normal px-1.5 py-0.5"
                                             />
+                                            <button
+                                                type="button"
+                                                @click.stop="openEditModal(event, 'event')"
+                                                class="opacity-70 sm:opacity-0 group-hover:opacity-100 text-surface-400 hover:text-primary-500 transition-opacity ml-1 cursor-pointer p-0.5"
+                                                title="Editar cita o evento"
+                                            >
+                                                <i class="pi pi-pencil text-[11px]"></i>
+                                            </button>
                                             <button
                                                 type="button"
                                                 @click="deleteEvent(event)"
@@ -1028,7 +1097,7 @@ onMounted(() => {
                                 <div
                                     v-for="reminder in reminders"
                                     :key="reminder.id || reminder._id"
-                                    class="rounded-lg border border-surface-200/80 dark:border-surface-800/80 bg-surface-50/50 dark:bg-surface-950/40 p-3 hover:border-surface-300 dark:hover:border-surface-700 transition-colors"
+                                    class="group rounded-lg border border-surface-200/80 dark:border-surface-800/80 bg-surface-50/50 dark:bg-surface-950/40 p-3 hover:border-surface-300 dark:hover:border-surface-700 transition-colors"
                                     :class="{ 'opacity-50': reminder.status === 'completed' }"
                                 >
                                     <div class="flex items-start gap-2.5">
@@ -1046,17 +1115,29 @@ onMounted(() => {
                                         <div class="flex-1 min-w-0">
                                             <div class="flex items-start justify-between gap-1.5">
                                                 <span
-                                                    class="text-xs font-medium leading-snug break-words transition-all"
+                                                    @dblclick="openEditModal(reminder, 'reminder')"
+                                                    class="text-xs font-medium leading-snug break-words transition-all cursor-pointer hover:text-primary-600 dark:hover:text-primary-400"
                                                     :class="reminder.status === 'completed' ? 'line-through text-surface-400 dark:text-surface-500' : 'text-surface-900 dark:text-surface-100'"
+                                                    title="Doble clic para editar"
                                                 >
                                                     {{ reminder.title }}
                                                 </span>
-                                                <Tag
-                                                    v-if="reminder.priority"
-                                                    :value="getPriorityTag(reminder.priority).label"
-                                                    :severity="getPriorityTag(reminder.priority).severity"
-                                                    class="text-[10px] font-normal px-1 py-0.5 shrink-0"
-                                                />
+                                                <div class="flex items-center gap-1 shrink-0">
+                                                    <Tag
+                                                        v-if="reminder.priority"
+                                                        :value="getPriorityTag(reminder.priority).label"
+                                                        :severity="getPriorityTag(reminder.priority).severity"
+                                                        class="text-[10px] font-normal px-1 py-0.5 shrink-0"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        @click.stop="openEditModal(reminder, 'reminder')"
+                                                        class="opacity-70 sm:opacity-0 group-hover:opacity-100 text-surface-400 hover:text-primary-500 transition-opacity p-0.5 cursor-pointer ml-0.5"
+                                                        title="Editar recordatorio"
+                                                    >
+                                                        <i class="pi pi-pencil text-[11px]"></i>
+                                                    </button>
+                                                </div>
                                             </div>
 
                                             <div class="mt-1.5 flex items-center justify-between text-[11px] text-surface-400 dark:text-surface-500 font-mono">
@@ -1106,13 +1187,25 @@ onMounted(() => {
                                 <div
                                     v-for="note in notes"
                                     :key="note.id || note._id"
+                                    @dblclick="openEditModal(note, isTask(note) ? 'task' : 'note')"
                                     class="rounded-lg border border-surface-200/80 dark:border-surface-800/80 bg-surface-50/50 dark:bg-surface-950/40 p-3 hover:border-surface-400 dark:hover:border-surface-600 hover:shadow-xs transition-all cursor-pointer group"
+                                    title="Doble clic para editar"
                                 >
                                     <div class="flex items-start justify-between gap-2">
                                         <h3 class="text-xs font-medium text-surface-900 dark:text-surface-100 group-hover:text-surface-700 dark:group-hover:text-surface-300 transition-colors">
                                             {{ note.title }}
                                         </h3>
-                                        <i v-if="note.is_pinned" class="pi pi-bookmark-fill text-amber-500 text-xs shrink-0" title="Nota fijada"></i>
+                                        <div class="flex items-center gap-1.5 shrink-0">
+                                            <i v-if="note.is_pinned" class="pi pi-bookmark-fill text-amber-500 text-xs shrink-0" title="Nota fijada"></i>
+                                            <button
+                                                type="button"
+                                                @click.stop="openEditModal(note, isTask(note) ? 'task' : 'note')"
+                                                class="opacity-70 sm:opacity-0 group-hover:opacity-100 text-surface-400 hover:text-primary-500 transition-opacity p-0.5 cursor-pointer"
+                                                title="Editar nota o pendiente"
+                                            >
+                                                <i class="pi pi-pencil text-[11px]"></i>
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <p class="mt-1.5 text-xs text-surface-600 dark:text-surface-300 line-clamp-3 leading-relaxed whitespace-pre-line">
@@ -2013,6 +2106,14 @@ onMounted(() => {
                 </div>
             </template>
         </Dialog>
+
+        <!-- MODAL REUTILIZABLE PARA EDICIÓN DE ENTIDADES (EVENTOS, RECORDATORIOS, NOTAS, TAREAS) -->
+        <EditItemModal
+            v-model="isEditModalOpen"
+            :item="editingItem"
+            :type="editingItemType"
+            @saved="handleEntitySaved"
+        />
 
     </AuthenticatedLayout>
 </template>
