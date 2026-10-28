@@ -61,7 +61,13 @@ class ProcessAssistantMessage implements ShouldQueue
 
         $prompt = (string) $assistantMessage->prompt;
         $metadata = (array) ($assistantMessage->metadata ?? []);
+        $conversationId = $assistantMessage->conversation_id ?? ($metadata['conversation_id'] ?? null);
+        $channel = $assistantMessage->channel ?? 'app';
+
         $history = (array) ($metadata['conversation_history'] ?? []);
+        if (empty($history)) {
+            $history = $orchestrator->loadConversationHistory($user, $conversationId, $channel, 20);
+        }
 
         // Si hay un prompt del sistema personalizado (ej. WhatsApp instance), anteponerlo al historial
         if (!empty($metadata['system_prompt'])) {
@@ -73,7 +79,7 @@ class ProcessAssistantMessage implements ShouldQueue
 
         try {
             // Interactuar con el orquestador inteligente del asistente
-            $result = $orchestrator->interact($user, $prompt, $history);
+            $result = $orchestrator->interact($user, $prompt, $history, $conversationId, $channel);
 
             $displayText = $result['display_text'] ?? $result['message'] ?? 'Mensaje procesado correctamente.';
             $speechText  = $result['speech_text'] ?? $displayText;
@@ -93,8 +99,8 @@ class ProcessAssistantMessage implements ShouldQueue
                 $phone        = $metadata['phone'] ?? null;
                 $messageKey   = $metadata['message_key'] ?? null;
 
-                if ($instanceName && $phone && trim($replyText) !== '') {
-                    $evolution->sendHumanizedMessage($instanceName, $phone, $replyText, $messageKey);
+                if ($instanceName && $phone && trim($displayText) !== '') {
+                    $evolution->sendHumanizedMessage($instanceName, $phone, $displayText, $messageKey);
                 }
             }
 

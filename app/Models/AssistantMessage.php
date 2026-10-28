@@ -16,6 +16,7 @@ class AssistantMessage extends Model
 
     protected $fillable = [
         'user_id',
+        'conversation_id',
         'channel',        // 'app' | 'whatsapp'
         'direction',      // 'inbound' | 'outbound'
         'prompt',

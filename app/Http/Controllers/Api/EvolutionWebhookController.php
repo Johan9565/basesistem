@@ -79,37 +79,46 @@ class EvolutionWebhookController extends Controller
                 continue;
             }
 
+            $cleanPhone = preg_replace('/\D/', '', $phone);
+            $conversationId = 'whatsapp_' . ($cleanPhone ?: $instanceName);
+
+            // Recuperar historial de conversación previo para mantener contexto multi-turn en WhatsApp
+            $history = $orchestrator->loadConversationHistory($user, $conversationId, 'whatsapp', 20);
+
+            $customPrompt = $instance->system_prompt ? "Instrucciones de WhatsApp para este usuario: " . $instance->system_prompt . "\n" : "";
+            if ($customPrompt !== '') {
+                array_unshift($history, ['role' => 'system', 'content' => $customPrompt]);
+            }
+
             // Guardar en base de datos para trazabilidad
             $assistantMessage = AssistantMessage::create([
-                'user_id'     => (string) $user->id,
-                'channel'     => 'whatsapp',
-                'direction'   => 'inbound',
-                'prompt'      => $text,
-                'status'      => 'processing',
-                'retry_count' => 0,
-                'metadata'    => [
-                    'instance_name' => $instanceName,
-                    'phone'         => $phone,
-                    'message_key'   => $messageKey,
-                    'system_prompt' => $instance->system_prompt ?? null,
+                'user_id'         => (string) $user->id,
+                'conversation_id' => $conversationId,
+                'channel'         => 'whatsapp',
+                'direction'       => 'inbound',
+                'prompt'          => $text,
+                'status'          => 'processing',
+                'retry_count'     => 0,
+                'metadata'        => [
+                    'instance_name'   => $instanceName,
+                    'phone'           => $phone,
+                    'message_key'     => $messageKey,
+                    'system_prompt'   => $instance->system_prompt ?? null,
+                    'conversation_id' => $conversationId,
                 ],
             ]);
 
             try {
-                $customPrompt = $instance->system_prompt ? "Instrucciones de WhatsApp para este usuario: " . $instance->system_prompt . "\n" : "";
-                $history = [];
-                if ($customPrompt !== '') {
-                    $history[] = ['role' => 'system', 'content' => $customPrompt];
-                }
-
-                $replyData = $orchestrator->interact($user, $text, $history);
-                $replyText = $replyData['message'] ?? 'Mensaje procesado por tu asistente.';
+                $replyData = $orchestrator->interact($user, $text, $history, $conversationId, 'whatsapp');
+                $replyText = $replyData['display_text'] ?? $replyData['message'] ?? 'Mensaje procesado por tu asistente.';
                 $action    = $replyData['action'] ?? 'conversation';
 
                 $assistantMessage->update([
-                    'status' => 'completed',
-                    'reply'  => $replyText,
-                    'action' => $action,
+                    'status'       => 'completed',
+                    'reply'        => $replyText,
+                    'display_text' => $replyText,
+                    'speech_text'  => $replyData['speech_text'] ?? $replyText,
+                    'action'       => $action,
                 ]);
 
                 if (trim($replyText) !== '') {

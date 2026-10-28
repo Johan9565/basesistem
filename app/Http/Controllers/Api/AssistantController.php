@@ -92,25 +92,49 @@ class AssistantController extends Controller
         }
 
         $channel = $request->input('channel', 'app');
+        $userId  = (string) ($user->_id ?? $user->id);
+
+        // Resolve or establish active conversation_id
+        $conversationId = $request->input('conversation_id');
+        if (empty($conversationId)) {
+            $recentActive = AssistantMessage::where('user_id', $userId)
+                ->where('channel', $channel)
+                ->where('created_at', '>=', Carbon::now()->subMinutes(60))
+                ->whereNotNull('conversation_id')
+                ->where('conversation_id', '!=', '')
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            $conversationId = $recentActive?->conversation_id ?: (string) \Illuminate\Support\Str::uuid();
+        }
+
+        // Retrieve prior conversation history if not explicitly provided
+        $conversationHistory = $validated['conversation_history'] ?? [];
+        if (empty($conversationHistory)) {
+            $conversationHistory = $this->orchestrator->loadConversationHistory($user, $conversationId, $channel, 20);
+        }
 
         $assistantMessage = AssistantMessage::create([
-            'user_id'     => (string) ($user->_id ?? $user->id),
-            'channel'     => $channel,
-            'direction'   => 'inbound',
-            'prompt'      => $validated['prompt'],
-            'status'      => 'received',
-            'retry_count' => 0,
-            'metadata'    => [
-                'conversation_history' => $validated['conversation_history'] ?? [],
-                'conversation_id'      => $request->input('conversation_id'),
+            'user_id'         => $userId,
+            'conversation_id' => $conversationId,
+            'channel'         => $channel,
+            'direction'       => 'inbound',
+            'prompt'          => $validated['prompt'],
+            'status'          => 'received',
+            'retry_count'     => 0,
+            'metadata'        => [
+                'conversation_history' => $conversationHistory,
+                'conversation_id'      => $conversationId,
             ],
         ]);
 
-        // Procesar inmediatamente con el orquestador inteligente
+        // Procesar inmediatamente con el orquestador inteligente inyectando el historial multi-turn
         $result = $this->orchestrator->interact(
             $user,
             $validated['prompt'],
-            $validated['conversation_history'] ?? []
+            $conversationHistory,
+            $conversationId,
+            $channel
         );
 
         $displayText = $result['display_text'] ?? $result['message'] ?? 'Mensaje procesado correctamente.';
@@ -144,7 +168,7 @@ class AssistantController extends Controller
                 'reply'               => $displayText,
                 'display_text'        => $displayText,
                 'speech_text'         => $speechText,
-                'conversation_id'     => $request->input('conversation_id'),
+                'conversation_id'     => $conversationId,
                 'action'              => $action,
                 'categories_detected' => $result['categories_detected'] ?? [],
                 'atomic_tasks_count'  => $result['atomic_tasks_count'] ?? 0,
@@ -209,26 +233,47 @@ class AssistantController extends Controller
             );
         }
 
+        $channel = 'app';
+        $userId  = (string) ($user->_id ?? $user->id);
+
+        $conversationId = $request->input('conversation_id');
+        if (empty($conversationId)) {
+            $recentActive = AssistantMessage::where('user_id', $userId)
+                ->where('channel', $channel)
+                ->where('created_at', '>=', Carbon::now()->subMinutes(60))
+                ->whereNotNull('conversation_id')
+                ->where('conversation_id', '!=', '')
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            $conversationId = $recentActive?->conversation_id ?: (string) \Illuminate\Support\Str::uuid();
+        }
+
         $history = $request->input('conversation_history', []);
         if (is_string($history)) {
             $history = json_decode($history, true) ?: [];
         }
+        if (empty($history)) {
+            $history = $this->orchestrator->loadConversationHistory($user, $conversationId, $channel, 20);
+        }
 
         $assistantMessage = AssistantMessage::create([
-            'user_id'     => (string) $user->id,
-            'channel'     => 'app',
-            'direction'   => 'inbound',
-            'prompt'      => $transcription,
-            'status'      => 'received',
-            'retry_count' => 0,
-            'metadata'    => [
+            'user_id'         => $userId,
+            'conversation_id' => $conversationId,
+            'channel'         => $channel,
+            'direction'       => 'inbound',
+            'prompt'          => $transcription,
+            'status'          => 'received',
+            'retry_count'     => 0,
+            'metadata'        => [
                 'transcription'        => $transcription,
                 'conversation_history' => (array) $history,
+                'conversation_id'      => $conversationId,
             ],
         ]);
 
         // Procesar la transcripción inmediatamente con el orquestador inteligente
-        $result = $this->orchestrator->interact($user, $transcription, (array) $history);
+        $result = $this->orchestrator->interact($user, $transcription, (array) $history, $conversationId, $channel);
 
         $displayText = $result['display_text'] ?? $result['message'] ?? 'Audio procesado correctamente.';
         $speechText  = $result['speech_text'] ?? $displayText;
@@ -261,6 +306,7 @@ class AssistantController extends Controller
                 'reply'               => $displayText,
                 'display_text'        => $displayText,
                 'speech_text'         => $speechText,
+                'conversation_id'     => $conversationId,
                 'action'              => $action,
                 'categories_detected' => $result['categories_detected'] ?? [],
                 'atomic_tasks_count'  => $result['atomic_tasks_count'] ?? 0,
@@ -392,6 +438,7 @@ class AssistantController extends Controller
 
         $userId = (string) ($user->_id ?? $user->id);
         $channel = $request->query('channel');
+        $conversationId = $request->query('conversation_id');
         $search = $request->query('search');
         $limit = min((int) ($request->query('limit', 50)), 100);
 
@@ -399,6 +446,13 @@ class AssistantController extends Controller
             $q->where('user_id', $userId)
               ->orWhere('user_id', (string) $user->id);
         });
+
+        if ($conversationId) {
+            $query->where(function ($q) use ($conversationId) {
+                $q->where('conversation_id', $conversationId)
+                  ->orWhere('metadata.conversation_id', $conversationId);
+            });
+        }
 
         if ($channel && in_array($channel, ['app', 'mobile', 'web', 'whatsapp'], true)) {
             if ($channel === 'mobile' || $channel === 'app') {
@@ -422,19 +476,20 @@ class AssistantController extends Controller
 
         $data = $messages->map(function ($msg) {
             return [
-                'id'            => (string) ($msg->id ?? $msg->_id),
-                'channel'       => $msg->channel ?? 'app',
-                'direction'     => $msg->direction ?? 'inbound',
-                'prompt'        => $msg->prompt,
-                'reply'         => $msg->display_text ?? $msg->reply,
-                'display_text'  => $msg->display_text ?? $msg->reply,
-                'speech_text'   => $msg->speech_text ?? $msg->reply,
-                'action'        => $msg->action ?? 'conversation',
-                'status'        => $msg->status ?? 'completed',
-                'metadata'      => $msg->metadata ?? [],
-                'error_message' => $msg->error_message,
-                'created_at'    => $msg->created_at?->toIso8601String(),
-                'updated_at'    => $msg->updated_at?->toIso8601String(),
+                'id'              => (string) ($msg->id ?? $msg->_id),
+                'conversation_id' => $msg->conversation_id ?? ($msg->metadata['conversation_id'] ?? null),
+                'channel'         => $msg->channel ?? 'app',
+                'direction'       => $msg->direction ?? 'inbound',
+                'prompt'          => $msg->prompt,
+                'reply'           => $msg->display_text ?? $msg->reply,
+                'display_text'    => $msg->display_text ?? $msg->reply,
+                'speech_text'     => $msg->speech_text ?? $msg->reply,
+                'action'          => $msg->action ?? 'conversation',
+                'status'          => $msg->status ?? 'completed',
+                'metadata'        => $msg->metadata ?? [],
+                'error_message'   => $msg->error_message,
+                'created_at'      => $msg->created_at?->toIso8601String(),
+                'updated_at'      => $msg->updated_at?->toIso8601String(),
             ];
         });
 
