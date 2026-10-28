@@ -292,6 +292,8 @@ class AssistantDemoDataSeeder extends Seeder
                     'conversation_id' => $conversationId,
                     'channel'         => $conv['channel'],
                     'direction'       => 'inbound',
+                    'role'            => 'user',
+                    'content'         => $prompt,
                     'prompt'          => $prompt,
                     'reply'           => $reply,
                     'display_text'    => $reply,
@@ -308,6 +310,26 @@ class AssistantDemoDataSeeder extends Seeder
                     'created_at'      => $createdAt,
                     'updated_at'      => (clone $createdAt)->addSeconds(rand(2, 30)),
                 ]);
+
+                if (!empty($reply)) {
+                    AssistantMessage::forceCreate([
+                        'user_id'         => $userId,
+                        'conversation_id' => $conversationId,
+                        'channel'         => $conv['channel'],
+                        'direction'       => 'outbound',
+                        'role'            => 'assistant',
+                        'content'         => $reply,
+                        'display_text'    => $reply,
+                        'speech_text'     => strip_tags($reply),
+                        'action'          => $action,
+                        'status'          => $status,
+                        'metadata'        => [
+                            'conversation_id' => $conversationId,
+                        ],
+                        'created_at'      => (clone $createdAt)->addSeconds(2),
+                        'updated_at'      => (clone $createdAt)->addSeconds(4),
+                    ]);
+                }
             }
         }
     }
