@@ -7,7 +7,9 @@ use App\Jobs\ProcessAssistantMessage;
 use App\Models\AssistantMessage;
 use App\Models\CalendarEvent;
 use App\Models\Reminder;
+use App\Http\Requests\UpdateEntityRequest;
 use App\Services\Assistant\AssistantOrchestratorService;
+use App\Services\Assistant\UpdateEntityService;
 use App\Services\GoogleCalendar\GoogleCalendarService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -17,10 +19,14 @@ use Illuminate\Support\Facades\Log;
 class AssistantController extends Controller
 {
     protected AssistantOrchestratorService $orchestrator;
+    protected UpdateEntityService $updateEntityService;
 
-    public function __construct(AssistantOrchestratorService $orchestrator)
-    {
-        $this->orchestrator = $orchestrator;
+    public function __construct(
+        AssistantOrchestratorService $orchestrator,
+        ?UpdateEntityService $updateEntityService = null
+    ) {
+        $this->orchestrator        = $orchestrator;
+        $this->updateEntityService = $updateEntityService ?? app(UpdateEntityService::class);
     }
 
     /**
@@ -751,5 +757,63 @@ class AssistantController extends Controller
         $event->delete();
 
         return $this->jsonResponse(true, null, 'Evento eliminado del calendario.', 'event_deleted');
+    }
+
+    /**
+     * PATCH /api/v1/assistant/entities/{type}/{id}
+     * Centralized REST endpoint to update any assistant entity.
+     */
+    public function updateEntity(UpdateEntityRequest $request, string $type, string $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            return $this->jsonResponse(false, null, 'No autenticado.', 'unauthenticated', 401);
+        }
+
+        $fields = $request->validated();
+        if (empty($fields)) {
+            $fields = $request->except(['_token', '_method']);
+        }
+
+        $result = $this->updateEntityService->update($user, $type, $id, $fields);
+
+        return response()->json([
+            'success' => $result['success'] ?? false,
+            'data'    => $result['data'] ?? null,
+            'message' => $result['message'] ?? 'Actualizado correctamente',
+            'action'  => 'entity_updated',
+        ], $result['status_code'] ?? ($result['success'] ? 200 : 422));
+    }
+
+    /**
+     * PATCH /api/v1/assistant/events/{id}
+     */
+    public function updateEvent(UpdateEntityRequest $request, string $id): JsonResponse
+    {
+        return $this->updateEntity($request, 'event', $id);
+    }
+
+    /**
+     * PATCH /api/v1/assistant/reminders/{id}
+     */
+    public function updateReminder(UpdateEntityRequest $request, string $id): JsonResponse
+    {
+        return $this->updateEntity($request, 'reminder', $id);
+    }
+
+    /**
+     * PATCH /api/v1/assistant/notes/{id}
+     */
+    public function updateNote(UpdateEntityRequest $request, string $id): JsonResponse
+    {
+        return $this->updateEntity($request, 'note', $id);
+    }
+
+    /**
+     * PATCH /api/v1/assistant/tasks/{id}
+     */
+    public function updateTask(UpdateEntityRequest $request, string $id): JsonResponse
+    {
+        return $this->updateEntity($request, 'task', $id);
     }
 }
