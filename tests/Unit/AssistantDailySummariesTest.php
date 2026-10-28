@@ -139,3 +139,4 @@ class AssistantDailySummariesTest extends TestCase
         $this->assertTrue($hasSummaryJob, 'Scheduler must register assistant:generate-daily-summaries command');
     }
 }
+
