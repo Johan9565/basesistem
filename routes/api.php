@@ -54,6 +54,13 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/events', [AssistantController::class, 'storeEvent'])->name('events.store');
         Route::delete('/events/{id}', [AssistantController::class, 'destroyEvent'])->name('events.destroy');
 
+        // Entity Edit & Update routes
+        Route::patch('/entities/{type}/{id}', [AssistantController::class, 'updateEntity'])->name('entities.update');
+        Route::patch('/events/{id}', [AssistantController::class, 'updateEvent'])->name('events.update');
+        Route::patch('/reminders/{id}', [AssistantController::class, 'updateReminder'])->name('reminders.update');
+        Route::patch('/notes/{id}', [AssistantController::class, 'updateNote'])->name('notes.update');
+        Route::patch('/tasks/{id}', [AssistantController::class, 'updateTask'])->name('tasks.update');
+
         Route::prefix('google-calendar')->name('google-calendar.')->group(function () {
             Route::get('/settings', [AssistantController::class, 'getGoogleCalendarSettings'])->name('settings');
             Route::post('/settings', [AssistantController::class, 'saveGoogleCalendarSettings'])->name('settings.save');
@@ -63,6 +70,13 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     });
 
     Route::patch('/reminders/{id}/complete', [AssistantController::class, 'completeReminder'])->name('reminders.complete');
+
+    // Root-level entity update endpoints
+    Route::patch('/entities/{type}/{id}', [AssistantController::class, 'updateEntity'])->name('entities.update.root');
+    Route::patch('/events/{id}', [AssistantController::class, 'updateEvent'])->name('events.update.root');
+    Route::patch('/reminders/{id}', [AssistantController::class, 'updateReminder'])->name('reminders.update.root');
+    Route::patch('/notes/{id}', [AssistantController::class, 'updateNote'])->name('notes.update.root');
+    Route::patch('/tasks/{id}', [AssistantController::class, 'updateTask'])->name('tasks.update.root');
 });
 
 Route::post('/evolution/webhook', [EvolutionWebhookController::class, 'handle'])

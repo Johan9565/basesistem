@@ -20,6 +20,10 @@ class IntentRouterService
         'prefix_action'     => '/^(nota:|recordatorio:|tarea:|todo:)/iu',
     ];
 
+    protected array $updatePatterns = [
+        'update_action' => '/\b(cambia(r)?|reprograma(r)?|mueve|mover|actualiza(r)?|edita(r)?|corrige|corregir|modifica(r)?|posp[oó]n(er)?|aplaza(r)?)\b/iu',
+    ];
+
     /**
      * Classifies a user prompt into a designated pipeline route:
      * - 'read_intent' (Fast Model / Ultra-low TTFT)
@@ -53,6 +57,18 @@ class IntentRouterService
                 'matched_pattern' => 'multi_part_or_reasoning',
                 'inferred_intent' => 'complex_reasoning',
             ];
+        }
+
+        // Check if message is an update / reschedule / edit intent
+        foreach ($this->updatePatterns as $name => $pattern) {
+            if (preg_match($pattern, $normalized)) {
+                return [
+                    'route'           => 'reasoning_fallback',
+                    'confidence'      => 0.95,
+                    'matched_pattern' => $name,
+                    'inferred_intent' => 'update_entity',
+                ];
+            }
         }
 
         // 1. Evaluate Write Intent Patterns

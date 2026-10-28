@@ -19,11 +19,16 @@ class AssistantOrchestratorService
     protected string $timezone = 'America/Cancun';
     protected IntentRouterService $intentRouter;
     protected ModelRouterService $modelRouter;
+    protected UpdateEntityService $updateEntityService;
 
-    public function __construct(?IntentRouterService $intentRouter = null, ?ModelRouterService $modelRouter = null)
-    {
-        $this->intentRouter = $intentRouter ?? app(IntentRouterService::class);
-        $this->modelRouter  = $modelRouter ?? app(ModelRouterService::class);
+    public function __construct(
+        ?IntentRouterService $intentRouter = null,
+        ?ModelRouterService $modelRouter = null,
+        ?UpdateEntityService $updateEntityService = null
+    ) {
+        $this->intentRouter        = $intentRouter ?? app(IntentRouterService::class);
+        $this->modelRouter         = $modelRouter ?? app(ModelRouterService::class);
+        $this->updateEntityService = $updateEntityService ?? app(UpdateEntityService::class);
 
         $defaultConfig = $this->modelRouter->getActiveModelConfig('write_intent');
         $this->apiUrl = $defaultConfig['base_url'];
@@ -856,6 +861,7 @@ MEMORIA, CONSULTA (RETRIEVAL) Y EJECUCIÓN DE HERRAMIENTAS:
 - CREACIÓN DE RECORDATORIOS: Cuando pida recordar algo con fecha/hora -> invoca `create_reminder`.
 - CREACIÓN DE NOTAS / PENDIENTES: Cuando pida guardar nota o pendientes sin hora -> invoca `create_workspace_note`.
 - CONSULTA DE AGENDA: Cuando pida la agenda de un rango -> invoca `get_agenda`.
+- EDICIÓN Y REPROGRAMACIÓN: Cuando el usuario pida reprogramar, corregir, mover de fecha o cambiar el contenido de un pendiente, nota o evento previo, utiliza la herramienta de edición (`update_entry`). Al finalizar la herramienta, confirma en una sola frase breve y natural el cambio realizado (ej. 'Listo, moví la cita al jueves a las 5:00 PM').
 
 Cuando emitas tu respuesta conversacional final (o turno de resumen), puedes entregarla como objeto estructurado:
 {
@@ -978,6 +984,48 @@ SYS;
                             ],
                         ],
                         'required'   => ['start_date', 'end_date'],
+                    ],
+                ],
+            ],
+
+            [
+                'type' => 'function',
+                'function' => [
+                    'name'        => 'update_entry',
+                    'description' => 'Permite editar o reprogramar una tarea, recordatorio, nota, cita o evento existente. Debe usarse cuando el usuario pida cambiar la fecha, hora, título, estado o contenido de algo ya registrado.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'identifier' => [
+                                'type'        => 'string',
+                                'description' => 'ID exacto del registro o texto de búsqueda aproximado del título (ej. "cita con el doctor", "comprar leche", "67123...").',
+                            ],
+                            'entity_type' => [
+                                'type'        => 'string',
+                                'enum'        => ['event', 'reminder', 'note', 'task'],
+                                'description' => 'Tipo de entidad a modificar (opcional si el identificador es unívoco: event, reminder, note, task).',
+                            ],
+                            'updates' => [
+                                'type'        => 'object',
+                                'description' => 'Campos a modificar (ej. {"datetime": "2026-10-29 17:00:00", "title": "Nuevo título", "status": "completed"}).',
+                                'properties'  => [
+                                    'title'        => ['type' => 'string', 'description' => 'Nuevo título descriptivo.'],
+                                    'description'  => ['type' => 'string', 'description' => 'Nueva descripción o detalles.'],
+                                    'content'      => ['type' => 'string', 'description' => 'Nuevo contenido de la nota o tarea.'],
+                                    'start_time'   => ['type' => 'string', 'description' => 'Nueva fecha y hora de inicio en formato ISO 8601 (YYYY-MM-DDTHH:mm:ss).'],
+                                    'end_time'     => ['type' => 'string', 'description' => 'Nueva fecha y hora de fin en formato ISO 8601 (YYYY-MM-DDTHH:mm:ss).'],
+                                    'scheduled_at' => ['type' => 'string', 'description' => 'Nueva fecha y hora programada para el recordatorio en formato ISO 8601 (YYYY-MM-DDTHH:mm:ss).'],
+                                    'datetime'     => ['type' => 'string', 'description' => 'Nueva fecha y hora genérica (YYYY-MM-DD HH:mm:ss o ISO 8601).'],
+                                    'date'         => ['type' => 'string', 'description' => 'Nueva fecha (YYYY-MM-DD).'],
+                                    'time'         => ['type' => 'string', 'description' => 'Nueva hora (HH:mm).'],
+                                    'status'       => ['type' => 'string', 'description' => 'Nuevo estado (ej. pending, completed, cancelled, scheduled).'],
+                                    'priority'     => ['type' => 'string', 'enum' => ['low', 'medium', 'high'], 'description' => 'Nueva prioridad.'],
+                                    'location'     => ['type' => 'string', 'description' => 'Nueva ubicación.'],
+                                    'tags'         => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Nuevas etiquetas.'],
+                                ],
+                            ],
+                        ],
+                        'required'   => ['identifier', 'updates'],
                     ],
                 ],
             ],
@@ -1111,6 +1159,10 @@ SYS;
                         break;
                     case 'create_workspace_note':
                         $actionResult = $this->executeCreateWorkspaceNote($user, $args);
+                        break;
+                    case 'update_entry':
+                    case 'edit_item':
+                        $actionResult = $this->executeUpdateEntry($user, $args);
                         break;
                     default:
                         $actionResult = [
@@ -1659,6 +1711,101 @@ SYS;
             'data'    => $agenda,
             'message' => "Agenda obtenida: {$eventsCount} eventos y {$remindersCount} recordatorios encontrados.",
             'action'  => 'get_agenda',
+        ];
+    }
+
+    /**
+     * Execute update_entry tool with ambiguity handling and clean natural confirmation.
+     */
+    protected function executeUpdateEntry(User $user, array $args): array
+    {
+        $identifier = trim((string) ($args['identifier'] ?? ''));
+        $entityType = !empty($args['entity_type']) ? trim((string) $args['entity_type']) : null;
+        $updates    = (array) ($args['updates'] ?? []);
+
+        if (empty($identifier)) {
+            $msg = 'Se requiere un identificador o título de búsqueda para modificar el registro.';
+            return [
+                'success'      => false,
+                'data'         => null,
+                'message'      => $msg,
+                'display_text' => $msg,
+                'speech_text'  => $this->cleanVoiceText($msg),
+                'action'       => 'update_entry_error',
+            ];
+        }
+
+        $resolution = $this->updateEntityService->resolveEntityByIdentifier($user, $identifier, $entityType);
+
+        if ($resolution['status'] === 'not_found') {
+            $msg = "No encontré ningún registro que coincida con '{$identifier}'. ¿Podrías darme más detalles o verificar el título?";
+            return [
+                'success'      => false,
+                'data'         => null,
+                'message'      => $msg,
+                'display_text' => $msg,
+                'speech_text'  => $this->cleanVoiceText($msg),
+                'action'       => 'update_entry_not_found',
+            ];
+        }
+
+        if ($resolution['status'] === 'ambiguous') {
+            $msg = $resolution['message'];
+            return [
+                'success'      => false,
+                'data'         => ['candidates' => $resolution['candidates']],
+                'message'      => $msg,
+                'display_text' => $msg,
+                'speech_text'  => $this->cleanVoiceText($msg),
+                'action'       => 'needs_clarification',
+            ];
+        }
+
+        // Exact match found
+        $resolvedType = $resolution['type'];
+        $model = $resolution['match'];
+        $entityId = (string) ($model->_id ?? $model->id);
+
+        $updateResult = $this->updateEntityService->update($user, $resolvedType, $entityId, $updates);
+
+        if (!($updateResult['success'] ?? false)) {
+            $errorMsg = $updateResult['message'] ?? 'Error al actualizar el registro.';
+            return [
+                'success'      => false,
+                'data'         => null,
+                'message'      => $errorMsg,
+                'display_text' => $errorMsg,
+                'speech_text'  => $this->cleanVoiceText($errorMsg),
+                'action'       => 'update_entry_failed',
+            ];
+        }
+
+        // Generate concise, natural confirmation message
+        $updatedData = $updateResult['data'];
+        $title = $updatedData['title'] ?? 'el registro';
+        $tz = $this->timezone;
+
+        if ($resolvedType === 'event' && !empty($updatedData['start_time_iso'])) {
+            $parsedDate = Carbon::parse($updatedData['start_time_iso'], $tz);
+            $formattedDate = $parsedDate->locale('es')->isoFormat('dddd D [de] MMMM [a las] H:mm');
+            $confirmation = "Listo, moví la cita {$title} al {$formattedDate}.";
+        } elseif ($resolvedType === 'reminder' && !empty($updatedData['scheduled_at_iso'])) {
+            $parsedDate = Carbon::parse($updatedData['scheduled_at_iso'], $tz);
+            $formattedDate = $parsedDate->locale('es')->isoFormat('dddd D [de] MMMM [a las] H:mm');
+            $confirmation = "Listo, reprogramé el recordatorio '{$title}' para el {$formattedDate}.";
+        } elseif ($resolvedType === 'task') {
+            $confirmation = "Listo, actualicé el pendiente '{$title}'.";
+        } else {
+            $confirmation = "Listo, actualicé '{$title}'.";
+        }
+
+        return [
+            'success'      => true,
+            'data'         => $updatedData,
+            'message'      => $confirmation,
+            'display_text' => $confirmation,
+            'speech_text'  => $this->cleanVoiceText($confirmation),
+            'action'       => 'update_entry',
         ];
     }
 

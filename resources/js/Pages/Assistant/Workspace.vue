@@ -17,6 +17,7 @@ import Tag from 'primevue/tag';
 import Message from 'primevue/message';
 import Dialog from 'primevue/dialog';
 import Textarea from 'primevue/textarea';
+import EditItemModal from '@/Components/EditItemModal.vue';
 
 // State
 const inputQuery = ref('');
@@ -40,6 +41,62 @@ const isConversationsLoading = ref(false);
 const conversationFilterChannel = ref('all'); // 'all' | 'app' | 'whatsapp'
 const conversationSearch = ref('');
 const copiedMessageId = ref(null);
+
+// Edit Item Modal State
+const isEditModalOpen = ref(false);
+const editingItem = ref(null);
+const editingItemType = ref('task');
+
+function isTask(item) {
+    if (!item) return false;
+    const tags = Array.isArray(item.tags) ? item.tags : [];
+    return tags.some((t) => ['todo', 'pendiente', 'task'].includes(String(t).toLowerCase()));
+}
+
+function openEditModal(item, type = null) {
+    if (!item) return;
+    editingItem.value = { ...item };
+    if (type) {
+        editingItemType.value = type;
+    } else if (item.start_time) {
+        editingItemType.value = 'event';
+    } else if (item.scheduled_at) {
+        editingItemType.value = 'reminder';
+    } else if (isTask(item)) {
+        editingItemType.value = 'task';
+    } else {
+        editingItemType.value = 'note';
+    }
+    isEditModalOpen.value = true;
+}
+
+function handleEntitySaved({ type, id, data }) {
+    if (type === 'event') {
+        const idx = events.value.findIndex((e) => (e.id || e._id) === id);
+        if (idx !== -1) {
+            events.value[idx] = { ...events.value[idx], ...data };
+        }
+    } else if (type === 'reminder') {
+        const idx = reminders.value.findIndex((r) => (r.id || r._id) === id);
+        if (idx !== -1) {
+            reminders.value[idx] = { ...reminders.value[idx], ...data };
+        }
+    } else if (type === 'note' || type === 'task') {
+        const idx = notes.value.findIndex((n) => (n.id || n._id) === id);
+        if (idx !== -1) {
+            notes.value[idx] = { ...notes.value[idx], ...data };
+        } else {
+            const remIdx = reminders.value.findIndex((r) => (r.id || r._id) === id);
+            if (remIdx !== -1) {
+                reminders.value[remIdx] = { ...reminders.value[remIdx], ...data };
+            }
+        }
+    }
+
+    lastMessage.value = `Registro '${data?.title || 'actualizado'}' guardado correctamente.`;
+    lastSuccess.value = true;
+    lastAction.value = 'entity_updated';
+}
 
 // Model Router State
 const models = ref([]);
@@ -948,23 +1005,31 @@ onMounted(() => {
                                 <div
                                     v-for="event in events"
                                     :key="event.id || event._id"
-                                    class="group rounded-lg border border-surface-200/80 dark:border-surface-800/80 bg-surface-50/50 dark:bg-surface-950/40 p-3 hover:border-surface-300 dark:hover:border-surface-700 transition-colors relative"
+                                    class="group w-full max-w-full overflow-hidden rounded-lg border border-surface-200/80 dark:border-surface-800/80 bg-surface-50/50 dark:bg-surface-950/40 p-3 hover:border-surface-300 dark:hover:border-surface-700 transition-colors relative"
                                 >
-                                    <div class="flex items-start justify-between gap-2">
-                                        <div class="flex items-center gap-1.5">
-                                            <h3 class="text-xs font-medium text-surface-900 dark:text-surface-100 leading-snug">
-                                                {{ event.title }}
-                                            </h3>
-                                            <span
-                                                v-if="event.google_event_id"
-                                                class="inline-flex items-center text-[10px] text-blue-500"
-                                                title="Sincronizado con Google Calendar"
-                                            >
-                                                <i class="pi pi-google text-[10px]"></i>
-                                            </span>
+                                    <div class="flex items-start justify-between gap-2 w-full">
+                                        <!-- Contenedor de contenido/texto (Fix Flexbox min-w-0 flex-1) -->
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-center gap-1.5 min-w-0">
+                                                <h3
+                                                    @dblclick="openEditModal(event, 'event')"
+                                                    class="text-xs font-medium text-surface-900 dark:text-surface-100 leading-snug cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors truncate break-words m-0"
+                                                    title="Doble clic para editar"
+                                                >
+                                                    {{ event.title }}
+                                                </h3>
+                                                <span
+                                                    v-if="event.google_event_id"
+                                                    class="shrink-0 inline-flex items-center text-[10px] text-blue-500"
+                                                    title="Sincronizado con Google Calendar"
+                                                >
+                                                    <i class="pi pi-google text-[10px]"></i>
+                                                </span>
+                                            </div>
                                         </div>
 
-                                        <div class="flex items-center gap-1">
+                                        <!-- Contenedor de acciones (Botones shrink-0 con tamaño consistente) -->
+                                        <div class="shrink-0 flex items-center gap-1">
                                             <Tag
                                                 :value="formatEventTimeRange(event.start_time, event.end_time)"
                                                 severity="secondary"
@@ -972,22 +1037,30 @@ onMounted(() => {
                                             />
                                             <button
                                                 type="button"
+                                                @click.stop="openEditModal(event, 'event')"
+                                                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 opacity-70 sm:opacity-0 group-hover:opacity-100 text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-surface-200/60 dark:hover:bg-surface-800/60 transition-all cursor-pointer"
+                                                title="Editar cita o evento"
+                                            >
+                                                <i class="pi pi-pencil text-xs"></i>
+                                            </button>
+                                            <button
+                                                type="button"
                                                 @click="deleteEvent(event)"
-                                                class="opacity-0 group-hover:opacity-100 text-surface-400 hover:text-red-500 transition-opacity ml-1 cursor-pointer p-0.5"
+                                                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100 text-surface-400 hover:text-red-500 hover:bg-red-500/10 transition-all cursor-pointer"
                                                 title="Eliminar del calendario"
                                             >
-                                                <i class="pi pi-trash text-[11px]"></i>
+                                                <i class="pi pi-trash text-xs"></i>
                                             </button>
                                         </div>
                                     </div>
 
-                                    <p v-if="event.description" class="mt-1.5 text-xs text-surface-500 dark:text-surface-400 line-clamp-2 leading-relaxed">
+                                    <p v-if="event.description" class="mt-1.5 text-xs text-surface-500 dark:text-surface-400 line-clamp-2 break-words leading-relaxed max-w-full overflow-hidden">
                                         {{ event.description }}
                                     </p>
 
-                                    <div v-if="event.location" class="mt-2 flex items-center gap-1.5 text-[11px] text-surface-400 dark:text-surface-500">
-                                        <i class="pi pi-map-marker text-[10px]"></i>
-                                        <span class="truncate">{{ event.location }}</span>
+                                    <div v-if="event.location" class="mt-2 flex items-center gap-1.5 text-[11px] text-surface-400 dark:text-surface-500 min-w-0 max-w-full overflow-hidden">
+                                        <i class="pi pi-map-marker text-[10px] shrink-0"></i>
+                                        <span class="truncate min-w-0">{{ event.location }}</span>
                                     </div>
                                 </div>
 
@@ -1028,11 +1101,11 @@ onMounted(() => {
                                 <div
                                     v-for="reminder in reminders"
                                     :key="reminder.id || reminder._id"
-                                    class="rounded-lg border border-surface-200/80 dark:border-surface-800/80 bg-surface-50/50 dark:bg-surface-950/40 p-3 hover:border-surface-300 dark:hover:border-surface-700 transition-colors"
+                                    class="group w-full max-w-full overflow-hidden rounded-lg border border-surface-200/80 dark:border-surface-800/80 bg-surface-50/50 dark:bg-surface-950/40 p-3 hover:border-surface-300 dark:hover:border-surface-700 transition-colors"
                                     :class="{ 'opacity-50': reminder.status === 'completed' }"
                                 >
-                                    <div class="flex items-start gap-2.5">
-                                        <div class="pt-0.5">
+                                    <div class="flex items-start gap-2.5 w-full min-w-0">
+                                        <div class="pt-0.5 shrink-0">
                                             <Checkbox
                                                 :modelValue="reminder.status === 'completed'"
                                                 :binary="true"
@@ -1043,25 +1116,41 @@ onMounted(() => {
                                             />
                                         </div>
 
+                                        <!-- Contenedor de contenido/texto (Fix Flexbox min-w-0 flex-1) -->
                                         <div class="flex-1 min-w-0">
-                                            <div class="flex items-start justify-between gap-1.5">
-                                                <span
-                                                    class="text-xs font-medium leading-snug break-words transition-all"
-                                                    :class="reminder.status === 'completed' ? 'line-through text-surface-400 dark:text-surface-500' : 'text-surface-900 dark:text-surface-100'"
-                                                >
-                                                    {{ reminder.title }}
-                                                </span>
-                                                <Tag
-                                                    v-if="reminder.priority"
-                                                    :value="getPriorityTag(reminder.priority).label"
-                                                    :severity="getPriorityTag(reminder.priority).severity"
-                                                    class="text-[10px] font-normal px-1 py-0.5 shrink-0"
-                                                />
+                                            <div class="flex items-start justify-between gap-2 w-full">
+                                                <div class="min-w-0 flex-1">
+                                                    <p
+                                                        @dblclick="openEditModal(reminder, 'reminder')"
+                                                        class="text-xs font-medium leading-snug line-clamp-2 break-words transition-all cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 m-0"
+                                                        :class="reminder.status === 'completed' ? 'line-through text-surface-400 dark:text-surface-500' : 'text-surface-900 dark:text-surface-100'"
+                                                        title="Doble clic para editar"
+                                                    >
+                                                        {{ reminder.title }}
+                                                    </p>
+                                                </div>
+                                                <!-- Contenedor de acciones (shrink-0 con tamaño consistente) -->
+                                                <div class="shrink-0 flex items-center gap-1.5">
+                                                    <Tag
+                                                        v-if="reminder.priority"
+                                                        :value="getPriorityTag(reminder.priority).label"
+                                                        :severity="getPriorityTag(reminder.priority).severity"
+                                                        class="text-[10px] font-normal px-1 py-0.5 shrink-0"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        @click.stop="openEditModal(reminder, 'reminder')"
+                                                        class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 opacity-70 sm:opacity-0 group-hover:opacity-100 text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-surface-200/60 dark:hover:bg-surface-800/60 transition-all cursor-pointer"
+                                                        title="Editar recordatorio o tarea"
+                                                    >
+                                                        <i class="pi pi-pencil text-xs"></i>
+                                                    </button>
+                                                </div>
                                             </div>
 
-                                            <div class="mt-1.5 flex items-center justify-between text-[11px] text-surface-400 dark:text-surface-500 font-mono">
-                                                <span>{{ formatReminderDate(reminder.scheduled_at) }}</span>
-                                                <span v-if="reminder.status === 'completed'" class="text-emerald-500 font-sans text-[10px] font-medium">
+                                            <div class="mt-1.5 flex items-center justify-between text-[11px] text-surface-400 dark:text-surface-500 font-mono w-full min-w-0">
+                                                <span class="truncate min-w-0">{{ formatReminderDate(reminder.scheduled_at) }}</span>
+                                                <span v-if="reminder.status === 'completed'" class="text-emerald-500 font-sans text-[10px] font-medium shrink-0 ml-1">
                                                     ✓ Completado
                                                 </span>
                                             </div>
@@ -1106,25 +1195,41 @@ onMounted(() => {
                                 <div
                                     v-for="note in notes"
                                     :key="note.id || note._id"
-                                    class="rounded-lg border border-surface-200/80 dark:border-surface-800/80 bg-surface-50/50 dark:bg-surface-950/40 p-3 hover:border-surface-400 dark:hover:border-surface-600 hover:shadow-xs transition-all cursor-pointer group"
+                                    @dblclick="openEditModal(note, isTask(note) ? 'task' : 'note')"
+                                    class="group w-full max-w-full overflow-hidden rounded-lg border border-surface-200/80 dark:border-surface-800/80 bg-surface-50/50 dark:bg-surface-950/40 p-3 hover:border-surface-400 dark:hover:border-surface-600 hover:shadow-xs transition-all cursor-pointer"
+                                    title="Doble clic para editar"
                                 >
-                                    <div class="flex items-start justify-between gap-2">
-                                        <h3 class="text-xs font-medium text-surface-900 dark:text-surface-100 group-hover:text-surface-700 dark:group-hover:text-surface-300 transition-colors">
-                                            {{ note.title }}
-                                        </h3>
-                                        <i v-if="note.is_pinned" class="pi pi-bookmark-fill text-amber-500 text-xs shrink-0" title="Nota fijada"></i>
+                                    <div class="flex items-start justify-between gap-2 w-full">
+                                        <!-- Contenedor de contenido/texto (Fix Flexbox min-w-0 flex-1) -->
+                                        <div class="min-w-0 flex-1">
+                                            <h3 class="text-xs font-medium text-surface-900 dark:text-surface-100 group-hover:text-surface-700 dark:group-hover:text-surface-300 transition-colors truncate break-words m-0">
+                                                {{ note.title }}
+                                            </h3>
+                                        </div>
+                                        <!-- Contenedor de acciones (shrink-0 con tamaño consistente) -->
+                                        <div class="shrink-0 flex items-center gap-1.5">
+                                            <i v-if="note.is_pinned" class="pi pi-bookmark-fill text-amber-500 text-xs shrink-0" title="Nota fijada"></i>
+                                            <button
+                                                type="button"
+                                                @click.stop="openEditModal(note, isTask(note) ? 'task' : 'note')"
+                                                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 opacity-70 sm:opacity-0 group-hover:opacity-100 text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-surface-200/60 dark:hover:bg-surface-800/60 transition-all cursor-pointer"
+                                                title="Editar nota o pendiente"
+                                            >
+                                                <i class="pi pi-pencil text-xs"></i>
+                                            </button>
+                                        </div>
                                     </div>
 
-                                    <p class="mt-1.5 text-xs text-surface-600 dark:text-surface-300 line-clamp-3 leading-relaxed whitespace-pre-line">
+                                    <p class="mt-1.5 text-xs text-surface-600 dark:text-surface-300 line-clamp-3 break-words whitespace-pre-line leading-relaxed max-w-full overflow-hidden">
                                         {{ note.content }}
                                     </p>
 
                                     <!-- Tags Temáticos (#tag) -->
-                                    <div v-if="note.tags && note.tags.length" class="mt-2.5 flex flex-wrap gap-1">
+                                    <div v-if="note.tags && note.tags.length" class="mt-2.5 flex flex-wrap gap-1 max-w-full overflow-hidden">
                                         <span
                                             v-for="tag in note.tags"
                                             :key="tag"
-                                            class="text-[10px] font-mono text-surface-500 dark:text-surface-400 bg-surface-200/60 dark:bg-surface-800/60 rounded px-1.5 py-0.5 hover:text-surface-800 dark:hover:text-surface-200 transition-colors"
+                                            class="text-[10px] font-mono text-surface-500 dark:text-surface-400 bg-surface-200/60 dark:bg-surface-800/60 rounded px-1.5 py-0.5 hover:text-surface-800 dark:hover:text-surface-200 transition-colors max-w-full truncate"
                                         >
                                             #{{ tag }}
                                         </span>
@@ -2014,13 +2119,33 @@ onMounted(() => {
             </template>
         </Dialog>
 
+        <!-- MODAL REUTILIZABLE PARA EDICIÓN DE ENTIDADES (EVENTOS, RECORDATORIOS, NOTAS, TAREAS) -->
+        <EditItemModal
+            v-model="isEditModalOpen"
+            :item="editingItem"
+            :type="editingItemType"
+            @saved="handleEntitySaved"
+        />
+
     </AuthenticatedLayout>
 </template>
 
 <style scoped>
-/* Scoped micro-refinements for minimalist Linear/Notion layout */
+/* Card layout & text containment to prevent horizontal overflow */
+:deep(.p-card) {
+    max-width: 100% !important;
+    overflow: hidden !important;
+}
+
 :deep(.p-card-body) {
     padding: 1.125rem !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+}
+
+:deep(.p-card-content) {
+    max-width: 100% !important;
+    overflow: hidden !important;
 }
 
 :deep(.p-card-caption) {
@@ -2034,5 +2159,10 @@ onMounted(() => {
 :deep(.p-message-content) {
     padding: 0.625rem 0.875rem !important;
     gap: 0.5rem !important;
+}
+
+.break-words {
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 </style>
