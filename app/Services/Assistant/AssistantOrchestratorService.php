@@ -108,24 +108,154 @@ class AssistantOrchestratorService
     }
 
     /**
-     * Interacts with LLM using tools and processes user prompt.
+     * Retrieves recent conversation history turns from the database for the active user/session.
+     * Returns an array of chronologically ordered messages:
+     * [['role' => 'user', 'content' => ...], ['role' => 'assistant', 'content' => ...], ...]
      *
      * @param User $user
-     * @param string $prompt
-     * @param array $conversationHistory
-     * @return array Standardized response: ['success' => bool, 'data' => mixed, 'message' => string, 'action' => string]
+     * @param string|null $conversationId
+     * @param string|null $channel
+     * @param int $maxMessages Maximum individual messages to include (default 20: 10 user + 10 assistant)
+     * @return array
      */
+    public function loadConversationHistory(User $user, ?string $conversationId = null, ?string $channel = null, int $maxMessages = 20): array
+    {
+        $userId = (string) ($user->_id ?? $user->id);
+        if (empty($userId)) {
+            return [];
+        }
+
+        $query = \App\Models\AssistantMessage::where(function ($q) use ($userId, $user) {
+            $q->where('user_id', $userId)
+              ->orWhere('user_id', (string) $user->id);
+        })
+        ->where('status', 'completed')
+        ->whereNotNull('prompt')
+        ->where('prompt', '!=', '')
+        ->where(function ($q) {
+            $q->whereNotNull('reply')->where('reply', '!=', '')
+              ->orWhereNotNull('display_text')->where('display_text', '!=', '');
+        });
+
+        if (!empty($conversationId)) {
+            $query->where(function ($q) use ($conversationId) {
+                $q->where('conversation_id', $conversationId)
+                  ->orWhere('metadata.conversation_id', $conversationId);
+            });
+        } elseif (!empty($channel)) {
+            if ($channel === 'mobile' || $channel === 'app') {
+                $query->whereIn('channel', ['app', 'mobile']);
+            } else {
+                $query->where('channel', $channel);
+            }
+        }
+
+        // Each AssistantMessage contains a prompt (user) and reply (assistant) = 2 messages.
+        // Fetch up to ceil($maxMessages / 2) turns, ordered by most recent first.
+        $turnLimit = max(1, (int) ceil($maxMessages / 2));
+        $messages = $query->orderBy('created_at', 'desc')
+            ->orderBy('_id', 'desc')
+            ->limit($turnLimit)
+            ->get();
+
+        // Reverse to chronological order (oldest first)
+        $chronological = $messages->reverse()->values();
+
+        $history = [];
+        foreach ($chronological as $msg) {
+            $userText = trim((string) $msg->prompt);
+            $assistantText = trim((string) ($msg->display_text ?? $msg->reply ?? ''));
+
+            if ($userText !== '') {
+                $history[] = [
+                    'role'    => 'user',
+                    'content' => $userText,
+                ];
+            }
+
+            if ($assistantText !== '') {
+                $history[] = [
+                    'role'    => 'assistant',
+                    'content' => $assistantText,
+                ];
+            }
+        }
+
+        // Keep strictly within window
+        if (count($history) > $maxMessages) {
+            $history = array_slice($history, -$maxMessages);
+        }
+
+        return $history;
+    }
+
     /**
-     * Interacts with the appropriate pipeline using zero-latency Intent Routing.
+     * Builds standard multi-turn LLM messages payload:
+     * [{ role: 'system', ... }, { role: 'user', ... }, { role: 'assistant', ... }, ..., { role: 'user', content: $prompt }]
+     *
+     * @param string $systemPrompt
+     * @param string $prompt
+     * @param array $conversationHistory
+     * @param int $maxHistoryMessages
+     * @return array
+     */
+    public function buildChatPayload(string $systemPrompt, string $prompt, array $conversationHistory = [], int $maxHistoryMessages = 20): array
+    {
+        $messages = [
+            ['role' => 'system', 'content' => $systemPrompt],
+        ];
+
+        // Sanitize and limit conversation history window
+        $trimmedHistory = array_slice($conversationHistory, -$maxHistoryMessages);
+
+        foreach ($trimmedHistory as $msg) {
+            if (!isset($msg['role'], $msg['content'])) {
+                continue;
+            }
+
+            $role = (string) $msg['role'];
+            $content = (string) $msg['content'];
+
+            if ($role === 'system') {
+                // If there's an additional system instruction in history (e.g. channel prompt), append to primary system prompt
+                $messages[0]['content'] .= "\n\n" . $content;
+            } elseif (in_array($role, ['user', 'assistant'], true)) {
+                $messages[] = [
+                    'role'    => $role,
+                    'content' => $content,
+                ];
+            }
+        }
+
+        // Append current user prompt as the final turn
+        $messages[] = ['role' => 'user', 'content' => $prompt];
+
+        return $messages;
+    }
+
+    /**
+     * Interacts with the appropriate pipeline using zero-latency Intent Routing and multi-turn context.
      *
      * @param User $user
      * @param string $prompt
      * @param array $conversationHistory
+     * @param string|null $conversationId
+     * @param string|null $channel
      * @return array Standardized response
      */
-    public function interact(User $user, string $prompt, array $conversationHistory = []): array
-    {
+    public function interact(
+        User $user,
+        string $prompt,
+        array $conversationHistory = [],
+        ?string $conversationId = null,
+        ?string $channel = null
+    ): array {
         try {
+            // Auto-load conversation history from database if not explicitly provided
+            if (empty($conversationHistory)) {
+                $conversationHistory = $this->loadConversationHistory($user, $conversationId, $channel, 20);
+            }
+
             $intent = $this->intentRouter->classify($prompt);
             Log::info("Assistant routing decision", [
                 'user_id' => (string) ($user->_id ?? $user->id),
@@ -134,11 +264,11 @@ class AssistantOrchestratorService
             ]);
 
             if ($intent['route'] === 'read_intent') {
-                return $this->executeReadPipeline($user, $prompt, $intent);
+                return $this->executeReadPipeline($user, $prompt, $intent, $conversationHistory);
             }
 
             if ($intent['route'] === 'write_intent') {
-                return $this->executeWritePipeline($user, $prompt, $intent);
+                return $this->executeWritePipeline($user, $prompt, $intent, $conversationHistory);
             }
 
             return $this->executeReasoningFallback($user, $prompt, $conversationHistory);
@@ -162,7 +292,7 @@ class AssistantOrchestratorService
      * READ PIPELINE (Ultra-low latency, pre-indexed DB context, dual visual/TTS output).
      * Prohibido pasar datos crudos no indexados al modelo rápido.
      */
-    public function executeReadPipeline(User $user, string $prompt, array $intent): array
+    public function executeReadPipeline(User $user, string $prompt, array $intent, array $conversationHistory = []): array
     {
         $userId = (string) ($user->_id ?? $user->id);
         $nowInTz = Carbon::now($this->timezone);
@@ -242,13 +372,18 @@ class AssistantOrchestratorService
 
         $systemPrompt = "Eres Cami, la asistente ejecutiva personal de {$user->name}. " .
             "Se te proporciona la información estructurada que YA FUE CONSULTADA de la base de datos del usuario. " .
-            "Tu función exclusiva es responder con ultra-baja latencia y máxima claridad para síntesis de voz (TTS) y pantalla móvil.\n\n" .
-            "REGLAS:\n" .
+            "Tu función es responder con ultra-baja latencia y máxima claridad para síntesis de voz (TTS) y pantalla móvil.\n\n" .
+            "DIRECTIVAS Y REGLAS:\n" .
             "1. NO inventes datos. Usa solo los datos provistos en la consulta estructurada.\n" .
-            "2. 'display_text': Markdown estructurado, limpio y elegante con viñetas y títulos en negrita.\n" .
-            "3. 'speech_text': Prosa natural, fluida, conversacional y cálida para voz TTS, SIN asteriscos, SIN viñetas, SIN caracteres especiales ni enlaces.\n" .
-            "4. Devuelve un JSON estricto con las claves: display_text, speech_text, action ('{$expectedAction}').\n\n" .
+            "2. LISTADOS BAJO DEMANDA: Solo desglosa o resume pendientes cuando el usuario lo solicite EXPLÍCITAMENTE (ej. '¿qué tengo pendiente?', 'revisa mis tareas de hoy'). Si el usuario solo saluda (ej. 'hola', 'buenos días'), responde con un saludo breve y natural sin volcar pendientes.\n" .
+            "3. ELIMINACIÓN DE DUPLICADOS: Cada elemento debe listarse exactamente UNA SOLA VEZ. NO dupliques ítems entre 'Prioridades' y sus categorías temáticas.\n" .
+            "4. TONO NATURAL: Sé directa, natural y conversacional. Elimina saludos robóticos o introducciones innecesarias.\n" .
+            "5. 'display_text': Markdown estructurado, limpio y elegante con viñetas y títulos en negrita.\n" .
+            "6. 'speech_text': Prosa natural, fluida, conversacional y cálida para voz TTS, SIN asteriscos, SIN viñetas, SIN caracteres especiales ni enlaces.\n" .
+            "7. Devuelve un JSON estricto con las claves: display_text, speech_text, action ('{$expectedAction}').\n\n" .
             "DATOS CONSULTADOS:\n{$contextJson}";
+
+        $messages = $this->buildChatPayload($systemPrompt, $prompt, $conversationHistory, 20);
 
         try {
             $response = Http::withToken($modelConfig['api_key'])
@@ -256,10 +391,7 @@ class AssistantOrchestratorService
                 ->timeout(max(5, intval($modelConfig['timeout_ms'] / 1000)))
                 ->post($endpoint, [
                     'model'           => $modelConfig['model'],
-                    'messages'        => [
-                        ['role' => 'system', 'content' => $systemPrompt],
-                        ['role' => 'user', 'content' => $prompt],
-                    ],
+                    'messages'        => $messages,
                     'temperature'     => $modelConfig['temperature'] ?? 0.5,
                     'max_tokens'      => $modelConfig['max_tokens'] ?? 1000,
                     'response_format' => ['type' => 'json_object'],
@@ -298,16 +430,22 @@ class AssistantOrchestratorService
     /**
      * WRITE PIPELINE (Reasoning Model, forced strict JSON object schema, direct deterministic DB persistence).
      */
-    public function executeWritePipeline(User $user, string $prompt, array $intent): array
+    public function executeWritePipeline(User $user, string $prompt, array $intent, array $conversationHistory = []): array
     {
         $userId = (string) ($user->_id ?? $user->id);
         $nowInTz = Carbon::now($this->timezone);
         $modelConfig = $this->modelRouter->getActiveModelConfig('write_intent');
         $endpoint = rtrim($modelConfig['base_url'], '/') . '/chat/completions';
 
-        $systemPrompt = "Eres el motor de razonamiento e ingesta estructurada de Cami. " .
+        $systemPrompt = "Eres el motor de razonamiento e ingesta estructurada de Cami, asistente ejecutiva de {$user->name}. " .
             "Tu tarea es descomponer atómicamente la solicitud del usuario en entidades independientes, deduplicar elementos repetidos y categorizarlos.\n" .
             "Fecha actual de referencia: {$nowInTz->format('Y-m-d H:i:s')} ({$this->timezone}).\n\n" .
+            "DIRECTIVAS CRÍTICAS DE RESPUESTA:\n" .
+            "1. RESPUESTAS CONVERSACIONALES Y CONCISAS: NO imprimas un reporte completo, inventario o volcado de base de datos cada vez que el usuario registra o modifica una tarea.\n" .
+            "2. Limítate a confirmar la acción de forma breve, natural y directa (ejemplo: 'Anotado: comprar tomates' o 'Recordatorio programado: comprar pan mañana a las 9:00 am').\n" .
+            "3. LISTADOS BAJO DEMANDA: Solo desglosa o resume pendientes cuando el usuario lo solicite explícitamente (ej. '¿qué tengo pendiente?'). Al registrar tareas, SOLO confirma lo recién registrado.\n" .
+            "4. ELIMINACIÓN DE DUPLICADOS: Si un elemento viene repetido, regístralo solo una vez.\n" .
+            "5. TONO NATURAL: Elimina saludos robóticos o introducciones innecesarias.\n\n" .
             "Debes responder ÚNICAMENTE un JSON con esta estructura exacta:\n" .
             "{\n" .
             '  "entities": [\n' .
@@ -321,9 +459,11 @@ class AssistantOrchestratorService
             '      "tags": ["string"]\n' .
             '    }\n' .
             '  ],\n' .
-            '  "display_text": "Resumen elegante para la pantalla",\n' .
-            '  "speech_text": "Resumen fluido y limpio para el sintetizador de voz (TTS)"\n' .
+            '  "display_text": "Confirmación breve, natural y directa (ej. Anotado: comprar tomates)",\n' .
+            '  "speech_text": "Confirmación breve para TTS sin markdown (ej. Anotado: comprar tomates)"\n' .
             "}";
+
+        $messages = $this->buildChatPayload($systemPrompt, $prompt, $conversationHistory, 20);
 
         try {
             $response = Http::withToken($modelConfig['api_key'])
@@ -331,10 +471,7 @@ class AssistantOrchestratorService
                 ->timeout(max(10, intval($modelConfig['timeout_ms'] / 1000)))
                 ->post($endpoint, [
                     'model'           => $modelConfig['model'],
-                    'messages'        => [
-                        ['role' => 'system', 'content' => $systemPrompt],
-                        ['role' => 'user', 'content' => $prompt],
-                    ],
+                    'messages'        => $messages,
                     'temperature'     => $modelConfig['temperature'] ?? 0.2,
                     'max_tokens'      => $modelConfig['max_tokens'] ?? 2000,
                     'response_format' => ['type' => 'json_object'],
@@ -407,7 +544,11 @@ class AssistantOrchestratorService
                         }
                     }
 
-                    $displayText = $decoded['display_text'] ?? ("He registrado " . count($persistedEntities) . " pendientes exitosamente.");
+                    $defaultConfirm = count($persistedEntities) === 1
+                        ? "Anotado: {$persistedEntities[0]['title']}."
+                        : ("Anotados en pendientes: " . implode(' ', array_map(fn($idx, $e) => ($idx + 1) . ". {$e['title']}.", array_keys($persistedEntities), $persistedEntities)));
+
+                    $displayText = $decoded['display_text'] ?? $defaultConfirm;
                     $speechText  = $decoded['speech_text'] ?? $this->cleanVoiceText($displayText);
 
                     return [
@@ -427,7 +568,7 @@ class AssistantOrchestratorService
             Log::error('Write pipeline failed, falling back to reasoning loop: ' . $e->getMessage());
         }
 
-        return $this->executeReasoningFallback($user, $prompt, []);
+        return $this->executeReasoningFallback($user, $prompt, $conversationHistory);
     }
 
     /**
@@ -435,38 +576,70 @@ class AssistantOrchestratorService
      */
     protected function formatLocalReadFallback(User $user, array $reminders, array $notes, array $events, string $prompt = ''): array
     {
-        $lines = ["Hola {$user->name}, esto es lo que tienes pendiente:\n"];
-        $speechLines = ["Hola {$user->name}, esto es lo que tienes pendiente:"];
+        $isExplicitRequest = (bool) preg_match('/(pendientes|recordatorios|agenda|eventos|tareas|notas|hoy|mañana|semana|resumen|status|estado)/iu', $prompt);
+
+        if (!$isExplicitRequest) {
+            $displayText = "¡Hola! ¿En qué puedo ayudarte hoy?";
+            return [
+                'success'             => true,
+                'data'                => [
+                    'reminders' => $reminders,
+                    'notes'     => $notes,
+                    'events'    => $events,
+                ],
+                'message'             => $displayText,
+                'display_text'        => $displayText,
+                'speech_text'         => $displayText,
+                'action'              => 'conversation',
+                'categories_detected' => [],
+                'atomic_tasks_count'  => count($reminders) + count($notes),
+                'prioritized_summary' => null,
+            ];
+        }
+
+        $lines = ["Tus pendientes:"];
+        $speechLines = ["Tus pendientes:"];
+        $seenTitles = [];
 
         if (!empty($notes)) {
-            $lines[] = "**Tareas y Pendientes**";
+            $lines[] = "\n**Tareas y Pendientes**";
             foreach ($notes as $n) {
-                $lines[] = "- {$n['title']}";
-                $speechLines[] = $n['title'];
+                $norm = mb_strtolower(trim($n['title'] ?? ''));
+                if (!isset($seenTitles[$norm])) {
+                    $seenTitles[$norm] = true;
+                    $lines[] = "- {$n['title']}";
+                    $speechLines[] = $n['title'];
+                }
             }
-            $lines[] = "";
         }
 
         if (!empty($reminders)) {
-            $lines[] = "**Recordatorios Programados**";
+            $lines[] = "\n**Recordatorios Programados**";
             foreach ($reminders as $r) {
-                $timeStr = !empty($r['remind_at']) ? " ({$r['remind_at']})" : "";
-                $lines[] = "- {$r['title']}{$timeStr}";
-                $speechLines[] = $r['title'];
+                $norm = mb_strtolower(trim($r['title'] ?? ''));
+                if (!isset($seenTitles[$norm])) {
+                    $seenTitles[$norm] = true;
+                    $timeStr = !empty($r['remind_at']) ? " ({$r['remind_at']})" : "";
+                    $lines[] = "- {$r['title']}{$timeStr}";
+                    $speechLines[] = $r['title'];
+                }
             }
-            $lines[] = "";
         }
 
         if (!empty($events)) {
-            $lines[] = "**Agenda de Hoy**";
+            $lines[] = "\n**Agenda de Hoy**";
             foreach ($events as $ev) {
-                $lines[] = "- {$ev['title']} a las {$ev['start_time']}";
-                $speechLines[] = "{$ev['title']} a las {$ev['start_time']}";
+                $norm = mb_strtolower(trim($ev['title'] ?? ''));
+                if (!isset($seenTitles[$norm])) {
+                    $seenTitles[$norm] = true;
+                    $lines[] = "- {$ev['title']} a las {$ev['start_time']}";
+                    $speechLines[] = "{$ev['title']} a las {$ev['start_time']}";
+                }
             }
         }
 
-        if (empty($notes) && empty($reminders) && empty($events)) {
-            $displayText = "Hola {$user->name}, no tienes pendientes ni recordatorios agendados por el momento.";
+        if (empty($seenTitles)) {
+            $displayText = "No tienes pendientes ni recordatorios agendados por el momento.";
             $speechText  = $displayText;
         } else {
             $displayText = trim(implode("\n", $lines));
@@ -483,7 +656,7 @@ class AssistantOrchestratorService
             'message'             => $displayText,
             'display_text'        => $displayText,
             'speech_text'         => $this->cleanVoiceText($speechText),
-            'action'              => (preg_match('/(pendientes|recordatorios|agenda|eventos|tareas|notas|hoy)/iu', $prompt) ? 'get_pending_reminders' : 'conversation'),
+            'action'              => 'get_pending_reminders',
             'categories_detected' => [],
             'atomic_tasks_count'  => count($reminders) + count($notes),
             'prioritized_summary' => null,
@@ -516,20 +689,7 @@ class AssistantOrchestratorService
 
             $systemPrompt = $this->buildSystemPrompt($nowIso, $user);
 
-            $messages = [
-                ['role' => 'system', 'content' => $systemPrompt],
-            ];
-
-            foreach ($conversationHistory as $msg) {
-                if (isset($msg['role'], $msg['content'])) {
-                    $messages[] = [
-                        'role'    => $msg['role'],
-                        'content' => (string) $msg['content'],
-                    ];
-                }
-            }
-
-            $messages[] = ['role' => 'user', 'content' => $prompt];
+            $messages = $this->buildChatPayload($systemPrompt, $prompt, $conversationHistory, 20);
 
             $modelConfig = $this->modelRouter->getActiveModelConfig('reasoning_fallback');
             $endpoint = rtrim($modelConfig['base_url'], '/');
@@ -615,6 +775,7 @@ IDENTIDAD Y ROLES (ESTRICTO):
 - TU IDENTIDAD: Te llamas Cami. Eres la asistente personal ejecutiva inteligente, eficiente, técnica y proactiva de {$firstName}.
 - IDENTIDAD DEL USUARIO: El usuario al que asistes se llama {$userName} (puedes llamarlo {$firstName}).
 - REGLA DE TRATO ABSOLUTA: NUNCA llames al usuario "Cami". Tú eres Cami; el usuario es {$firstName}. Si el usuario dice "Cami", "hola Cami", "¿estás ahí Cami?", te está llamando a TI por tu nombre.
+- TONO NATURAL: Sé directa, natural y conversacional. Elimina saludos robóticos, rodeos o introducciones innecesarias (ej. no uses "Como tu asistente...", "A continuación presento el reporte...", ve directo al grano).
 - CONVERSACIÓN Y SALUDOS: Ante saludos, cortesías o preguntas de presencia (ej. "hola", "hola Cami", "¿estás ahí?", "buenos días", "¿cómo estás?"), responde de manera directa, cordial, cálida y concisa. NO ejecutes herramientas ni búsquedas de base de datos para responder a un saludo cotidiano.
 
 Zona horaria de referencia: America/Cancun.
@@ -642,10 +803,16 @@ FASE 1: REGLAS DE NEGOCIO Y MODELO MENTAL (MÓDULO: CLASIFICACIÓN Y DIVISIÓN D
        - Ejemplo: Si el usuario pide comprar un paraguas y un impermeable, invoca `create_workspace_note` para "Comprar paraguas" y otro para "Comprar impermeable".
        - Ejemplo confirmación concisa: "Anotados en pendientes: 1. Comprar paraguas. 2. Comprar impermeable."
 
-2. DEDUPLICACIÓN SEMÁNTICA:
-   - Identifica elementos redundantes o repetidos (ejemplo: "agregar función de mensajes" vs "poder enviar mensajes") y unifícalos automáticamente en una sola tarea limpia.
+2. RESPUESTAS CONVERSACIONALES Y CONCISAS AL CREAR O MODIFICAR:
+   - NO imprimas un reporte completo, inventario o volcado de base de datos cada vez que el usuario registra o modifica una tarea.
+   - Si el usuario agrega un recordatorio o nota, limítate a confirmar la acción de forma breve, natural y directa (ej. "Anotado: comprar tomates" o "Recordatorio programado: comprar pan mañana a las 9 am").
+   - Si el usuario agrega múltiples pendientes atomizados, confírmalos de forma compacta (ej. "Anotados en pendientes: 1. Comprar paraguas. 2. Comprar impermeable.").
 
-3. CATEGORIZACIÓN CONTEXTUAL IMPLÍCITA:
+3. DEDUPLICACIÓN SEMÁNTICA Y ELIMINACIÓN DE DUPLICADOS:
+   - Identifica elementos redundantes o repetidos (ejemplo: "agregar función de mensajes" vs "poder enviar mensajes") y unifícalos automáticamente en una sola tarea limpia.
+   - Al listar o categorizar, un elemento solo debe mostrarse una sola vez. PROHIBIDO duplicar ítems entre "Prioridades" y sus categorías temáticas (como "Personal/Compras").
+
+4. CATEGORIZACIÓN CONTEXTUAL IMPLÍCITA:
    - Clasifica automáticamente cada entrada por contexto o dominio sin solicitar confirmación al usuario:
      * Desarrollo/Tech: Código, bugs, deploys, APIs, refactor, arquitectura, bases de datos.
      * Personal/Compras: Supermercado, farmacia, compras, salud, ejercicio.
@@ -653,10 +820,12 @@ FASE 1: REGLAS DE NEGOCIO Y MODELO MENTAL (MÓDULO: CLASIFICACIÓN Y DIVISIÓN D
      * General/Agenda: Citas, reuniones y acuerdos.
 
 FASE 2: PROACTIVIDAD Y SÍNTESIS:
-1. PRIORIZACIÓN INTELIGENTE:
-   - Al presentar la información, no muestres listas planas interminables. Agrupa los pendientes por su área de impacto o categoría.
-   - Si la cantidad de tareas supera 5 elementos, prioriza los 3 más relevantes del día y genera un resumen compacto del resto.
-2. CONTEXTUALIZACIÓN PROACTIVA:
+1. LISTADOS BAJO DEMANDA:
+   - SOLO desglosa o resume pendientes cuando el usuario lo solicite EXPLÍCITAMENTE (ej. "¿qué tengo pendiente?", "revisa mis tareas de hoy"). NUNCA muestres un volcado de tareas si el usuario no lo ha pedido.
+2. ELIMINACIÓN ESTRICTA DE DUPLICADOS:
+   - Al presentar la información, agrupa los pendientes por su área de impacto o categoría.
+   - Cada tarea o recordatorio debe aparecer UNA SOLA VEZ. NO dupliques ítems entre una lista de "Prioridades" y las categorías temáticas.
+3. CONTEXTUALIZACIÓN PROACTIVA:
    - Si una tarea o recordatorio entrante se relaciona con especificaciones o notas técnicas guardadas previamente, asócialas en el contexto del registro sin generar ruido innecesario.
 
 FASE 3: SALIDA DUAL CONVERSACIONAL (VISUAL VS VOZ):
@@ -1076,10 +1245,13 @@ SYS;
                 $messages[] = $tm;
             }
 
+            $modelConfig = $this->modelRouter->getActiveModelConfig('reasoning_fallback');
+
             $secondResponse = Http::withToken($modelConfig['api_key'] ?? $this->apiKey)
+                ->withHeaders((array) ($modelConfig['headers'] ?? []))
                 ->timeout(45)
                 ->post($endpoint, [
-                    'model'       => $this->model,
+                    'model'       => $modelConfig['model'] ?? $this->model,
                     'messages'    => $messages,
                     'temperature' => 0.3,
                 ]);
@@ -1382,12 +1554,15 @@ SYS;
         }
 
         $formattedDate = $startTime->locale('es')->isoFormat('D [de] MMMM [a las] HH:mm');
+        $msg = "Evento {$title} agendado para el {$formattedDate}.";
 
         return [
-            'success' => true,
-            'data'    => $event,
-            'message' => "Evento {$title} agendado para el {$formattedDate}.",
-            'action'  => 'create_calendar_event',
+            'success'      => true,
+            'data'         => $event,
+            'message'      => $msg,
+            'display_text' => $msg,
+            'speech_text'  => $msg,
+            'action'       => 'create_calendar_event',
         ];
     }
 
@@ -1418,12 +1593,15 @@ SYS;
         ]);
 
         $formattedDate = $scheduledAt->locale('es')->isoFormat('D [de] MMMM [a las] HH:mm');
+        $msg = "Recordatorio {$title} programado para el {$formattedDate}.";
 
         return [
-            'success' => true,
-            'data'    => $reminder,
-            'message' => "Recordatorio {$title} programado para el {$formattedDate} con prioridad {$priority}.",
-            'action'  => 'create_reminder',
+            'success'      => true,
+            'data'         => $reminder,
+            'message'      => $msg,
+            'display_text' => $msg,
+            'speech_text'  => $msg,
+            'action'       => 'create_reminder',
         ];
     }
 
@@ -1451,11 +1629,15 @@ SYS;
             'is_pinned' => false,
         ]);
 
+        $msg = "Anotado: {$title}.";
+
         return [
-            'success' => true,
-            'data'    => $note,
-            'message' => "Anotado en pendientes: {$title}.",
-            'action'  => 'create_workspace_note',
+            'success'      => true,
+            'data'         => $note,
+            'message'      => $msg,
+            'display_text' => $msg,
+            'speech_text'  => $msg,
+            'action'       => 'create_workspace_note',
         ];
     }
 
