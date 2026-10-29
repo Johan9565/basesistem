@@ -177,6 +177,86 @@ function deleteBranch() {
         });
     }
 }
+
+// --- Gestión de Cuentas Principales (Clientes SaaS) ---
+const clientDialogVisible = ref(false);
+const isEditingClient = ref(false);
+const editingClientId = ref(null);
+const clientsListDialogVisible = ref(false);
+
+const clientForm = useForm({
+    name: '',
+    document_number: '',
+    billing_email: '',
+    phone: '',
+    plan: 'pro',
+    max_companies: 5,
+    status: 'active',
+});
+
+function openCreateClientDialog() {
+    isEditingClient.value = false;
+    editingClientId.value = null;
+    clientForm.reset();
+    clientForm.clearErrors();
+    clientForm.name = '';
+    clientForm.document_number = '';
+    clientForm.billing_email = '';
+    clientForm.phone = '';
+    clientForm.plan = 'pro';
+    clientForm.max_companies = 5;
+    clientForm.status = 'active';
+    clientDialogVisible.value = true;
+}
+
+function openEditClientDialog(client) {
+    isEditingClient.value = true;
+    editingClientId.value = client.id;
+    clientForm.reset();
+    clientForm.clearErrors();
+    clientForm.name = client.name ?? '';
+    clientForm.document_number = client.document_number ?? '';
+    clientForm.billing_email = client.billing_email ?? '';
+    clientForm.phone = client.phone ?? '';
+    clientForm.plan = client.plan ?? 'pro';
+    clientForm.max_companies = client.max_companies ?? 5;
+    clientForm.status = client.status ?? 'active';
+    clientDialogVisible.value = true;
+}
+
+function submitClientForm() {
+    if (isEditingClient.value) {
+        clientForm.patch(route('clients.update', editingClientId.value), {
+            preserveScroll: true,
+            onSuccess: () => {
+                clientDialogVisible.value = false;
+            },
+        });
+    } else {
+        clientForm.post(route('clients.store'), {
+            preserveScroll: true,
+            onSuccess: (page) => {
+                clientDialogVisible.value = false;
+                const newId = page.props?.flash?.new_client_id;
+                if (newId) {
+                    form.client_id = newId;
+                }
+            },
+        });
+    }
+}
+
+function deleteClient(client) {
+    if (client.companies_count > 0) {
+        alert(`No puedes eliminar la cuenta "${client.name}" porque tiene ${client.companies_count} empresa(s) asociada(s).`);
+        return;
+    }
+    if (confirm(`¿Estás seguro de que deseas eliminar la cuenta principal "${client.name}"?`)) {
+        router.delete(route('clients.destroy', client.id), {
+            preserveScroll: true,
+        });
+    }
+}
 </script>
 
 <template>
@@ -194,14 +274,24 @@ function deleteBranch() {
                         Administra las empresas asociadas a la cuenta y activa o desactiva módulos individualmente en tiempo real.
                     </p>
                 </div>
-                <Button
-                    v-if="can?.create"
-                    label="Nueva Empresa"
-                    icon="pi pi-plus"
-                    size="small"
-                    severity="primary"
-                    @click="openCreateDialog"
-                />
+                <div class="flex items-center gap-2">
+                    <Button
+                        label="Cuentas Principales"
+                        icon="pi pi-building-columns"
+                        size="small"
+                        severity="secondary"
+                        outlined
+                        @click="clientsListDialogVisible = true"
+                    />
+                    <Button
+                        v-if="can?.create"
+                        label="Nueva Empresa"
+                        icon="pi pi-plus"
+                        size="small"
+                        severity="primary"
+                        @click="openCreateDialog"
+                    />
+                </div>
             </div>
         </template>
 
@@ -448,14 +538,54 @@ function deleteBranch() {
                 </div>
 
                 <div v-if="!isEditing && clients && clients.length">
-                    <label class="text-xs font-semibold text-base-content/80">Cuenta Principal (Cliente) *</label>
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-base-content/80">Cuenta Principal (Cliente) *</label>
+                        <button
+                            type="button"
+                            class="text-[11px] text-primary hover:underline flex items-center gap-1 font-semibold"
+                            @click="openCreateClientDialog"
+                        >
+                            <i class="pi pi-plus text-[10px]"></i>
+                            <span>Nueva Cuenta Principal</span>
+                        </button>
+                    </div>
                     <Select
                         v-model="form.client_id"
                         :options="clients"
                         optionLabel="name"
                         optionValue="id"
+                        placeholder="Selecciona la cuenta principal"
                         class="w-full text-sm mt-1"
                         required
+                    >
+                        <template #option="slotProps">
+                            <div class="flex flex-col text-xs py-0.5">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="font-bold text-base-content">{{ slotProps.option.name }}</span>
+                                    <span class="badge badge-xs uppercase font-mono text-[9px]">{{ slotProps.option.plan }}</span>
+                                </div>
+                                <span v-if="slotProps.option.document_number" class="text-base-content/50 font-mono text-[11px]">
+                                    RFC: {{ slotProps.option.document_number }}
+                                </span>
+                            </div>
+                        </template>
+                    </Select>
+                </div>
+                <div v-else-if="!isEditing && (!clients || !clients.length)" class="p-3 bg-warning/10 border border-warning/30 rounded-lg text-xs space-y-2">
+                    <div class="font-semibold text-warning-content flex items-center gap-1.5">
+                        <i class="pi pi-exclamation-triangle"></i>
+                        <span>No hay Cuentas Principales registradas</span>
+                    </div>
+                    <p class="text-base-content/70">
+                        Para crear una empresa necesitas al menos una Cuenta Principal corporativa.
+                    </p>
+                    <Button
+                        label="Crear Cuenta Principal"
+                        icon="pi pi-plus"
+                        size="small"
+                        severity="warn"
+                        type="button"
+                        @click="openCreateClientDialog"
                     />
                 </div>
 
@@ -572,6 +702,225 @@ function deleteBranch() {
                     </div>
                 </div>
             </form>
+        </Dialog>
+
+        <!-- Modal Crear / Editar Cuenta Principal (Cliente SaaS) -->
+        <Dialog
+            v-model:visible="clientDialogVisible"
+            modal
+            :header="isEditingClient ? 'Editar Cuenta Principal' : 'Nueva Cuenta Principal (Cliente Corporativo)'"
+            :style="{ width: '480px' }"
+            class="p-fluid"
+        >
+            <form @submit.prevent="submitClientForm" class="space-y-4 pt-2">
+                <div class="text-xs text-base-content/60 pb-1 border-b border-base-300">
+                    Una Cuenta Principal agrupa a una o más empresas bajo una misma entidad comercial o cliente de la plataforma.
+                </div>
+
+                <div>
+                    <label class="text-xs font-semibold text-base-content/80">Nombre de la Cuenta / Corporativo *</label>
+                    <InputText
+                        v-model="clientForm.name"
+                        class="w-full text-sm mt-1"
+                        placeholder="Ej. Corporativo Médico del Norte S.A."
+                        required
+                    />
+                    <div v-if="clientForm.errors.name" class="text-error text-[11px] mt-0.5">{{ clientForm.errors.name }}</div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-semibold text-base-content/80">RFC / ID Fiscal</label>
+                        <InputText
+                            v-model="clientForm.document_number"
+                            class="w-full text-sm mt-1"
+                            placeholder="ABC-123456-XYZ"
+                        />
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-base-content/80">Teléfono</label>
+                        <InputText
+                            v-model="clientForm.phone"
+                            class="w-full text-sm mt-1"
+                            placeholder="+52 998 123 4567"
+                        />
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-xs font-semibold text-base-content/80">Email de Facturación / Contacto</label>
+                    <InputText
+                        v-model="clientForm.billing_email"
+                        type="email"
+                        class="w-full text-sm mt-1"
+                        placeholder="facturacion@corporativo.com"
+                    />
+                    <div v-if="clientForm.errors.billing_email" class="text-error text-[11px] mt-0.5">{{ clientForm.errors.billing_email }}</div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-semibold text-base-content/80">Plan SaaS *</label>
+                        <Select
+                            v-model="clientForm.plan"
+                            :options="[
+                                { label: 'Básico', value: 'basic' },
+                                { label: 'Pro', value: 'pro' },
+                                { label: 'Enterprise', value: 'enterprise' }
+                            ]"
+                            optionLabel="label"
+                            optionValue="value"
+                            class="w-full text-sm mt-1"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-base-content/80">Límite de Empresas *</label>
+                        <InputText
+                            v-model.number="clientForm.max_companies"
+                            type="number"
+                            min="1"
+                            max="100"
+                            class="w-full text-sm mt-1"
+                            required
+                        />
+                    </div>
+                </div>
+
+                <div v-if="isEditingClient">
+                    <label class="text-xs font-semibold text-base-content/80">Estado de la Cuenta *</label>
+                    <Select
+                        v-model="clientForm.status"
+                        :options="[
+                            { label: 'Activa', value: 'active' },
+                            { label: 'Suspendida', value: 'suspended' },
+                            { label: 'Cancelada', value: 'cancelled' }
+                        ]"
+                        optionLabel="label"
+                        optionValue="value"
+                        class="w-full text-sm mt-1"
+                        required
+                    />
+                </div>
+
+                <div class="flex justify-end gap-2 pt-4 border-t border-base-300">
+                    <Button
+                        label="Cancelar"
+                        severity="secondary"
+                        text
+                        size="small"
+                        type="button"
+                        @click="clientDialogVisible = false"
+                    />
+                    <Button
+                        :label="isEditingClient ? 'Actualizar Cuenta' : 'Crear Cuenta Principal'"
+                        type="submit"
+                        severity="primary"
+                        size="small"
+                        :loading="clientForm.processing"
+                    />
+                </div>
+            </form>
+        </Dialog>
+
+        <!-- Modal Gestión de Cuentas Principales -->
+        <Dialog
+            v-model:visible="clientsListDialogVisible"
+            modal
+            header="Cuentas Principales Registradas (Clientes SaaS)"
+            :style="{ width: '650px' }"
+            class="p-fluid"
+        >
+            <div class="space-y-4 pt-2">
+                <div class="flex items-center justify-between pb-3 border-b border-base-300">
+                    <div>
+                        <p class="text-xs text-base-content/70">
+                            Cuentas corporativas registradas en la plataforma. Cada una puede poseer múltiples empresas asociadas.
+                        </p>
+                    </div>
+                    <Button
+                        label="Nueva Cuenta"
+                        icon="pi pi-plus"
+                        size="small"
+                        severity="primary"
+                        @click="openCreateClientDialog"
+                    />
+                </div>
+
+                <div v-if="!clients || !clients.length" class="text-center py-8 text-base-content/50 text-sm">
+                    No hay cuentas principales registradas aún.
+                </div>
+
+                <div v-else class="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+                    <div
+                        v-for="c in clients"
+                        :key="c.id"
+                        class="flex items-center justify-between p-3.5 rounded-xl border border-base-300 bg-base-200/40 hover:bg-base-200/70 transition-all"
+                    >
+                        <div class="space-y-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-sm text-base-content">{{ c.name }}</span>
+                                <span
+                                    class="badge badge-xs uppercase font-mono text-[9px]"
+                                    :class="{
+                                        'badge-primary': c.plan === 'enterprise',
+                                        'badge-info': c.plan === 'pro',
+                                        'badge-ghost': c.plan === 'basic'
+                                    }"
+                                >
+                                    {{ c.plan }}
+                                </span>
+                                <span
+                                    class="badge badge-xs text-[9px]"
+                                    :class="c.status === 'active' ? 'badge-success' : 'badge-warning'"
+                                >
+                                    {{ c.status === 'active' ? 'Activa' : c.status }}
+                                </span>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-base-content/60">
+                                <span v-if="c.document_number" class="font-mono">RFC: {{ c.document_number }}</span>
+                                <span v-if="c.billing_email">{{ c.billing_email }}</span>
+                                <span v-if="c.phone">{{ c.phone }}</span>
+                                <span class="text-primary font-semibold">
+                                    Empresas: {{ c.companies_count ?? 0 }} / {{ c.max_companies ?? 10 }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-1">
+                            <Button
+                                icon="pi pi-pencil"
+                                severity="secondary"
+                                text
+                                rounded
+                                size="small"
+                                title="Editar cuenta"
+                                @click="openEditClientDialog(c)"
+                            />
+                            <Button
+                                icon="pi pi-trash"
+                                severity="danger"
+                                text
+                                rounded
+                                size="small"
+                                title="Eliminar cuenta"
+                                :disabled="(c.companies_count ?? 0) > 0"
+                                @click="deleteClient(c)"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end pt-3 border-t border-base-300">
+                    <Button
+                        label="Cerrar"
+                        severity="secondary"
+                        size="small"
+                        @click="clientsListDialogVisible = false"
+                    />
+                </div>
+            </div>
         </Dialog>
     </AuthenticatedLayout>
 </template>

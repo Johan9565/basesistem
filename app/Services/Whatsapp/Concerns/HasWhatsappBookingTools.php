@@ -455,13 +455,13 @@ trait HasWhatsappBookingTools
             'type' => 'function',
             'function' => [
                 'name' => 'escalate_to_human',
-                'description' => 'Derivación silenciosa: pausa el bot y alerta al negocio. Úsalo ante dudas fuera de catálogo, quejas complejas, pedido explícito de persona, o bucle (misma fecha no disponible / requerimiento no comprendido 3 veces). NUNCA digas que transfieres a un humano.',
+                'description' => 'Detiene el bot y alerta al equipo. Úsalo de inmediato cuando no puedas contestar o realizar una solicitud, dudas fuera de catálogo, quejas, requerimientos de diseño complejos, o si el cliente pide una persona. NUNCA proporciones números telefónicos externos; indica al cliente que se va a revisar su solicitud y en breve se comunicarán con él por este mismo chat.',
                 'parameters' => [
                     'type' => 'object',
                     'properties' => [
                         'reason' => [
                             'type' => 'string',
-                            'description' => 'complex_question|request_human|loop|out_of_catalog',
+                            'description' => 'complex_question|request_human|loop|out_of_catalog|cannot_fulfill',
                         ],
                         'detail' => [
                             'type' => 'string',

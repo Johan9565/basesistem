@@ -30,7 +30,7 @@ class ChatTestController extends Controller
         $instances = [];
         $selectedInstance = null;
         $testHistory = [];
-        $defaultPhone = '+52 999 000 0000';
+        $defaultPhone = '9981010001';
 
         if ($activeCompany) {
             $companyId = (string) $activeCompany->_id;
@@ -139,7 +139,8 @@ class ChatTestController extends Controller
             ], 403);
         }
 
-        $phone = $validated['phone'] ?? '+52 999 000 0000';
+        $rawPhone = $validated['phone'] ?? '9981010001';
+        $phone = preg_replace('/\D+/', '', $rawPhone) ?: '9981010001';
         $provider = $validated['provider'] ?? null;
         $text = trim($validated['message']);
 
@@ -230,7 +231,8 @@ class ChatTestController extends Controller
             return response()->json(['ok' => false, 'error' => 'No tienes permiso para acceder a esta instancia.'], 403);
         }
 
-        $phone = $validated['phone'] ?? '+52 999 000 0000';
+        $rawPhone = $validated['phone'] ?? '9981010001';
+        $phone = preg_replace('/\D+/', '', $rawPhone) ?: '9981010001';
         $source = $validated['source'] ?? 'sim';
         $history = $orchestrator->getTestHistory($instance, $phone, 60, $source);
 
@@ -271,7 +273,8 @@ class ChatTestController extends Controller
             return response()->json(['ok' => false, 'error' => 'No tienes permiso para acceder a esta instancia.'], 403);
         }
 
-        $phone = $validated['phone'] ?? '+52 999 000 0000';
+        $rawPhone = $validated['phone'] ?? '9981010001';
+        $phone = preg_replace('/\D+/', '', $rawPhone) ?: '9981010001';
         $orchestrator->resetTestSession($instance, $phone);
 
         return response()->json([

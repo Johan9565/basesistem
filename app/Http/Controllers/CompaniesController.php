@@ -67,9 +67,16 @@ class CompaniesController extends Controller
             ];
         });
 
-        $clients = Client::where('status', 'active')->get(['_id', 'name'])->map(fn ($cl) => [
+        $clients = Client::orderBy('name', 'asc')->get()->map(fn ($cl) => [
             'id' => (string) $cl->_id,
             'name' => $cl->name,
+            'document_number' => $cl->document_number ?? '',
+            'billing_email' => $cl->billing_email ?? '',
+            'phone' => $cl->phone ?? '',
+            'plan' => $cl->plan ?? 'pro',
+            'max_companies' => (int) ($cl->max_companies ?? 10),
+            'companies_count' => $cl->companies()->count(),
+            'status' => $cl->status ?? 'active',
         ]);
 
         $usersQuery = \App\Models\User::where('status', 1)->orderBy('name', 'asc');

@@ -123,7 +123,7 @@ return [
         'friction_escalate_after' => (int) env('WHATSAPP_FRICTION_ESCALATE_AFTER', 3),
         'escalation_courtesy' => env(
             'WHATSAPP_ESCALATION_COURTESY',
-            'Déjame revisar ese detalle específico con el equipo para darte la información exacta. En un momento te confirmo por aquí mismo.'
+            'He tomado nota de tu solicitud; la vamos a revisar con el equipo y en breve nos comunicamos contigo por este mismo medio.'
         ),
         // Opcional: WhatsApp del encargado (número) e instancia Evolution para alertas.
         'escalation_phone' => env('WHATSAPP_ESCALATION_PHONE', ''),

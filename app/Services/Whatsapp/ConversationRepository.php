@@ -11,10 +11,17 @@ class ConversationRepository
     {
         $limit = $limit ?? (int) config('services.whatsapp.history_limit', 15);
 
+        $cleanPhone = preg_replace('/\D+/', '', $userPhone);
+
         // _id de Mongo es monotónico: evita desorden cuando created_at coincide al segundo.
         return WhatsappMessage::withoutGlobalScopes()
             ->where('instance_name', $instanceName)
-            ->where('user_phone', $userPhone)
+            ->where(function ($q) use ($userPhone, $cleanPhone) {
+                $q->where('user_phone', $userPhone);
+                if ($cleanPhone !== '' && $cleanPhone !== $userPhone) {
+                    $q->orWhere('user_phone', $cleanPhone);
+                }
+            })
             ->orderBy('_id', 'desc')
             ->limit($limit)
             ->get()

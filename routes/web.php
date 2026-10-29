@@ -36,7 +36,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/profile/banner', [ProfileController::class, 'updateBanner'])->name('profile.banner');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
+use App\Http\Controllers\ClientsController;
 use App\Http\Controllers\CompaniesController;
+use App\Http\Controllers\ComponentsController;
 use App\Http\Controllers\EmployeesController;
 use App\Http\Controllers\OrdersController;
 use App\Http\Controllers\ProductsController;
@@ -50,6 +52,10 @@ Route::middleware(['auth', 'permission:administration'])->group(function () {
     Route::post('/companies/{company}/branches', [BranchesController::class, 'store'])->middleware('permission:branches.create')->name('companies.branches.store');
     Route::patch('/companies/{company}/branches/{branch}', [BranchesController::class, 'update'])->middleware('permission:branches.edit')->name('companies.branches.update');
     Route::delete('/companies/{company}/branches/{branch}', [BranchesController::class, 'destroy'])->middleware('permission:branches.delete')->name('companies.branches.destroy');
+
+    Route::post('/clients', [ClientsController::class, 'store'])->middleware('permission:companies.create')->name('clients.store');
+    Route::patch('/clients/{client}', [ClientsController::class, 'update'])->middleware('permission:companies.edit')->name('clients.update');
+    Route::delete('/clients/{client}', [ClientsController::class, 'destroy'])->middleware('permission:companies.edit')->name('clients.destroy');
 
     Route::middleware(['auth', 'permission:users'])->group(function () {
         Route::get('/users', [UsersController::class, 'index'])->middleware('permission:users.view')->name('users');

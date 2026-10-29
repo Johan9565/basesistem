@@ -26,7 +26,7 @@ const props = defineProps({
     },
     defaultPhone: {
         type: String,
-        default: '+52 999 000 0000',
+        default: '9981010001',
     },
     companyKnowledge: {
         type: Object,
@@ -141,8 +141,8 @@ async function selectConversation(conv) {
 
 // Iniciar nueva conversación con número fresco
 function startNewConversation() {
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    testPhone.value = `+52 999 ${randomSuffix} 0000`;
+    const randomSuffix = Math.floor(1000000 + Math.random() * 9000000);
+    testPhone.value = `998${randomSuffix}`;
     activeSource.value = 'sim';
     messages.value = [];
     lastBookingState.value = {};
