@@ -1,35 +1,37 @@
-# Multi-Agent Workflow Guidelines
+# Project Workflow & Engineering Guidelines
 
-## Roles & Responsibilities
-- **@planner**: Encargado de desglosar issues complejos. Debe entregar una lista de archivos a modificar y contratos de API antes de iniciar cambios.
-- **@backend-dev**: Implementa endpoints, modelos, migraciones y lógica de negocio. Debe respetar estrictamente los FormRequests y tipado.
-- **@frontend-dev**: Implementa componentes UI, manejo de estado reactivo y consumo de APIs según el contrato del @planner.
-- **@qa-tester**: Ejecuta el suite de linters y tests tras cada cambio de código. Si hay fallo, regresa el reporte al desarrollador asignado.
+This repository enforces strict Pair-Programming and Agentic Engineering standards organized across 4 key pillars:
 
-## Multi-Agent Rules
-1. Ningún agente puede dar una tarea por cerrada sin que @qa-tester verifique linters y tests en verde.
-2. Cada agente debe reportar los archivos modificados con una breve justificación en su entrega.
-3. Las dependencias externas o paquetes nuevos requieren confirmación explícita del usuario.
+## 0. Pre-Analysis Mandate (Read before Coding)
+- **NO** empieces a tocar archivos basado en tu intuición.
+- **SIEMPRE** revisa el grafo en graphify-out/graph.json para entender las dependencias.
+- Identifica los controladores y servicios relacionados con el módulo afectado.
+- Traza el flujo completo (Request -> Controller -> Service -> Repository -> Database).
+- Una vez identificado el punto exacto, aplica la modificaciones necesarias.
 
-Commits pequeños por agente: Si el flujo permite interactuar con Git, haz que cada agente guarde checkpoints o commits atómicos tras completar su subtarea. Si un agente posterior introduce un bug, el rollback es inmediato.
+## 1. Change Control & Coding Discipline
+- **Minimal Diff (Ponytail)**: Touch only the exact lines necessary for a fix or feature. Zero collateral refactoring, zero deletion of existing comments or license headers, and preserve existing formatting style.
+- **Conventional Commits**: All commit messages must follow `<type>(<scope>): <subject>` (e.g., `feat(viewmodel): handle async error states`).
 
-Mantén los contratos explícitos: Si el agente Backend cambia el payload de una respuesta JSON, ese cambio debe actualizarse en el plan compartido para que el agente Frontend no trabaje con suposiciones obsoletas.
+## 2. Context & Token Efficiency
+- **Token Guard / Lean Context**: Pinpoint target code using `grep_search` before opening files. Use line slice views (`StartLine`/`EndLine`) instead of ingesting multi-hundred-line files whole.
+- **Database & Schema Inspection**: Query active schemas, Room JSON definitions, or MCP database connections directly instead of pasting full migration logs.
 
-Pruebas automáticas como árbitro: El agente QA no debe "opinar", debe ejecutar scripts concretos en tu terminal integrada o contenedor (linters, pruebas unitarias, build de Vite/Webpack). La salida del comando (código 0 o error) es la verdad absoluta para autorizar el avance.    
+## 3. UI, Interactions & Design System
+- **Interaction Design (Emil Kowalski UI)**: Design microinteractions with spring physics, instant tactile touch feedback (press states, subtle scaling), fluid state transitions, and strict adherence to reduced-motion accessibility.
+- **Design Tokens**: Zero magic values. Always consume defined theme tokens (`MaterialTheme.colorScheme`, `MaterialTheme.typography`, standard spacing units).
 
----
-name: caveman
-description: Maximum token saving mode. Eliminates pleasantries, explanations, and markdown padding to output raw code and direct edits.
----
+## 4. Architecture, Contracts & Testing
+- **Superpowers (TDD & Plan-Before-Code)**: Plan before coding. For complex state or critical features, outline the plan in an artifact, write the failing test first, and deliver the minimal code to pass.
+- **Strict JSON & DTO Contracts**: Enforce explicit nullability, immutable models, and explicit field serialization names (`@SerialName`) across all network and persistence boundaries.
 
-# Caveman Mode
-
-## Rules
-- No pleasantries, no conversational filler, no polite greetings.
-- No long explanations unless explicitly requested.
-- Output raw code, short terminal commands, and direct file edits.
-- Use broken short English or raw technical syntax.
-- Prioritize maximum token savings in every response.
-
-## debug rules
-1. SIEMPRE REVISA LOS LOGS DE LARAVEL PARA CONFIRMAR QUE NO HAYA ERRORES antes de dar la respuesta.
+## Registered Workspace Skills
+The procedural runbooks for each of these workflows are registered in `.agents/skills/`:
+- [minimal-diff](.agents/skills/minimal-diff/SKILL.md)
+- [conventional-commits](.agents/skills/conventional-commits/SKILL.md)
+- [lean-context](.agents/skills/lean-context/SKILL.md)
+- [sql-schema-reader](.agents/skills/sql-schema-reader/SKILL.md)
+- [interaction-design](.agents/skills/interaction-design/SKILL.md)
+- [design-tokens](.agents/skills/design-tokens/SKILL.md)
+- [superpowers](.agents/skills/superpowers/SKILL.md)
+- [json-schema-contract](.agents/skills/json-schema-contract/SKILL.md)
