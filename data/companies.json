@@ -1,0 +1,3 @@
+[
+{"_id":{"$oid":"6ae3707024dc7c75ad0de0e2"},"user_id":"6ae36b477e61600e9b079382","client_id":"6ae3704a7e61600e9b079383","name":"DUOPRINT","document_number":null,"email":"sergio.s@duoprint.co","phone":"9982603846","modules":"{\"inventory\":true,\"orders\":true,\"services\":false,\"appointments\":true,\"whatsapp\":true,\"chat-test\":true}","slug":"duoprint","status":"active","updated_at":{"$date":"2026-10-29T17:20:21.777Z"},"created_at":{"$date":"2026-10-29T16:12:32.748Z"},"settings":"{\"timezone\":\"America\\/Cancun\",\"currency\":\"MXN\"}"}
+]

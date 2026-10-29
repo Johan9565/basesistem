@@ -1,0 +1,3 @@
+[
+{"_id":{"$oid":"6ae3707024dc7c75ad0de0e3"},"company_id":"6ae3707024dc7c75ad0de0e2","name":"DUOPRINT","code":"MATRIZ","phone":"9982603846","email":"sergio.s@duoprint.co","is_main":true,"is_active":true,"updated_at":{"$date":"2026-10-29T16:12:32.749Z"},"created_at":{"$date":"2026-10-29T16:12:32.749Z"}}
+]

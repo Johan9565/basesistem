@@ -1,0 +1,4 @@
+[
+{"_id":{"$oid":"6ac0178d0105e87a73010561"},"name":"JOHAN ALBERTO","ape_pat":"PALMA","ape_mat":"CHAVEZ","email":"johan_palma45@hotmail.com","password":"$2y$12$IVlnCZ3Ij6CpTJ5fn5KAre1eZ6S4EuaKe1otHjxs4uJNIosjucrxu","role_id":"6ac0178d0105e87a7301055c","user_type":"client","status":1,"active":1,"updated_at":{"$date":"2026-10-02T20:43:57.232Z"},"created_at":{"$date":"2026-10-02T20:43:57.232Z"}},
+{"_id":{"$oid":"6ae36b477e61600e9b079382"},"name":"SERGIO","ape_pat":"SERRANO","ape_mat":"MEGAPRINT","email":"sergio.s@duoprint.co","password":"$2y$12$GcTfMtYm4rWglkUicZyXfeq4GPnGhelbMNOoaS.A9VQzn3KXYWjyO","role_id":{"$oid":"6ac0178d0105e87a7301055d"},"user_type":"client","status":1,"active":true,"updated_at":{"$date":"2026-10-29T15:52:04.939Z"},"created_at":{"$date":"2026-10-29T15:50:31.159Z"}}
+]
