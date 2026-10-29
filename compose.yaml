@@ -25,12 +25,13 @@ services:
         - '${FORWARD_REVERB_PORT:-8080}:8080'
     networks:
         - sail
+        - nginx-red
     depends_on:
         - redis
         - mongo
     restart: always
   mongo:
-    image: mongo:8
+    image: mongo
     restart: always
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/opt/keyfile/mongo-keyfile"]
     # Solo localhost (Compass vía túnel SSH/Tailscale)
@@ -112,6 +113,8 @@ services:
 networks:
   sail:
     driver: bridge
+  nginx-red:
+    external: true
 volumes:
   sail-redis:
     driver: local
