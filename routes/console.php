@@ -11,4 +11,5 @@ Artisan::command('inspire', function () {
 Schedule::command('assistant:process-reminders')->everyMinute();
 Schedule::command('assistant:dispatch-reminders')->everyMinute();
 Schedule::command('assistant:send-daily-digest')->dailyAt('08:00')->timezone('America/Cancun');
+Schedule::command('assistant:generate-daily-summaries')->dailyAt('00:00')->timezone('America/Cancun');
 

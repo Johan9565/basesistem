@@ -71,6 +71,19 @@ class IntentRouterService
             }
         }
 
+        // Check if message is querying past conversation history / memory
+        $isHistoryQuery = preg_match('/\b(qu[eé]|de qu[eé]|recuerdas|te acuerdas|qu[eé] dijimos|qu[eé] platicamos|qu[eé] hablamos|hablamos|platicamos)\b.*\b(ayer|antier|semana pasada|el lunes|el martes|el mi[eé]rcoles|el jueves|el viernes|el s[aá]bado|el domingo|sesi[oó]n|anterior|pasad[oa]|presupuesto|acordamos|conversaci[oó]n)\b/iu', $normalized)
+            || preg_match('/^(¿|\?|\s)*(qu[eé] (hablamos|platicamos|dijimos|vimos|acordamos)|recuerdas qu[eé]|te acuerdas)/iu', $normalized);
+
+        if ($isHistoryQuery) {
+            return [
+                'route'           => 'reasoning_fallback',
+                'confidence'      => 0.95,
+                'matched_pattern' => 'historical_memory',
+                'inferred_intent' => 'search_conversation_history',
+            ];
+        }
+
         // 1. Evaluate Write Intent Patterns
         $writeMatches = [];
         foreach ($this->writePatterns as $name => $pattern) {

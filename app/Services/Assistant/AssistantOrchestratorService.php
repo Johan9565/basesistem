@@ -862,6 +862,11 @@ MEMORIA, CONSULTA (RETRIEVAL) Y EJECUCIÓN DE HERRAMIENTAS:
 - CREACIÓN DE NOTAS / PENDIENTES: Cuando pida guardar nota o pendientes sin hora -> invoca `create_workspace_note`.
 - CONSULTA DE AGENDA: Cuando pida la agenda de un rango -> invoca `get_agenda`.
 - EDICIÓN Y REPROGRAMACIÓN: Cuando el usuario pida reprogramar, corregir, mover de fecha o cambiar el contenido de un pendiente, nota o evento previo, utiliza la herramienta de edición (`update_entry`). Al finalizar la herramienta, confirma en una sola frase breve y natural el cambio realizado (ej. 'Listo, moví la cita al jueves a las 5:00 PM').
+- BÚSQUEDA EN HISTORIAL DE CONVERSACIONES PASADAS: Cuando el usuario haga alusiones al pasado ('¿qué hablamos ayer?', '¿de qué platicamos el lunes?', '¿recuerdas qué acordamos sobre X?'), invoca `search_conversation_history`.
+  * Traduce automáticamente términos relativos ('ayer', 'hace 3 días', 'la semana pasada', 'el lunes') a rangos ISO 8601 precisos (start_date, end_date) basados estrictamente en la FECHA Y HORA ACTUAL DEL SISTEMA indicada arriba.
+  * Si la búsqueda no incluye palabras clave y solo pide lo hablado en un periodo, deja `query` vacío o null y envía el rango de fechas.
+  * Si busca un tema o acuerdo, incluye el concepto en `query`.
+  * COMPORTAMIENTO CONVERSACIONAL Y HONESTIDAD: Tras consultar la herramienta, sintetiza los hallazgos con un tono natural y directo. Si la base de datos no contiene registros del tema o periodo, admite con total honestidad y claridad que no tienes registros previos sobre ese asunto en lugar de especular o inventar respuestas.
 
 Cuando emitas tu respuesta conversacional final (o turno de resumen), puedes entregarla como objeto estructurado:
 {
@@ -1091,6 +1096,34 @@ SYS;
                     ],
                 ],
             ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name'        => 'search_conversation_history',
+                    'description' => 'Busca en el historial de conversaciones pasadas del usuario. Debe ejecutarse cuando el usuario haga alusiones al pasado, mencione periodos previos (ej. "ayer", "la semana pasada", "el lunes") o pregunte por temas o acuerdos discutidos en sesiones anteriores.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'query' => [
+                                'type'        => 'string',
+                                'description' => 'Término, tema, concepto o palabras clave a buscar en el contenido de las conversaciones pasadas.',
+                            ],
+                            'start_date' => [
+                                'type'        => 'string',
+                                'description' => 'Fecha y hora de inicio del rango de búsqueda en formato ISO 8601 (YYYY-MM-DDTHH:mm:ss o YYYY-MM-DD), calculada automáticamente a partir del lenguaje natural del usuario.',
+                            ],
+                            'end_date' => [
+                                'type'        => 'string',
+                                'description' => 'Fecha y hora de fin del rango de búsqueda en formato ISO 8601 (YYYY-MM-DDTHH:mm:ss o YYYY-MM-DD), calculada automáticamente a partir del lenguaje natural del usuario.',
+                            ],
+                            'limit' => [
+                                'type'        => 'integer',
+                                'description' => 'Límite de turnos a recuperar (entre 5 y 10 turnos para un bloque compacto). Por defecto 10.',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
         ];
     }
 
@@ -1099,7 +1132,7 @@ SYS;
      */
     protected function handleToolCalls(User $user, array $toolCalls, array $messages, string $endpoint, array $choice, Carbon $nowInTz): array
     {
-        $retrievalTools = ['search_calendar_events', 'search_notes', 'get_pending_reminders', 'get_agenda'];
+        $retrievalTools = ['search_calendar_events', 'search_notes', 'get_pending_reminders', 'get_agenda', 'search_conversation_history'];
 
         $hasRetrieval = false;
         $toolMessages = [];
@@ -1134,18 +1167,25 @@ SYS;
                         $agendaRes = $this->executeGetAgenda($user, $args);
                         $resData = $agendaRes['data'] ?? [];
                         break;
+                    case 'search_conversation_history':
+                        $resData = $this->executeSearchConversationHistory($user, $args);
+                        break;
                 }
 
                 $retrievalResults[$fnName] = $resData;
 
-                $toolMessages[] = [
-                    'role'         => 'tool',
-                    'tool_call_id' => $callId,
-                    'content'      => json_encode([
+                $toolContent = is_array($resData) && isset($resData['formatted_text'])
+                    ? $resData['formatted_text']
+                    : json_encode([
                         'query_tool'    => $fnName,
                         'results_count' => is_array($resData) ? count($resData) : 1,
                         'records'       => $resData,
-                    ], JSON_UNESCAPED_UNICODE),
+                    ], JSON_UNESCAPED_UNICODE);
+
+                $toolMessages[] = [
+                    'role'         => 'tool',
+                    'tool_call_id' => $callId,
+                    'content'      => $toolContent,
                 ];
             } else {
                 // Creation tools
@@ -1496,6 +1536,273 @@ SYS;
                 'created_at' => $n->created_at ? $n->created_at->format('Y-m-d H:i') : null,
             ];
         })->all();
+    }
+
+    /**
+     * Executes historical conversation search.
+     * When querying past days, checks daily_summaries first for key decisions and derived actions.
+     * When querying the current day, queries active session messages from assistant_messages.
+     */
+    public function executeSearchConversationHistory(User $user, array $args): array
+    {
+        $userId = (string) ($user->_id ?? $user->id);
+        $rawQuery  = trim((string) ($args['query'] ?? ''));
+        $startDate = $args['start_date'] ?? null;
+        $endDate   = $args['end_date'] ?? null;
+        $limit     = isset($args['limit']) ? min(10, max(5, intval($args['limit']))) : 10;
+
+        try {
+            $today = Carbon::today($this->timezone);
+            $todayStr = $today->format('Y-m-d');
+
+            $startCarbon = !empty($startDate) ? Carbon::parse($startDate, $this->timezone) : null;
+            $endCarbon   = !empty($endDate) ? Carbon::parse($endDate, $this->timezone) : null;
+
+            // Determine if the query specifically targets past days (prior to today)
+            $isPastDaysQuery = false;
+            if ($startCarbon && $endCarbon) {
+                $isPastDaysQuery = $endCarbon->format('Y-m-d') < $todayStr || ($startCarbon->format('Y-m-d') < $todayStr && $endCarbon->format('Y-m-d') <= $todayStr && $startCarbon->format('Y-m-d') !== $todayStr);
+            } elseif ($endCarbon) {
+                $isPastDaysQuery = $endCarbon->format('Y-m-d') < $todayStr;
+            } elseif ($startCarbon) {
+                $isPastDaysQuery = $startCarbon->format('Y-m-d') < $todayStr;
+            }
+
+            // 1. DÍAS PREVIOS: Consultar primero la colección daily_summaries
+            if ($isPastDaysQuery) {
+                $summaryQuery = \App\Models\DailySummary::where(function ($q) use ($userId, $user) {
+                    $q->where('user_id', $userId)
+                      ->orWhere('user_id', (string) $user->id);
+                });
+
+                if ($startCarbon && $endCarbon) {
+                    $startStr = $startCarbon->format('Y-m-d');
+                    $endStr   = $endCarbon->format('Y-m-d');
+                    if ($startStr === $endStr) {
+                        $summaryQuery->where('date', $startStr);
+                    } else {
+                        $summaryQuery->where('date', '>=', $startStr)->where('date', '<=', $endStr);
+                    }
+                } elseif ($startCarbon) {
+                    $summaryQuery->where('date', '>=', $startCarbon->format('Y-m-d'));
+                } elseif ($endCarbon) {
+                    $summaryQuery->where('date', '<=', $endCarbon->format('Y-m-d'));
+                }
+
+                $summaries = $summaryQuery->orderBy('date', 'desc')->limit($limit)->get();
+
+                if ($summaries->isNotEmpty()) {
+                    $summaryBlocks = [];
+                    $records = [];
+
+                    foreach ($summaries as $s) {
+                        $decisionsList = '';
+                        if (!empty($s->key_decisions)) {
+                            foreach ((array) $s->key_decisions as $dec) {
+                                $decisionsList .= "\n  - " . trim($dec);
+                            }
+                        } else {
+                            $decisionsList = " Ninguna registrada.";
+                        }
+
+                        $actionsList = '';
+                        if (!empty($s->action_items)) {
+                            foreach ((array) $s->action_items as $act) {
+                                $actionsList .= "\n  - " . trim($act);
+                            }
+                        } else {
+                            $actionsList = " Ninguno registrado.";
+                        }
+
+                        $block = "Resumen consolidado del día {$s->date}:\n";
+                        $block .= "• Resumen general: {$s->summary}\n";
+                        $block .= "• Decisiones clave:{$decisionsList}\n";
+                        $block .= "• Pendientes derivados:{$actionsList}";
+
+                        $summaryBlocks[] = $block;
+                        $records[] = [
+                            'date'          => $s->date,
+                            'summary'       => $s->summary,
+                            'key_decisions' => $s->key_decisions,
+                            'action_items'  => $s->action_items,
+                        ];
+                    }
+
+                    $plainTextExtract = implode("\n\n", $summaryBlocks);
+
+                    return [
+                        'success'        => true,
+                        'data'           => $plainTextExtract,
+                        'formatted_text' => $plainTextExtract,
+                        'results_count'  => count($records),
+                        'records'        => $records,
+                        'source'         => 'daily_summaries',
+                    ];
+                }
+                // Si no hay daily_summaries pre-generados para esa fecha, continúa a consultar assistant_messages como fallback
+            }
+
+            // 2. DÍA ACTUAL / SESIÓN ACTIVA (O FALLBACK DE MENSAJES CRUDOS)
+            $collection = \Illuminate\Support\Facades\DB::connection('mongodb')->getCollection('assistant_messages');
+
+            $filter = [
+                '$or' => [
+                    ['user_id' => $userId],
+                    ['user_id' => (string) $user->id],
+                ],
+                'status' => 'completed',
+            ];
+
+            // Resolución de fechas sobre created_at
+            $dateConditions = [];
+            if (!$isPastDaysQuery && empty($startDate) && empty($endDate) && empty($rawQuery)) {
+                // Consulta por omisión del día actual / sesión activa cuando no hay query específico ni rango de fechas
+                $dateConditions['$gte'] = new \MongoDB\BSON\UTCDateTime($today->copy()->startOfDay()->getTimestampMs());
+                $dateConditions['$lte'] = new \MongoDB\BSON\UTCDateTime($today->copy()->endOfDay()->getTimestampMs());
+            } else {
+                if ($startCarbon) {
+                    $dateConditions['$gte'] = new \MongoDB\BSON\UTCDateTime($startCarbon->getTimestampMs());
+                }
+                if ($endCarbon) {
+                    if (strlen(trim((string) $endDate)) <= 10) {
+                        $endCarbon->endOfDay();
+                    }
+                    $dateConditions['$lte'] = new \MongoDB\BSON\UTCDateTime($endCarbon->getTimestampMs());
+                }
+            }
+
+            if (!empty($dateConditions)) {
+                $filter['created_at'] = $dateConditions;
+            }
+
+            $options = ['limit' => $limit];
+
+            if ($rawQuery !== '') {
+                $textFilter = $filter;
+                $textFilter['$text'] = ['$search' => $rawQuery];
+                $textOptions = [
+                    'projection' => [
+                        'score' => ['$meta' => 'textScore'],
+                        'role' => 1,
+                        'content' => 1,
+                        'prompt' => 1,
+                        'reply' => 1,
+                        'display_text' => 1,
+                        'created_at' => 1,
+                    ],
+                    'sort'  => ['score' => ['$meta' => 'textScore']],
+                    'limit' => $limit,
+                ];
+
+                try {
+                    $cursor = $collection->find($textFilter, $textOptions);
+                    $docs = iterator_to_array($cursor);
+                } catch (\Throwable $e) {
+                    $regex = new \MongoDB\BSON\Regex(preg_quote($rawQuery), 'i');
+                    $filter['$or'] = [
+                        ['content' => $regex],
+                        ['prompt' => $regex],
+                        ['reply' => $regex],
+                    ];
+                    $cursor = $collection->find($filter, ['sort' => ['created_at' => -1], 'limit' => $limit]);
+                    $docs = iterator_to_array($cursor);
+                }
+
+                if (empty($docs)) {
+                    $terms = array_filter(explode(' ', $rawQuery), fn($t) => mb_strlen($t) >= 3);
+                    if (!empty($terms)) {
+                        $regexOr = [];
+                        foreach ($terms as $term) {
+                            $r = new \MongoDB\BSON\Regex(preg_quote($term), 'i');
+                            $regexOr[] = ['content' => $r];
+                            $regexOr[] = ['prompt' => $r];
+                            $regexOr[] = ['reply' => $r];
+                        }
+                        $filter['$or'] = $regexOr;
+                        $cursor = $collection->find($filter, ['sort' => ['created_at' => -1], 'limit' => $limit]);
+                        $docs = iterator_to_array($cursor);
+                    }
+                }
+            } else {
+                $options['sort'] = ['created_at' => 1];
+                $cursor = $collection->find($filter, $options);
+                $docs = iterator_to_array($cursor);
+            }
+
+            if (empty($docs)) {
+                $emptyMsg = "No se encontraron mensajes en el historial de conversación para el periodo o criterio especificado.";
+                return [
+                    'success'        => true,
+                    'data'           => $emptyMsg,
+                    'formatted_text' => $emptyMsg,
+                    'results_count'  => 0,
+                    'records'        => [],
+                    'source'         => 'assistant_messages',
+                ];
+            }
+
+            $records = [];
+            $lines = [];
+
+            foreach ($docs as $doc) {
+                $dateObj = $doc['created_at'] ?? null;
+                $dateFormatted = 'Desconocida';
+                if ($dateObj instanceof \MongoDB\BSON\UTCDateTime) {
+                    $dateFormatted = $dateObj->toDateTime()->setTimezone(new \DateTimeZone($this->timezone))->format('Y-m-d H:i:s');
+                } elseif ($dateObj instanceof \DateTimeInterface) {
+                    $dateFormatted = Carbon::instance($dateObj)->setTimezone($this->timezone)->format('Y-m-d H:i:s');
+                }
+
+                $role = $doc['role'] ?? (!empty($doc['prompt']) ? 'user' : 'assistant');
+                $roleLabel = ($role === 'user' || $role === 'Usuario') ? 'Usuario' : 'Cami';
+
+                $content = trim((string) ($doc['content'] ?? ($role === 'user' ? ($doc['prompt'] ?? '') : ($doc['display_text'] ?? $doc['reply'] ?? ''))));
+                if ($content === '') {
+                    continue;
+                }
+
+                $records[] = [
+                    'date'    => $dateFormatted,
+                    'role'    => $role,
+                    'content' => $content,
+                ];
+
+                $lines[] = "[{$dateFormatted}] {$roleLabel}: {$content}";
+            }
+
+            if (empty($lines)) {
+                $emptyMsg = "No se encontraron mensajes legibles en el historial de conversación.";
+                return [
+                    'success'        => true,
+                    'data'           => $emptyMsg,
+                    'formatted_text' => $emptyMsg,
+                    'results_count'  => 0,
+                    'records'        => [],
+                    'source'         => 'assistant_messages',
+                ];
+            }
+
+            $plainTextExtract = implode("\n", $lines);
+
+            return [
+                'success'        => true,
+                'data'           => $plainTextExtract,
+                'formatted_text' => $plainTextExtract,
+                'results_count'  => count($records),
+                'records'        => $records,
+                'source'         => 'assistant_messages',
+            ];
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('executeSearchConversationHistory error: ' . $e->getMessage());
+
+            return [
+                'success'        => false,
+                'data'           => 'Error al consultar la memoria histórica: ' . $e->getMessage(),
+                'formatted_text' => 'Error al consultar la memoria histórica: ' . $e->getMessage(),
+                'results_count'  => 0,
+                'records'        => [],
+            ];
+        }
     }
 
     /**
