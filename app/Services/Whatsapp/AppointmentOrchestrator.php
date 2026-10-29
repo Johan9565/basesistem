@@ -827,7 +827,10 @@ class AppointmentOrchestrator
 
         $item = $product ?: $service;
         $itemType = $product ? 'product' : 'service';
-        $imageUrl = $item->image_url ?? ($item->image_path ? asset('storage/'.$item->image_path) : null);
+        $rawUrl = $item->getRawOriginal('image_url') ?? ($item->getAttributes()['image_url'] ?? null);
+        $imageUrl = ! empty($item->image_path)
+            ? asset('storage/'.$item->image_path)
+            : (! empty($rawUrl) ? $rawUrl : null);
 
         if (empty($imageUrl)) {
             return [
