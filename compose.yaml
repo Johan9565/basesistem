@@ -1,6 +1,4 @@
-# Stack local WSL — mismo proyecto Docker que ya usabas (basesistem).
-# NO usar name distinto: la DB Mongo y volúmenes viven en este proyecto.
-name: basesistem
+name: gestion_desk
 services:
   laravel.test:
     build:
@@ -16,7 +14,7 @@ services:
         WWWUSER: '${WWWUSER}'
         LARAVEL_SAIL: 1
         XDEBUG_MODE: 'off'
-        IGNITION_LOCAL_SITES_PATH: '/var/www/html/basesistem'
+        IGNITION_LOCAL_SITES_PATH: '${PWD:-/var/www/html}'
     volumes:
         - '.:/var/www/html'
     ports:
