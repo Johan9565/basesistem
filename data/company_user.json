@@ -1,4 +1,0 @@
-[
-{"_id":{"$oid":"6ae370a15bdca2600c0ec222"},"user_id":"6ae36b477e61600e9b079382","company_id":"6ae3707024dc7c75ad0de0e2","role_id":"6ac0178d0105e87a7301055d","status":"active","is_owner":true,"updated_at":{"$date":"2026-10-29T16:13:21.189Z"},"created_at":{"$date":"2026-10-29T16:13:21.189Z"}},
-{"_id":{"$oid":"6ae37410e1274a954407aca2"},"user_id":"6ac0178d0105e87a73010561","company_id":"6ae3707024dc7c75ad0de0e2","role_id":"6ac0178d0105e87a7301055c","status":"active","is_owner":false,"updated_at":{"$date":"2026-10-29T16:28:00.645Z"},"created_at":{"$date":"2026-10-29T16:28:00.645Z"}}
-]

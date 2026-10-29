@@ -1,3 +1,0 @@
-[
-{"_id":{"$oid":"6ae3704a7e61600e9b079383"},"name":"duoprint","document_number":null,"billing_email":"sergio.s@duoprint.co","phone":"9982603846","plan":"basic","max_companies":1,"status":"active","updated_at":{"$date":"2026-10-29T16:11:54.833Z"},"created_at":{"$date":"2026-10-29T16:11:54.833Z"}}
-]
