@@ -16,7 +16,7 @@ class DeepSeekClient implements LlmChatClient
      * @param  list<array<string, mixed>>  $messages
      * @return array<string, mixed>
      */
-    public function chat(array $messages, bool $withTools = true, ?array $tools = null): array
+    public function chat(array $messages, bool $withTools = true, ?array $tools = null, ?int $maxTokens = null): array
     {
         $apiKey = (string) config('services.deepseek.key');
         $baseUrl = rtrim((string) config('services.deepseek.base_url'), '/');
@@ -29,7 +29,7 @@ class DeepSeekClient implements LlmChatClient
         $payload = [
             'model' => $model,
             'messages' => $messages,
-            'max_tokens' => (int) config('services.deepseek.max_tokens', 150),
+            'max_tokens' => $maxTokens ?? (int) config('services.deepseek.max_tokens', 1600),
             'temperature' => (float) config('services.deepseek.temperature', 0.25),
         ];
 

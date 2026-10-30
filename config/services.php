@@ -47,7 +47,9 @@ return [
         'key' => env('DEEPSEEK_API_KEY'),
         'base_url' => env('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
         'model' => env('DEEPSEEK_MODEL', 'deepseek-chat'),
-        'max_tokens' => (int) env('DEEPSEEK_MAX_TOKENS', 400),
+        // 800 truncaba tool_calls cuando el modelo "razonaba" (deepseek-flash
+        // consume tokens de razonamiento del mismo presupuesto de salida).
+        'max_tokens' => (int) env('DEEPSEEK_MAX_TOKENS', 1600),
         'temperature' => (float) env('DEEPSEEK_TEMPERATURE', 0.25),
         // Vacío por defecto: "\n\n" cortaba los resúmenes de confirmación a media frase.
         'stop' => array_values(array_filter(array_map(
@@ -60,7 +62,7 @@ return [
         'key' => env('MIMO_API_KEY'),
         'base_url' => env('MIMO_BASE_URL', 'https://api.xiaomimimo.com/v1'),
         'model' => env('MIMO_MODEL', 'mimo-v2-flash'),
-        'max_tokens' => (int) env('MIMO_MAX_TOKENS', 400),
+        'max_tokens' => (int) env('MIMO_MAX_TOKENS', 800),
         'temperature' => (float) env('MIMO_TEMPERATURE', 0.25),
         'stop' => array_values(array_filter(array_map(
             'trim',

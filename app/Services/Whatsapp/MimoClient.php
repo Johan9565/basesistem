@@ -16,7 +16,7 @@ class MimoClient implements LlmChatClient
      * @param  list<array<string, mixed>>  $messages
      * @return array<string, mixed>
      */
-    public function chat(array $messages, bool $withTools = true, ?array $tools = null): array
+    public function chat(array $messages, bool $withTools = true, ?array $tools = null, ?int $maxTokens = null): array
     {
         $apiKey = (string) config('services.mimo.key');
         $baseUrl = rtrim((string) config('services.mimo.base_url'), '/');
@@ -29,7 +29,7 @@ class MimoClient implements LlmChatClient
         $payload = [
             'model' => $model,
             'messages' => $messages,
-            'max_tokens' => (int) config('services.mimo.max_tokens', 150),
+            'max_tokens' => $maxTokens ?? (int) config('services.mimo.max_tokens', 150),
             'temperature' => (float) config('services.mimo.temperature', 0.25),
             'stream' => false,
             // Flash puede activar thinking; lo desactivamos para respuestas cortas de WhatsApp.

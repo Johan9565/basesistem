@@ -71,6 +71,7 @@ trait HasWhatsappBookingTools
             $this->checkAvailabilityToolDefinition(),
             $this->calendarToolDefinition(),
             $this->listMyAppointmentsToolDefinition(),
+            $this->rescheduleAppointmentToolDefinition(),
             $this->cancelAppointmentToolDefinition(),
         ];
     }
@@ -297,6 +298,54 @@ trait HasWhatsappBookingTools
                         ],
                     ],
                     'required' => ['appointment_id', 'client_confirmed'],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function rescheduleAppointmentToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'reschedule_appointment',
+                'description' => 'REPROGRAMA una cita existente (sistema + Google) a una nueva fecha/hora. Úsala en lugar de cancelar y volver a crear: conserva el mismo appointment_id y el embudo del cliente. PELIGROSO: úsala SOLO tras list_my_appointments, haber mostrado el nuevo horario al cliente y recibir un SÍ explícito en ESTE turno. Requiere client_confirmed=true y un appointment_id que pertenezca a ESTE teléfono.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'appointment_id' => [
+                            'type' => 'string',
+                            'description' => 'ID exacto devuelto por list_my_appointments.',
+                        ],
+                        'start_iso' => [
+                            'type' => 'string',
+                            'description' => 'Nuevo inicio en ISO 8601 (ej. 2026-11-07T11:00:00).',
+                        ],
+                        'end_iso' => [
+                            'type' => 'string',
+                            'description' => 'Nuevo fin en ISO 8601. Si no hay duración, usa 30 minutos.',
+                        ],
+                        'summary' => [
+                            'type' => 'string',
+                            'description' => 'Asunto o servicio de la cita. Si se omite, se conserva el actual.',
+                        ],
+                        'description' => [
+                            'type' => 'string',
+                            'description' => 'Notas opcionales actualizadas.',
+                        ],
+                        'client_confirmed' => [
+                            'type' => 'boolean',
+                            'description' => 'true SOLO si el cliente confirmó explícitamente el nuevo horario en este turno.',
+                        ],
+                        'confirm_summary' => [
+                            'type' => 'string',
+                            'description' => 'Resumen breve del cambio (cita + horario anterior → nuevo) para auditoría.',
+                        ],
+                    ],
+                    'required' => ['appointment_id', 'start_iso', 'end_iso', 'client_confirmed'],
                 ],
             ],
         ];
