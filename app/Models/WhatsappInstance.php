@@ -9,6 +9,11 @@ class WhatsappInstance extends Model
 {
     use BelongsToCompany;
 
+    /**
+     * Longitud máxima permitida para system_prompt (configuración de instancia).
+     */
+    public const SYSTEM_PROMPT_MAX = 10000;
+
     protected $connection = 'mongodb';
 
     protected $collection = 'whatsapp_instances';
@@ -68,6 +73,21 @@ class WhatsappInstance extends Model
         $shared = trim((string) ($this->evolution_instance_name ?? ''));
 
         return $shared !== '' ? $shared : (string) ($this->instance_name ?? '');
+    }
+
+    /**
+     * Límite duro del campo: la configuración de la instancia nunca debe
+     * guardar más de SYSTEM_PROMPT_MAX caracteres.
+     */
+    public function setSystemPromptAttribute($value): void
+    {
+        $text = $value === null ? null : (string) $value;
+
+        if ($text !== null && $text !== '') {
+            $text = mb_substr($text, 0, self::SYSTEM_PROMPT_MAX);
+        }
+
+        $this->attributes['system_prompt'] = $text;
     }
 
     /**

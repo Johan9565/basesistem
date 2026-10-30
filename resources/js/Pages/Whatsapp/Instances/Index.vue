@@ -158,6 +158,39 @@ const form = useForm({
 const credentialsFileInput = ref(null);
 const editCredentialsFileInput = ref(null);
 
+/** Límite duro del campo "Instrucciones extra" (system_prompt) en la configuración de la instancia. */
+const SYSTEM_PROMPT_MAX = 10000;
+const systemPromptLen = computed(() => (form.system_prompt ?? '').length);
+const systemPromptOver = computed(() => systemPromptLen.value > SYSTEM_PROMPT_MAX);
+
+const systemPromptCounterLabel = computed(() => {
+    const len = systemPromptLen.value.toLocaleString('es-MX');
+    const max = SYSTEM_PROMPT_MAX.toLocaleString('es-MX');
+
+    return systemPromptOver.value
+        ? `${len} / ${max} caracteres — excede el máximo, redúcelo para poder guardar.`
+        : `${len} / ${max} caracteres`;
+});
+
+/**
+ * Bloquea el envío si el prompt supera el máximo permitido.
+ * @returns {boolean}
+ */
+function guardSystemPrompt() {
+    if (!systemPromptOver.value) return true;
+
+    const len = systemPromptLen.value.toLocaleString('es-MX');
+    const max = SYSTEM_PROMPT_MAX.toLocaleString('es-MX');
+    form.setError(
+        'system_prompt',
+        `El texto tiene ${len} caracteres; el máximo permitido es ${max}. Redúcelo para poder guardar.`,
+    );
+    createTab.value = 'negocio';
+    editTab.value = 'negocio';
+
+    return false;
+}
+
 watch(
     () => page.props.flash,
     (flash) => {
@@ -232,6 +265,8 @@ function closeCreateDialog() {
 }
 
 function submitCreate() {
+    if (!guardSystemPrompt()) return;
+
     form.post(route('whatsapp.instances.store'), {
         forceFormData: true,
         preserveScroll: true,
@@ -286,6 +321,7 @@ function closeEditDialog() {
 
 function submitEdit() {
     if (!selectedId.value) return;
+    if (!guardSystemPrompt()) return;
     const hasFile = form.credentials_file instanceof File;
     form
         .transform((data) => ({
@@ -722,8 +758,15 @@ function closeConnectDialog() {
                             class="mt-1 block w-full"
                             rows="4"
                             autoResize
+                            :maxlength="SYSTEM_PROMPT_MAX"
                             placeholder="Tono, políticas de anticipación, excepciones, qué no debe prometer…"
                         />
+                        <p
+                            class="mt-1 text-xs"
+                            :class="systemPromptOver ? 'text-error font-medium' : 'text-base-content/45'"
+                        >
+                            {{ systemPromptCounterLabel }}
+                        </p>
                         <InputError :message="form.errors.system_prompt" class="mt-2" />
                     </div>
                 </div>
@@ -997,10 +1040,17 @@ function closeConnectDialog() {
                                 class="mt-1 block w-full"
                                 rows="6"
                                 autoResize
+                                :maxlength="SYSTEM_PROMPT_MAX"
                                 placeholder="Ej. No ofrecer descuentos no listados. Pedir anticipo del 50%. Sesiones solo en playa pública…"
                             />
                             <p class="mt-1 text-xs text-base-content/45">
                                 Políticas y tono adicionales al flujo por etapas del bot.
+                                <span
+                                    class="ml-1"
+                                    :class="systemPromptOver ? 'font-medium text-error' : ''"
+                                >
+                                    {{ systemPromptCounterLabel }}
+                                </span>
                             </p>
                             <InputError
                                 :message="form.errors.system_prompt"
