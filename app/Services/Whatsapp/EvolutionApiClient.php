@@ -362,15 +362,6 @@ class EvolutionApiClient implements MessengerGatewayInterface
             return null;
         }
     }
-        } catch (Throwable $e) {
-            Log::warning('Evolution sendImage downloadUrlToBase64 falló por excepción', [
-                'url' => $url,
-                'error' => $e->getMessage(),
-            ]);
-
-            return null;
-        }
-    }
 
     /**
      * Detecta el tipo MIME de un binario o extensión.
