@@ -827,9 +827,37 @@ class AppointmentOrchestrator
 
         $item = $product ?: $service;
         $itemType = $product ? 'product' : 'service';
-        $imageUrl = $item->image_url ?? ($item->image_path ? asset('storage/'.$item->image_path) : null);
 
-        if (empty($imageUrl)) {
+        // Recopilar imágenes a enviar (soporte para hasta 5 imágenes del producto)
+        $imagesToSend = [];
+        if ($product) {
+            $gallery = $product->images()->orderBy('order')->get();
+            if ($gallery->isNotEmpty()) {
+                // Ordenar: primero la portada/principal si existe
+                $primary = $gallery->firstWhere('is_primary', true);
+                if ($primary && ! empty($primary->url)) {
+                    $imagesToSend[] = $primary->url;
+                }
+                foreach ($gallery as $gImg) {
+                    if ($primary && (string) $gImg->_id === (string) $primary->_id) {
+                        continue;
+                    }
+                    if (! empty($gImg->url)) {
+                        $imagesToSend[] = $gImg->url;
+                    }
+                }
+            }
+        }
+
+        // Si no hay imágenes en galería, recurrir a image_url / image_path
+        if (empty($imagesToSend)) {
+            $singleUrl = $item->image_url ?? ($item->image_path ? asset('storage/'.$item->image_path) : null);
+            if (! empty($singleUrl)) {
+                $imagesToSend[] = $singleUrl;
+            }
+        }
+
+        if (empty($imagesToSend)) {
             return [
                 'ok' => false,
                 'image_sent' => false,
@@ -840,43 +868,57 @@ class AppointmentOrchestrator
         }
 
         $sessionKey = $instance->evolutionName();
-        $caption = $customCaption !== '' ? $customCaption : "Aquí tienes la imagen de {$item->name}";
-
         $isSim = str_starts_with($phone, '5219999999999') || str_starts_with($sessionKey, 'sim:');
-        if (! $isSim) {
-            try {
-                $this->evolution->sendImage($sessionKey, $phone, $imageUrl, $caption);
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error('toolSendCatalogImage sendImage error', [
-                    'instance' => $sessionKey,
-                    'phone' => $phone,
-                    'error' => $e->getMessage(),
-                ]);
+        $totalImages = count($imagesToSend);
+
+        foreach ($imagesToSend as $idx => $imgUrl) {
+            $caption = ($idx === 0)
+                ? ($customCaption !== '' ? $customCaption : "Aquí tienes la imagen de {$item->name}".($totalImages > 1 ? " (1 de {$totalImages})" : ''))
+                : "Foto ".($idx + 1)." de {$totalImages} - {$item->name}";
+
+            if (! $isSim) {
+                try {
+                    $this->evolution->sendImage($sessionKey, $phone, $imgUrl, $caption);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error('toolSendCatalogImage sendImage error', [
+                        'instance' => $sessionKey,
+                        'phone' => $phone,
+                        'image_url' => $imgUrl,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
+
+            // Registrar mensaje de imagen en el historial de la conversación
+            $this->conversations->append(
+                $sessionKey,
+                $phone,
+                'assistant',
+                $caption,
+                metadata: [
+                    'image_url' => $imgUrl,
+                    'item_name' => $item->name,
+                    'item_type' => $itemType,
+                    'image_index' => $idx + 1,
+                    'total_images' => $totalImages,
+                    'sent_via_tool' => true,
+                ]
+            );
         }
 
-        // Registrar mensaje de imagen en el historial de la conversación
-        $this->conversations->append(
-            $sessionKey,
-            $phone,
-            'assistant',
-            $caption,
-            metadata: [
-                'image_url' => $imageUrl,
-                'item_name' => $item->name,
-                'item_type' => $itemType,
-                'sent_via_tool' => true,
-            ]
-        );
+        $mainImageUrl = $imagesToSend[0];
 
         return [
             'ok' => true,
             'image_sent' => true,
             'item_name' => $item->name,
             'item_type' => $itemType,
-            'image_url' => $imageUrl,
-            'caption' => $caption,
-            'message' => "La fotografía de '{$item->name}' fue enviada con éxito al cliente.",
+            'images_sent_count' => $totalImages,
+            'image_url' => $mainImageUrl,
+            'caption' => $customCaption !== '' ? $customCaption : "Aquí tienes la imagen de {$item->name}",
+            'message' => $totalImages > 1
+                ? "Se enviaron con éxito {$totalImages} fotografías de '{$item->name}' al cliente por WhatsApp."
+                : "La fotografía de '{$item->name}' fue enviada con éxito al cliente.",
         ];
     }
 
