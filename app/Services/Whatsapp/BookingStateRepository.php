@@ -10,9 +10,17 @@ class BookingStateRepository
 {
     public function find(string $instanceName, string $userPhone): ?WhatsappBookingState
     {
-        return WhatsappBookingState::query()
-            ->where('instance_name', $instanceName)
+        $names = [$instanceName];
+        if (str_starts_with($instanceName, 'sim:')) {
+            $names[] = substr($instanceName, 4);
+        } else {
+            $names[] = 'sim:'.$instanceName;
+        }
+
+        return WhatsappBookingState::withoutGlobalScopes()
+            ->whereIn('instance_name', $names)
             ->where('user_phone', $userPhone)
+            ->latest('last_interaction_at')
             ->first();
     }
 
@@ -38,7 +46,24 @@ class BookingStateRepository
             return $state;
         }
 
-        return WhatsappBookingState::query()->create([
+        $companyId = null;
+        /** @var \App\Services\Tenancy\CompanyContext $context */
+        $context = app(\App\Services\Tenancy\CompanyContext::class);
+        if ($context->hasCompany()) {
+            $companyId = $context->getCompanyId();
+        } else {
+            $cleanName = str_starts_with($instanceName, 'sim:') ? substr($instanceName, 4) : $instanceName;
+            $inst = \App\Models\WhatsappInstance::withoutGlobalScopes()
+                ->where('instance_name', $cleanName)
+                ->orWhere('evolution_instance_name', $cleanName)
+                ->first();
+            if ($inst && $inst->company_id) {
+                $companyId = $inst->company_id;
+            }
+        }
+
+        return WhatsappBookingState::withoutGlobalScopes()->create([
+            'company_id' => $companyId,
             'instance_name' => $instanceName,
             'user_phone' => $userPhone,
             'step' => WhatsappBookingState::STAGE_RECEPTION,
@@ -302,9 +327,16 @@ class BookingStateRepository
      */
     public function resetAllForInstance(string $instanceName): int
     {
+        $names = [$instanceName];
+        if (str_starts_with($instanceName, 'sim:')) {
+            $names[] = substr($instanceName, 4);
+        } else {
+            $names[] = 'sim:'.$instanceName;
+        }
+
         $count = 0;
-        WhatsappBookingState::query()
-            ->where('instance_name', $instanceName)
+        WhatsappBookingState::withoutGlobalScopes()
+            ->whereIn('instance_name', $names)
             ->orderBy('_id')
             ->get()
             ->each(function (WhatsappBookingState $state) use (&$count) {

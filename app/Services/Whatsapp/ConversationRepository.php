@@ -38,7 +38,24 @@ class ConversationRepository
         ?string $toolName = null,
         ?array $metadata = null
     ): WhatsappMessage {
-        return WhatsappMessage::query()->create([
+        $companyId = null;
+        /** @var \App\Services\Tenancy\CompanyContext $context */
+        $context = app(\App\Services\Tenancy\CompanyContext::class);
+        if ($context->hasCompany()) {
+            $companyId = $context->getCompanyId();
+        } else {
+            $cleanName = str_starts_with($instanceName, 'sim:') ? substr($instanceName, 4) : $instanceName;
+            $inst = \App\Models\WhatsappInstance::withoutGlobalScopes()
+                ->where('instance_name', $cleanName)
+                ->orWhere('evolution_instance_name', $cleanName)
+                ->first();
+            if ($inst && $inst->company_id) {
+                $companyId = $inst->company_id;
+            }
+        }
+
+        return WhatsappMessage::withoutGlobalScopes()->create([
+            'company_id' => $companyId,
             'instance_name' => $instanceName,
             'user_phone' => $userPhone,
             'role' => $role,
@@ -207,7 +224,7 @@ class ConversationRepository
         $phone = preg_replace('/\D+/', '', $userPhone) ?? $userPhone;
 
         // Borra por teléfono normalizado y por posibles variantes guardadas.
-        return (int) WhatsappMessage::query()
+        return (int) WhatsappMessage::withoutGlobalScopes()
             ->where('instance_name', $instanceName)
             ->where(function ($q) use ($phone, $userPhone) {
                 $q->where('user_phone', $phone)
@@ -229,7 +246,7 @@ class ConversationRepository
             $alsoInstanceNames,
         ))));
 
-        return (int) WhatsappMessage::query()
+        return (int) WhatsappMessage::withoutGlobalScopes()
             ->whereIn('instance_name', $names)
             ->delete();
     }
