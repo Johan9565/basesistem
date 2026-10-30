@@ -125,7 +125,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 40,
                 'min_stock' => 5,
                 'description' => 'Libreta pasta rígida con solapa magnética (21x14.5 cm), pluma metálica con repuesto, caja de protección de regalo.',
-                'image_url' => 'https://images.unsplash.com/photo-1585336261026-7f09f0a202c4?auto=format&fit=crop&w=800&q=80',
+                'image_url' => 'https://images.unsplash.com/photo-1585776245991-cf89dd7fc73a?auto=format&fit=crop&w=800&q=80',
             ],
             [
                 'sku' => 'DUO-KIT-004',
@@ -173,7 +173,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 150,
                 'min_stock' => 15,
                 'description' => 'Pluma de aluminio mate con tinta negra, estuche de MDF grabado láser.',
-                'image_url' => 'https://images.unsplash.com/photo-1585336261026-7f09f0a202c4?auto=format&fit=crop&w=800&q=80',
+                'image_url' => 'https://images.unsplash.com/photo-1585776245991-cf89dd7fc73a?auto=format&fit=crop&w=800&q=80',
             ],
             [
                 'sku' => 'DUO-PAP-004',
@@ -243,7 +243,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 60,
                 'min_stock' => 5,
                 'description' => 'Acrílico con base de madera (20x30 cm), foto, código Spotify escaneable y frase grabada.',
-                'image_url' => 'https://images.unsplash.com/photo-1614680376593-902f749f7ffc?auto=format&fit=crop&w=800&q=80',
+                'image_url' => 'https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&w=800&q=80',
             ],
             [
                 'sku' => 'DUO-DET-006',
@@ -254,7 +254,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 60,
                 'min_stock' => 5,
                 'description' => 'Acrílico con base de madera (20x18 cm), foto, código Spotify y frase.',
-                'image_url' => 'https://images.unsplash.com/photo-1614680376593-902f749f7ffc?auto=format&fit=crop&w=800&q=80',
+                'image_url' => 'https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&w=800&q=80',
             ],
             [
                 'sku' => 'DUO-DET-007',
@@ -287,7 +287,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 200,
                 'min_stock' => 20,
                 'description' => 'Llavero acrílico (4.5x6.5 cm) con foto y código Spotify escaneable.',
-                'image_url' => 'https://images.unsplash.com/photo-1614680376593-902f749f7ffc?auto=format&fit=crop&w=800&q=80',
+                'image_url' => 'https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&w=800&q=80',
             ],
             [
                 'sku' => 'DUO-DET-010',
