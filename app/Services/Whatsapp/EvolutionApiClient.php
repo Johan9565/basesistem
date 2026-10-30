@@ -68,6 +68,12 @@ class EvolutionApiClient implements MessengerGatewayInterface
         $safeFileName = $resolved['fileName'];
         $isUrl = $resolved['is_url'];
 
+        // Garantizar que si el media no es una URL pública, sea Base64 puro sin encabezado Data URI
+        // ya que el validador oficial de Evolution API (@IsUrlOrBase64) falla si contiene 'data:...;base64,'
+        if (is_string($media) && preg_match('/^data:[^;]+;base64,(.+)$/is', $media, $cleanMatches)) {
+            $media = trim($cleanMatches[1]);
+        }
+
         $payload = [
             'number' => $number,
             'mediatype' => 'image',
@@ -104,7 +110,7 @@ class EvolutionApiClient implements MessengerGatewayInterface
 
             // 3. Fallback inteligente: si se envió como URL y Evolution API no la pudo procesar
             // (e.g. host inaccesible desde contenedor Docker, 400/500, o timeout),
-            // descargar el buffer en el backend, convertir a Data URI Base64 y reintentar.
+            // descargar el buffer en el backend, convertir a Base64 puro y reintentar.
             if ($isUrl && ! empty($imageUrlOrPath)) {
                 $base64Fallback = $this->downloadUrlToBase64($imageUrlOrPath);
                 if ($base64Fallback) {
@@ -162,7 +168,7 @@ class EvolutionApiClient implements MessengerGatewayInterface
             $safeName = $fileName ?: ('image.'.$ext);
 
             return [
-                'media' => $raw,
+                'media' => trim($matches[2]),
                 'mimeType' => $mimeType,
                 'fileName' => $safeName,
                 'is_url' => false,
@@ -178,7 +184,7 @@ class EvolutionApiClient implements MessengerGatewayInterface
                 $safeName = $fileName ?: ('image.'.$ext);
 
                 return [
-                    'media' => 'data:'.$mimeType.';base64,'.$raw,
+                    'media' => $raw,
                     'mimeType' => $mimeType,
                     'fileName' => $safeName,
                     'is_url' => false,
@@ -190,6 +196,8 @@ class EvolutionApiClient implements MessengerGatewayInterface
         if (str_starts_with($raw, 'http://') || str_starts_with($raw, 'https://')) {
             $parsed = parse_url($raw);
             $pathPart = $parsed['path'] ?? '';
+            $host = strtolower($parsed['host'] ?? '');
+            $isLocalHost = in_array($host, ['localhost', '127.0.0.1', '::1', 'laravel.test', 'basesistem.test'], true);
 
             // Si apunta a /storage/ resolver localmente para no depender de la resolución de red de Docker
             if (str_contains($pathPart, '/storage/')) {
@@ -200,7 +208,7 @@ class EvolutionApiClient implements MessengerGatewayInterface
                     $mimeType = Storage::disk('public')->mimeType($storageRelative) ?: $this->detectMimeType($fileContent, $storageRelative);
 
                     return [
-                        'media' => 'data:'.$mimeType.';base64,'.base64_encode($fileContent),
+                        'media' => base64_encode($fileContent),
                         'mimeType' => $mimeType,
                         'fileName' => $fileName ?: basename($storageRelative),
                         'is_url' => false,
@@ -213,7 +221,7 @@ class EvolutionApiClient implements MessengerGatewayInterface
                     $mimeType = $this->detectMimeType($fileContent, $publicDirect);
 
                     return [
-                        'media' => 'data:'.$mimeType.';base64,'.base64_encode($fileContent),
+                        'media' => base64_encode($fileContent),
                         'mimeType' => $mimeType,
                         'fileName' => $fileName ?: basename($storageRelative),
                         'is_url' => false,
@@ -221,7 +229,20 @@ class EvolutionApiClient implements MessengerGatewayInterface
                 }
             }
 
-            // URL externa o pública
+            // Si es un host local pero no está en storage, descargarlo internamente y pasarlo como Base64
+            if ($isLocalHost) {
+                $downloaded = $this->downloadUrlToBase64($raw);
+                if ($downloaded) {
+                    return [
+                        'media' => $downloaded['media'],
+                        'mimeType' => $downloaded['mimeType'],
+                        'fileName' => $fileName ?: $downloaded['fileName'],
+                        'is_url' => false,
+                    ];
+                }
+            }
+
+            // URL externa o pública (ej. Unsplash, CDN, S3)
             $urlPath = $parsed['path'] ?? '';
             $ext = strtolower(pathinfo($urlPath, PATHINFO_EXTENSION));
             $mimeType = match ($ext) {
@@ -249,7 +270,7 @@ class EvolutionApiClient implements MessengerGatewayInterface
             $mimeType = Storage::disk('public')->mimeType($raw) ?: $this->detectMimeType($fileContent, $raw);
 
             return [
-                'media' => 'data:'.$mimeType.';base64,'.base64_encode($fileContent),
+                'media' => base64_encode($fileContent),
                 'mimeType' => $mimeType,
                 'fileName' => $fileName ?: basename($raw),
                 'is_url' => false,
@@ -269,7 +290,7 @@ class EvolutionApiClient implements MessengerGatewayInterface
                 $mimeType = $this->detectMimeType($fileContent, $candidate);
 
                 return [
-                    'media' => 'data:'.$mimeType.';base64,'.base64_encode($fileContent),
+                    'media' => base64_encode($fileContent),
                     'mimeType' => $mimeType,
                     'fileName' => $fileName ?: basename($candidate),
                     'is_url' => false,
@@ -287,7 +308,7 @@ class EvolutionApiClient implements MessengerGatewayInterface
     }
 
     /**
-     * Descarga una imagen remota y la convierte en un buffer Base64 con Data URI.
+     * Descarga una imagen remota y la convierte en un buffer Base64 puro.
      *
      * @return array{media: string, mimeType: string, fileName: string}|null
      */
@@ -328,10 +349,19 @@ class EvolutionApiClient implements MessengerGatewayInterface
             $fileName = (basename(parse_url($url, PHP_URL_PATH) ?? '') ?: 'image').'.'.$ext;
 
             return [
-                'media' => 'data:'.$mimeType.';base64,'.base64_encode($binary),
+                'media' => base64_encode($binary),
                 'mimeType' => $mimeType,
                 'fileName' => $fileName,
             ];
+        } catch (Throwable $e) {
+            Log::warning('Evolution sendImage downloadUrlToBase64 falló por excepción', [
+                'url' => $url,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
         } catch (Throwable $e) {
             Log::warning('Evolution sendImage downloadUrlToBase64 falló por excepción', [
                 'url' => $url,
