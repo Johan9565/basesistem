@@ -45,12 +45,13 @@ class EvolutionApiClientTest extends TestCase
             ], 200),
         ]);
 
-        $base64Data = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+        $pureBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+        $base64Data = 'data:image/png;base64,' . $pureBase64;
         $result = $this->client->sendImage('test-instance', '+52 1 999 123 4567', $base64Data, 'Mi Imagen Base64');
 
         $this->assertEquals('PENDING', $result['status'] ?? null);
 
-        Http::assertSent(function (Request $request) use ($base64Data) {
+        Http::assertSent(function (Request $request) use ($pureBase64) {
             $data = $request->data();
 
             return $request->url() === 'http://evolution-test:8080/message/sendMedia/test-instance'
@@ -58,7 +59,7 @@ class EvolutionApiClientTest extends TestCase
                 && $data['mediatype'] === 'image'
                 && $data['mimetype'] === 'image/png'
                 && $data['caption'] === 'Mi Imagen Base64'
-                && $data['media'] === $base64Data
+                && $data['media'] === $pureBase64
                 && str_ends_with($data['fileName'], '.png');
         });
     }
@@ -91,12 +92,13 @@ class EvolutionApiClientTest extends TestCase
     public function test_send_image_falls_back_to_base64_buffer_when_url_fails_in_api(): void
     {
         $imageUrl = 'https://example.com/catalog/oferta.png';
-        $pngBinary = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+        $pureBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+        $pngBinary = base64_decode($pureBase64);
 
         $callCount = 0;
         Http::fake([
             // Primer envío a Evolution API falla simulando que Evolution API no pudo descargar la URL
-            'http://evolution-test:8080/message/sendMedia/test-instance' => function (Request $request) use (&$callCount) {
+            'http://evolution-test:8080/message/sendMedia/test-instance' => function (Request $request) use (&$callCount, $pureBase64) {
                 $callCount++;
                 if ($callCount === 1) {
                     return Http::response([
@@ -105,7 +107,9 @@ class EvolutionApiClientTest extends TestCase
                     ], 400);
                 }
 
-                // Segundo envío (fallback con Base64) tiene éxito
+                // Segundo envío (fallback con Base64 puro) tiene éxito
+                $this->assertEquals($pureBase64, $request->data()['media']);
+
                 return Http::response([
                     'key' => ['id' => 'MSG-FALLBACK-OK'],
                     'status' => 'PENDING',
@@ -126,7 +130,8 @@ class EvolutionApiClientTest extends TestCase
     public function test_send_image_with_storage_disk_file_automatically_converts_to_base64(): void
     {
         Storage::fake('public');
-        $dummyImage = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+        $pureBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+        $dummyImage = base64_decode($pureBase64);
         Storage::disk('public')->put('products/camisa.png', $dummyImage);
 
         Http::fake([
@@ -140,12 +145,40 @@ class EvolutionApiClientTest extends TestCase
 
         $this->assertEquals('PENDING', $result['status'] ?? null);
 
-        Http::assertSent(function (Request $request) {
+        Http::assertSent(function (Request $request) use ($pureBase64) {
             $data = $request->data();
 
-            return str_starts_with($data['media'], 'data:image/png;base64,')
+            return $data['media'] === $pureBase64
                 && $data['mediatype'] === 'image'
                 && $data['fileName'] === 'camisa.png';
+        });
+    }
+
+    public function test_send_image_with_localhost_storage_url_resolves_directly_to_pure_base64(): void
+    {
+        Storage::fake('public');
+        $pureBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+        $dummyImage = base64_decode($pureBase64);
+        Storage::disk('public')->put('products/caja.jpg', $dummyImage);
+
+        Http::fake([
+            'http://evolution-test:8080/message/sendMedia/test-instance' => Http::response([
+                'key' => ['id' => 'MSG-CAJA-OK'],
+                'status' => 'PENDING',
+            ], 200),
+        ]);
+
+        $localUrl = 'http://localhost:8000/storage/products/caja.jpg';
+        $result = $this->client->sendImage('test-instance', '5219991112222', $localUrl, 'Caja de Aniversario');
+
+        $this->assertEquals('PENDING', $result['status'] ?? null);
+
+        Http::assertSent(function (Request $request) use ($pureBase64) {
+            $data = $request->data();
+
+            return $data['media'] === $pureBase64
+                && $data['mediatype'] === 'image'
+                && str_contains($data['fileName'], 'caja.jpg');
         });
     }
 
