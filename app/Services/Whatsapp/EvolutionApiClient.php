@@ -221,6 +221,23 @@ class EvolutionApiClient implements MessengerGatewayInterface
                 }
             }
 
+            // Si apunta a /images/ resolver directamente desde public/images/ local
+            if (str_contains($pathPart, '/images/')) {
+                $imageRelative = ltrim(substr($pathPart, strpos($pathPart, '/images/')), '/');
+                $publicDirect = public_path($imageRelative);
+                if (file_exists($publicDirect)) {
+                    $fileContent = (string) file_get_contents($publicDirect);
+                    $mimeType = $this->detectMimeType($fileContent, $publicDirect);
+
+                    return [
+                        'media' => 'data:'.$mimeType.';base64,'.base64_encode($fileContent),
+                        'mimeType' => $mimeType,
+                        'fileName' => $fileName ?: basename($publicDirect),
+                        'is_url' => false,
+                    ];
+                }
+            }
+
             // URL externa o pública
             $urlPath = $parsed['path'] ?? '';
             $ext = strtolower(pathinfo($urlPath, PATHINFO_EXTENSION));

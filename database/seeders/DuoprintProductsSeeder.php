@@ -44,7 +44,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 50,
                 'min_stock' => 5,
                 'description' => 'Incluye vaso térmico 20oz (varios colores), tapa de madera, caja personalizada con logotipo o dedicatoria y grabado láser.',
-                'image_url' => 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-ter-001.jpeg',
             ],
             [
                 'sku' => 'DUO-TER-002',
@@ -55,7 +55,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 50,
                 'min_stock' => 5,
                 'description' => 'Incluye vaso térmico 20oz (varios colores), tapa de acrílico, caja personalizada con logotipo o dedicatoria y grabado láser.',
-                'image_url' => 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-ter-002.jpeg',
             ],
             [
                 'sku' => 'DUO-TER-003',
@@ -66,7 +66,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 100,
                 'min_stock' => 10,
                 'description' => 'Vaso térmico 20oz en varios colores con grabado láser personalizado.',
-                'image_url' => 'https://images.unsplash.com/photo-1577937927133-66ef06acdf18?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-ter-003.jpeg',
             ],
             [
                 'sku' => 'DUO-TER-004',
@@ -77,7 +77,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 100,
                 'min_stock' => 10,
                 'description' => 'Vaso térmico 12oz en varios colores con grabado láser personalizado.',
-                'image_url' => 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-ter-004.jpeg',
             ],
             [
                 'sku' => 'DUO-TER-005',
@@ -88,7 +88,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 500,
                 'min_stock' => 20,
                 'description' => 'Cotizar por volumen. Diseños regulares o navideños, cilindros en varios materiales con grabado láser o sublimación.',
-                'image_url' => 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-ter-005.jpeg',
             ],
 
             // ==========================================
@@ -103,7 +103,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 30,
                 'min_stock' => 5,
                 'description' => 'Termo 20oz, libreta rayada 80 hojas (21x14.5 cm), pluma de aluminio, caja MDF personalizada con grabado láser.',
-                'image_url' => 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-kit-001.jpeg',
             ],
             [
                 'sku' => 'DUO-KIT-002',
@@ -114,7 +114,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 40,
                 'min_stock' => 5,
                 'description' => 'Termo 20oz con popote de aluminio y limpiador, pluma de aluminio, caja de MDF personalizada.',
-                'image_url' => 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-kit-002.jpeg',
             ],
             [
                 'sku' => 'DUO-KIT-003',
@@ -125,7 +125,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 40,
                 'min_stock' => 5,
                 'description' => 'Libreta pasta rígida con solapa magnética (21x14.5 cm), pluma metálica con repuesto, caja de protección de regalo.',
-                'image_url' => 'https://images.unsplash.com/photo-1585776245991-cf89dd7fc73a?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-kit-003.jpeg',
             ],
             [
                 'sku' => 'DUO-KIT-004',
@@ -136,7 +136,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 50,
                 'min_stock' => 5,
                 'description' => 'Libreta 80 hojas rayadas, pluma de aluminio, caja de MDF personalizada.',
-                'image_url' => 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-kit-004.jpeg',
             ],
 
             // ==========================================
@@ -151,7 +151,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 80,
                 'min_stock' => 10,
                 'description' => 'Libreta 80 hojas en negro, gris o azul rey, pluma incluida, grabado láser con logo y nombre.',
-                'image_url' => 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-pap-001.jpeg',
             ],
             [
                 'sku' => 'DUO-PAP-002',
@@ -162,7 +162,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 100,
                 'min_stock' => 10,
                 'description' => 'Libreta rayada 80 hojas (21x14.5 cm), personalizado con logo y nombre en láser.',
-                'image_url' => 'https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-pap-002.jpeg',
             ],
             [
                 'sku' => 'DUO-PAP-003',
@@ -173,7 +173,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 150,
                 'min_stock' => 15,
                 'description' => 'Pluma de aluminio mate con tinta negra, estuche de MDF grabado láser.',
-                'image_url' => 'https://images.unsplash.com/photo-1585776245991-cf89dd7fc73a?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-pap-003.jpeg',
             ],
             [
                 'sku' => 'DUO-PAP-004',
@@ -184,7 +184,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 200,
                 'min_stock' => 20,
                 'description' => 'Pluma de aluminio con tinta negra y caja de MDF grabada láser.',
-                'image_url' => 'https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-pap-004.jpeg',
             ],
 
             // ==========================================
@@ -199,7 +199,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 30,
                 'min_stock' => 5,
                 'description' => 'Caja MDF (28x21 cm), tapa convertible en portarretrato, foto y nombres con realce, mensaje interno y carta enrollada opcional.',
-                'image_url' => 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-det-001.jpeg',
             ],
             [
                 'sku' => 'DUO-DET-002',
@@ -210,7 +210,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 40,
                 'min_stock' => 5,
                 'description' => 'Cuadro corazón (23x35 cm) o collage iniciales (31x24 cm), fotos, nombres y fechas.',
-                'image_url' => 'https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-det-002.jpeg',
             ],
             [
                 'sku' => 'DUO-DET-003',
@@ -221,7 +221,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 50,
                 'min_stock' => 5,
                 'description' => '15x19 cm sobre base total de 22x19 cm, foto impresa en aluminio con iniciales y frase.',
-                'image_url' => 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-det-003.jpeg',
             ],
             [
                 'sku' => 'DUO-DET-004',
@@ -232,7 +232,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 50,
                 'min_stock' => 5,
                 'description' => 'Cuadro corazón (20x17 cm) con ranura intercambiable para foto, iniciales o frase.',
-                'image_url' => 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-det-004.jpeg',
             ],
             [
                 'sku' => 'DUO-DET-005',
@@ -243,7 +243,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 60,
                 'min_stock' => 5,
                 'description' => 'Acrílico con base de madera (20x30 cm), foto, código Spotify escaneable y frase grabada.',
-                'image_url' => 'https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-det-005.jpeg',
             ],
             [
                 'sku' => 'DUO-DET-006',
@@ -254,7 +254,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 60,
                 'min_stock' => 5,
                 'description' => 'Acrílico con base de madera (20x18 cm), foto, código Spotify y frase.',
-                'image_url' => 'https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-det-006.jpeg',
             ],
             [
                 'sku' => 'DUO-DET-007',
@@ -265,7 +265,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 40,
                 'min_stock' => 5,
                 'description' => 'Silueta grabada a partir de foto (hasta 2 personas, 15-19 cm), base de luz con cable USB / pilas.',
-                'image_url' => 'https://images.unsplash.com/photo-1517991104123-1d56a6e81ed9?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-det-007.jpeg',
             ],
             [
                 'sku' => 'DUO-DET-008',
@@ -276,7 +276,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 50,
                 'min_stock' => 5,
                 'description' => 'Rompecabezas 100 piezas (20x28 cm) impreso con foto + cajita MDF personalizada (10x10 cm).',
-                'image_url' => 'https://images.unsplash.com/photo-1587654780291-39c9404d746b?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-det-008.jpeg',
             ],
             [
                 'sku' => 'DUO-DET-009',
@@ -287,7 +287,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 200,
                 'min_stock' => 20,
                 'description' => 'Llavero acrílico (4.5x6.5 cm) con foto y código Spotify escaneable.',
-                'image_url' => 'https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-det-009.jpeg',
             ],
             [
                 'sku' => 'DUO-DET-010',
@@ -298,7 +298,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 100,
                 'min_stock' => 10,
                 'description' => 'Playera negra dama/caballero con silueta vectorial a partir de foto.',
-                'image_url' => 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-det-010.jpeg',
             ],
             [
                 'sku' => 'DUO-DET-011',
@@ -309,7 +309,7 @@ class DuoprintProductsSeeder extends Seeder
                 'stock' => 500,
                 'min_stock' => 50,
                 'description' => 'Cotizar por volumen. Esferas acrílico/madera regulares y jumbo con nombre personalizado.',
-                'image_url' => 'https://images.unsplash.com/photo-1543258103-a62bdc069871?auto=format&fit=crop&w=800&q=80',
+                'image_url' => '/images/products/duo-det-011.jpeg',
             ],
         ];
 
