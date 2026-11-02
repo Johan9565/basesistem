@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\WhatsappAppointment;
 use App\Models\WhatsappBookingState;
 use App\Models\WhatsappInstance;
+use App\Models\WhatsappSession;
 use App\Services\Telegram\AdminAssistantOrchestrator;
 use App\Services\Whatsapp\Contracts\LlmChatClient;
 use App\Services\Whatsapp\Contracts\MessengerGatewayInterface;
@@ -45,6 +46,9 @@ class AppointmentOrchestrator
     /** @var MessageDispatcher */
     protected $dispatcher;
 
+    /** @var ChatSessionManager|null */
+    protected $sessionManager;
+
     public function __construct(
         ConversationRepository $conversations,
         BookingStateRepository $bookingStates,
@@ -53,7 +57,8 @@ class AppointmentOrchestrator
         GoogleCalendarService $calendar,
         MessengerGatewayInterface $evolution,
         AdminAssistantOrchestrator $telegramAdmin,
-        ?MessageDispatcher $dispatcher = null
+        ?MessageDispatcher $dispatcher = null,
+        ?ChatSessionManager $sessionManager = null
     ) {
         $this->conversations = $conversations;
         $this->bookingStates = $bookingStates;
@@ -63,6 +68,7 @@ class AppointmentOrchestrator
         $this->evolution = $evolution;
         $this->telegramAdmin = $telegramAdmin;
         $this->dispatcher = $dispatcher ?? new MessageDispatcher($evolution);
+        $this->sessionManager = $sessionManager;
     }
 
     public function handleIncoming(string $instanceName, string $userPhone, string $text): ?string
@@ -146,12 +152,63 @@ class AppointmentOrchestrator
         }
     }
 
+    /**
+     * Responde a un mensaje consolidado desde el búfer anti-metralleta.
+     * La pausa, la sesión y el debounce ya fueron resueltos por el pipeline
+     * (jobs), por lo que va directo al ciclo de prompts + LLM.
+     */
+    public function respondToBuffered(
+        string $instanceName,
+        string $userPhone,
+        string $text,
+        ?string $sessionId = null
+    ): ?string {
+        $instance = WhatsappInstance::resolveActiveByEvolutionSession($instanceName);
+
+        if (! $instance) {
+            throw new RuntimeException("Instancia WhatsApp no registrada o inactiva: {$instanceName}");
+        }
+
+        // Clave de sesión = Evolution (compartida entre perfiles duplicados).
+        $sessionKey = $instance->evolutionName();
+        $phone = $this->evolution->normalizePhone($userPhone);
+        $booking = $this->bookingStates->touch($sessionKey, $phone);
+
+        // Expectativa del usuario mientras el LLM + tools corren.
+        $this->evolution->sendTyping($sessionKey, $phone);
+
+        return $this->processIncomingLocked($instance, $sessionKey, $phone, $booking, $text, $sessionId);
+    }
+
+    /**
+     * Consume la etiqueta de control [CONVERSATION_CLOSED]: se elimina del
+     * texto antes de que llegue al cliente y señala el cierre de sesión.
+     *
+     * @return array{0: string, 1: bool}
+     */
+    protected function consumeConversationClosedTag(string $reply): array
+    {
+        $closed = false;
+        $clean = preg_replace_callback(
+            '/\[\s*CONVERSATION_CLOSED\s*\]/iu',
+            function () use (&$closed): string {
+                $closed = true;
+
+                return '';
+            },
+            $reply
+        );
+
+        return [trim((string) $clean), $closed];
+    }
+
     protected function processIncomingLocked(
         WhatsappInstance $instance,
         string $sessionKey,
         string $phone,
         WhatsappBookingState $booking,
-        string $text
+        string $text,
+        ?string $sessionId = null
     ): ?string {
         $timezone = $instance->timezone ?? config('services.google_calendar.timezone');
         $this->bookingStates->backfillMissingFromTranscript($sessionKey, $phone);
@@ -193,11 +250,12 @@ class AppointmentOrchestrator
             $phone,
             $staticPrompt,
             $dynamicPrompt,
-            $contextSummary
+            $contextSummary,
+            $sessionId
         );
 
         try {
-            $loop = $this->runLlmLoop($messages, $instance, $sessionKey, $phone, $provider);
+            $loop = $this->runLlmLoop($messages, $instance, $sessionKey, $phone, $provider, $sessionId);
         } catch (Throwable $e) {
             if ($this->isLlmToolHistoryError($e)) {
                 Log::warning('LLM history invalid; retrying with fresh context', [
@@ -213,7 +271,7 @@ class AppointmentOrchestrator
                     ['role' => 'system', 'content' => $dynamicPrompt],
                     ['role' => 'user', 'content' => $text],
                 ];
-                $loop = $this->runLlmLoop($messages, $instance, $sessionKey, $phone, $provider);
+                $loop = $this->runLlmLoop($messages, $instance, $sessionKey, $phone, $provider, $sessionId);
             } else {
                 throw $e;
             }
@@ -237,12 +295,21 @@ class AppointmentOrchestrator
             (string) $instance->company_id
         );
 
+        // Etiqueta de cierre del modelo: se retira antes de que el mensaje
+        // llegue al cliente y ejecuta la rutina de cierre de sesión.
+        [$reply, $shouldCloseSession] = $this->consumeConversationClosedTag($reply);
+
         // Guardar respuesta completa en el historial
-        $this->conversations->append($sessionKey, $phone, 'assistant', $reply);
+        $this->conversations->append($sessionKey, $phone, 'assistant', $reply, sessionId: $sessionId);
 
         // Despachar con MessageDispatcher (Splitting inteligente + typing natural)
         $this->dispatcher->dispatch($sessionKey, $phone, $reply);
         $this->bookingStates->touch($sessionKey, $phone);
+
+        if ($shouldCloseSession) {
+            $manager = $this->sessionManager ?? app(ChatSessionManager::class);
+            $manager->close($sessionKey, $phone, WhatsappSession::REASON_IA);
+        }
 
         return $reply;
     }
@@ -822,6 +889,7 @@ class AppointmentOrchestrator
         string $instanceName,
         string $phone,
         string $provider,
+        ?string $sessionId = null,
     ): array {
         $client = $this->llmClient($provider);
         $label = $provider === 'mimo' ? 'MiMo' : 'DeepSeek';
@@ -908,6 +976,7 @@ class AppointmentOrchestrator
                 'assistant',
                 $assistantContent,
                 metadata: ['tool_calls' => $toolCalls],
+                sessionId: $sessionId,
             );
 
             $messages[] = [
@@ -965,6 +1034,7 @@ class AppointmentOrchestrator
                     $encoded,
                     toolCallId: $toolCallId,
                     toolName: $toolName,
+                    sessionId: $sessionId,
                 );
 
                 $messages[] = [

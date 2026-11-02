@@ -7,8 +7,12 @@ use Illuminate\Support\Collection;
 
 class ConversationRepository
 {
-    public function recent(string $instanceName, string $userPhone, ?int $limit = null): Collection
-    {
+    public function recent(
+        string $instanceName,
+        string $userPhone,
+        ?int $limit = null,
+        ?string $sessionId = null
+    ): Collection {
         $limit = $limit ?? (int) config('services.whatsapp.history_limit', 15);
 
         $cleanPhone = preg_replace('/\D+/', '', $userPhone);
@@ -22,6 +26,8 @@ class ConversationRepository
                     $q->orWhere('user_phone', $cleanPhone);
                 }
             })
+            // Solo la sesión activa: excluye cualquier sesión previa cerrada.
+            ->when($sessionId !== null, fn ($q) => $q->where('session_id', $sessionId))
             ->orderBy('_id', 'desc')
             ->limit($limit)
             ->get()
@@ -36,7 +42,8 @@ class ConversationRepository
         string $content,
         ?string $toolCallId = null,
         ?string $toolName = null,
-        ?array $metadata = null
+        ?array $metadata = null,
+        ?string $sessionId = null
     ): WhatsappMessage {
         $companyId = null;
         /** @var \App\Services\Tenancy\CompanyContext $context */
@@ -63,6 +70,7 @@ class ConversationRepository
             'tool_call_id' => $toolCallId,
             'tool_name' => $toolName,
             'metadata' => $metadata,
+            'session_id' => $sessionId,
         ]);
     }
 
@@ -79,7 +87,8 @@ class ConversationRepository
         string $userPhone,
         string $staticSystemPrompt,
         string $dynamicSystemPrompt,
-        ?string $contextSummary = null
+        ?string $contextSummary = null,
+        ?string $sessionId = null
     ): array {
         $maxTurns = max(1, (int) config('services.whatsapp.history_turns', 3));
         $fetchLimit = max(
@@ -110,7 +119,7 @@ class ConversationRepository
         }
 
         $turns = [];
-        foreach ($this->recent($instanceName, $userPhone, $fetchLimit) as $row) {
+        foreach ($this->recent($instanceName, $userPhone, $fetchLimit, $sessionId) as $row) {
             $role = (string) $row->role;
             if (! in_array($role, ['user', 'assistant'], true)) {
                 continue;

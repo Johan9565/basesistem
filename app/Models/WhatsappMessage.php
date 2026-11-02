@@ -24,6 +24,7 @@ class WhatsappMessage extends Model
         'tool_call_id',
         'tool_name',
         'metadata',
+        'session_id',
     ];
 
     protected function casts(): array
