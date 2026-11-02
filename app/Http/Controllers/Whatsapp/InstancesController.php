@@ -96,7 +96,7 @@ class InstancesController extends Controller
             'branch_id' => 'nullable|string',
             'google_calendar_id' => 'nullable|string|max:255',
             'timezone' => 'nullable|string|max:64',
-            'system_prompt' => 'nullable|string|max:5000',
+            'system_prompt' => 'nullable|string|max:'.WhatsappInstance::SYSTEM_PROMPT_MAX,
             'business_name' => 'nullable|string|max:255',
             'ai_provider' => 'nullable|string|in:deepseek,mimo',
             'status' => 'nullable|string|in:active,inactive',
@@ -106,7 +106,7 @@ class InstancesController extends Controller
             'telegram_bot_token' => 'nullable|string|max:200',
             'telegram_allowed_user_ids' => 'nullable|string|max:2000',
             'register_telegram_webhook' => 'sometimes|boolean',
-        ]);
+        ], $this->instanceValidationMessages());
 
         $user = $request->user();
         $canSeeAllCompanies = $user ? $user->canSelectAllCompanies() : false;
@@ -219,7 +219,7 @@ class InstancesController extends Controller
             'branch_id' => 'nullable|string',
             'google_calendar_id' => 'nullable|string|max:255',
             'timezone' => 'nullable|string|max:64',
-            'system_prompt' => 'nullable|string|max:5000',
+            'system_prompt' => 'nullable|string|max:'.WhatsappInstance::SYSTEM_PROMPT_MAX,
             'business_name' => 'nullable|string|max:255',
             'ai_provider' => 'required|string|in:deepseek,mimo',
             'status' => 'required|string|in:active,inactive',
@@ -229,7 +229,7 @@ class InstancesController extends Controller
             'clear_telegram_bot' => 'sometimes|boolean',
             'register_telegram_webhook' => 'sometimes|boolean',
             'regenerate_telegram_link_code' => 'sometimes|boolean',
-        ]);
+        ], $this->instanceValidationMessages());
 
         $payload = [
             'branch_id' => ! empty($validated['branch_id']) ? $validated['branch_id'] : null,
@@ -328,6 +328,7 @@ class InstancesController extends Controller
             'google_service_email' => $source->google_service_email,
             'timezone' => $source->timezone,
             'ai_provider' => $source->ai_provider ?: 'deepseek',
+            // El mutador del modelo recorta a WhatsappInstance::SYSTEM_PROMPT_MAX.
             'system_prompt' => $source->system_prompt,
             'business_name' => $validated['business_name']
                 ?? (($source->business_name ? $source->business_name.' (copia)' : null)),
@@ -528,6 +529,20 @@ class InstancesController extends Controller
         if (is_file($absolute)) {
             @unlink($absolute);
         }
+    }
+
+    /**
+     * Mensajes en español para la validación de la configuración de instancia.
+     *
+     * @return array<string, string>
+     */
+    protected function instanceValidationMessages(): array
+    {
+        return [
+            'system_prompt.max' => 'Las instrucciones extra no pueden superar los '
+                .WhatsappInstance::SYSTEM_PROMPT_MAX
+                .' caracteres. Redúcelo para poder guardar.',
+        ];
     }
 
     /**

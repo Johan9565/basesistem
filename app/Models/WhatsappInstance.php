@@ -9,6 +9,11 @@ class WhatsappInstance extends Model
 {
     use BelongsToCompany;
 
+    /**
+     * Longitud máxima permitida para system_prompt (configuración de instancia).
+     */
+    public const SYSTEM_PROMPT_MAX = 10000;
+
     protected $connection = 'mongodb';
 
     protected $collection = 'whatsapp_instances';
@@ -39,6 +44,8 @@ class WhatsappInstance extends Model
         'telegram_link_code',
         'telegram_allowed_user_ids',
         'slot_busy_policy',
+        'tiempo_pausa_humano',
+        'tiempo_expiracion_sesion',
     ];
 
     public function branch()
@@ -68,6 +75,47 @@ class WhatsappInstance extends Model
         $shared = trim((string) ($this->evolution_instance_name ?? ''));
 
         return $shared !== '' ? $shared : (string) ($this->instance_name ?? '');
+    }
+
+    /**
+     * Límite duro del campo: la configuración de la instancia nunca debe
+     * guardar más de SYSTEM_PROMPT_MAX caracteres.
+     */
+    public function setSystemPromptAttribute($value): void
+    {
+        $text = $value === null ? null : (string) $value;
+
+        if ($text !== null && $text !== '') {
+            $text = mb_substr($text, 0, self::SYSTEM_PROMPT_MAX);
+        }
+
+        $this->attributes['system_prompt'] = $text;
+    }
+
+    /**
+     * Minutos que el bot espera antes de volver a responder tras la
+     * intervención de un operador (bandera de pausa con TTL).
+     */
+    public function pauseMinutes(): int
+    {
+        $value = $this->tiempo_pausa_humano;
+
+        return $value !== null && $value !== ''
+            ? max(1, (int) $value)
+            : max(1, (int) config('services.whatsapp.tiempo_pausa_humano', 15));
+    }
+
+    /**
+     * Horas de inactividad para considerar muerta la conversación
+     * y comenzar una nueva sesión desde cero.
+     */
+    public function sessionHours(): int
+    {
+        $value = $this->tiempo_expiracion_sesion;
+
+        return $value !== null && $value !== ''
+            ? max(1, (int) $value)
+            : max(1, (int) config('services.whatsapp.tiempo_expiracion_sesion', 24));
     }
 
     /**

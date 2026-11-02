@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\Storage;
 use MongoDB\Laravel\Eloquent\Model;
 
 class Product extends Model
@@ -35,10 +36,20 @@ class Product extends Model
 
     public function getImageUrlAttribute(?string $value): ?string
     {
+        // 1. Si la relación images está cargada, usar la portada o primera foto
+        if ($this->relationLoaded('images') && $this->images->isNotEmpty()) {
+            $primary = $this->images->firstWhere('is_primary', true) ?? $this->images->sortBy('order')->first();
+            if ($primary && ! empty($primary->url)) {
+                return $primary->url;
+            }
+        }
+
+        // 2. Si tiene URL explícita persistida
         if (! empty($value)) {
             return $value;
         }
 
+        // 3. Si tiene image_path legacy
         if (! empty($this->image_path)) {
             return asset('storage/'.$this->image_path);
         }
@@ -135,5 +146,36 @@ class Product extends Model
     public function branch()
     {
         return $this->belongsTo(Branch::class, 'branch_id');
+    }
+
+    /**
+     * Imágenes asociadas al producto, ordenadas por posición.
+     */
+    public function images()
+    {
+        return $this->hasMany(ProductImage::class, 'product_id')->orderBy('order');
+    }
+
+    /**
+     * Imagen principal / portada del producto.
+     */
+    public function primaryImage()
+    {
+        return $this->hasOne(ProductImage::class, 'product_id')
+            ->where('is_primary', true)
+            ->where('is_processed', true);
+    }
+
+    /**
+     * Elimina todas las imágenes asociadas del storage y la BD.
+     */
+    public function purgeAllImages(): void
+    {
+        $this->images->each(function (ProductImage $img) {
+            if (! empty($img->path)) {
+                Storage::disk('public')->delete($img->path);
+            }
+            $img->delete();
+        });
     }
 }

@@ -11,9 +11,13 @@ class MessageDispatcher
     /** @var MessengerGatewayInterface|EvolutionApiClient */
     protected $gateway;
 
-    public function __construct(MessengerGatewayInterface $gateway)
+    /** @var ChatStateStore */
+    protected $store;
+
+    public function __construct(MessengerGatewayInterface $gateway, ?ChatStateStore $store = null)
     {
         $this->gateway = $gateway;
+        $this->store = $store ?? new ChatStateStore;
     }
 
     /**
@@ -49,6 +53,10 @@ class MessageDispatcher
             try {
                 $res = $this->gateway->sendText($instance, $phone, $textChunk);
                 $results[] = $res;
+
+                // Registro del envío propio: protege contra la autopausa cuando
+                // Evolution reporte este mensaje de vuelta (fromMe: true).
+                $this->store->registerBotMessage($this->extractMessageId(is_array($res) ? $res : []));
             } catch (Throwable $e) {
                 Log::error('MessageDispatcher sendText failed', [
                     'instance' => $instance,
@@ -65,6 +73,22 @@ class MessageDispatcher
         }
 
         return $results;
+    }
+
+    /**
+     * Extrae el identificador del mensaje devuelto por la API de envío.
+     */
+    protected function extractMessageId(array $response): string
+    {
+        foreach (['key.id', 'data.key.id', 'data.id', 'message.id', 'id'] as $path) {
+            $value = data_get($response, $path);
+
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+        }
+
+        return '';
     }
 
     /**

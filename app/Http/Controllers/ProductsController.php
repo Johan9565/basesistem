@@ -2,7 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreProductRequest;
+use App\Http\Requests\UpdateProductRequest;
+use App\Jobs\ProcessProductImage;
 use App\Models\Product;
+use App\Models\ProductImage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -39,7 +43,7 @@ class ProductsController extends Controller
                 ->toArray();
         }
 
-        $query = Product::with('branch')->orderBy('name', 'asc');
+        $query = Product::with(['branch', 'images'])->orderBy('name', 'asc');
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
@@ -54,18 +58,29 @@ class ProductsController extends Controller
         }
 
         $products = $query->paginate(16)->through(function ($p) {
-            $imageUrl = $p->image_url;
+            // Resolver imagen principal: primera de la galería o fallback legacy
+            $images = $p->images->map(fn (ProductImage $img) => [
+                'id' => (string) $img->_id,
+                'url' => $img->url,
+                'path' => $img->path,
+                'order' => $img->order,
+                'is_primary' => (bool) $img->is_primary,
+                'is_processed' => (bool) $img->is_processed,
+            ])->values();
 
-            // Si el producto no tenía imagen persistida en BD, guardarla permanentemente
-            if (empty($p->getRawOriginal('image_url')) && empty($p->image_path) && ! empty($imageUrl)) {
+            $primaryImage = $images->firstWhere('is_primary', true) ?? $images->first();
+            $imageUrl = $primaryImage['url'] ?? $p->image_url;
+
+            // Compatibilidad: si no tenía imagen y generó fallback, persistirla
+            if (empty($p->getRawOriginal('image_url')) && empty($p->image_path) && $images->isEmpty() && ! empty($imageUrl)) {
                 $p->update(['image_url' => $imageUrl]);
             }
 
             return [
                 'id' => (string) $p->_id,
                 'branch_id' => (string) ($p->branch_id ?? ''),
-                'branch_name' => $p->branch?->name ?? 'Sucursal Principal',
-                'branch_code' => $p->branch?->code ?? '',
+                'branch_name' => $p->branch ? $p->branch->name : 'Sucursal Principal',
+                'branch_code' => $p->branch ? ($p->branch->code ?? '') : '',
                 'sku' => $p->sku,
                 'name' => $p->name,
                 'description' => $p->description,
@@ -77,6 +92,7 @@ class ProductsController extends Controller
                 'image_path' => $p->image_path ?? null,
                 'image_url' => $imageUrl,
                 'is_active' => (bool) $p->is_active,
+                'images' => $images,
             ];
         })->withQueryString();
 
@@ -93,22 +109,9 @@ class ProductsController extends Controller
     /**
      * Guarda un nuevo producto.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(StoreProductRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'branch_id' => 'nullable|string',
-            'sku' => 'required|string|max:50',
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'category' => 'nullable|string|max:100',
-            'price' => 'required|numeric|min:0',
-            'cost' => 'nullable|numeric|min:0',
-            'stock' => 'required|integer|min:0',
-            'min_stock' => 'nullable|integer|min:0',
-            'image' => 'nullable|image|max:5120',
-            'image_url' => 'nullable|string|max:1000',
-            'is_active' => 'boolean',
-        ]);
+        $validated = $request->validated();
 
         if (empty($validated['branch_id'])) {
             $companyContext = app(\App\Services\Tenancy\CompanyContext::class);
@@ -118,15 +121,14 @@ class ProductsController extends Controller
             $validated['branch_id'] = $mainBranch ? (string) $mainBranch->_id : null;
         }
 
-        if ($request->hasFile('image')) {
-            $path = $request->file('image')->store('products', 'public');
-            $validated['image_path'] = $path;
-            $validated['image_url'] = asset('storage/'.$path);
+        unset($validated['images']);
+
+        $product = Product::create($validated);
+
+        // Procesar imágenes subidas
+        if ($request->hasFile('images')) {
+            $this->storeProductImages($product, $request->file('images'));
         }
-
-        unset($validated['image']);
-
-        Product::create($validated);
 
         return back()->with('flash', [
             'type' => 'success',
@@ -137,23 +139,9 @@ class ProductsController extends Controller
     /**
      * Actualiza un producto existente.
      */
-    public function update(Request $request, Product $product): RedirectResponse
+    public function update(UpdateProductRequest $request, Product $product): RedirectResponse
     {
-        $validated = $request->validate([
-            'branch_id' => 'nullable|string',
-            'sku' => 'required|string|max:50',
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'category' => 'nullable|string|max:100',
-            'price' => 'required|numeric|min:0',
-            'cost' => 'nullable|numeric|min:0',
-            'stock' => 'required|integer|min:0',
-            'min_stock' => 'nullable|integer|min:0',
-            'image' => 'nullable|image|max:5120',
-            'image_url' => 'nullable|string|max:1000',
-            'remove_image' => 'nullable|boolean',
-            'is_active' => 'boolean',
-        ]);
+        $validated = $request->validated();
 
         if (empty($validated['branch_id'])) {
             $companyContext = app(\App\Services\Tenancy\CompanyContext::class);
@@ -163,22 +151,35 @@ class ProductsController extends Controller
             $validated['branch_id'] = $mainBranch ? (string) $mainBranch->_id : null;
         }
 
-        if ($request->boolean('remove_image')) {
-            if (! empty($product->image_path)) {
-                Storage::disk('public')->delete($product->image_path);
-            }
-            $validated['image_path'] = null;
-            $validated['image_url'] = null;
-        } elseif ($request->hasFile('image')) {
-            if (! empty($product->image_path)) {
-                Storage::disk('public')->delete($product->image_path);
-            }
-            $path = $request->file('image')->store('products', 'public');
-            $validated['image_path'] = $path;
-            $validated['image_url'] = asset('storage/'.$path);
+        // 1. Eliminar imágenes marcadas para borrar
+        $removeIds = $validated['remove_image_ids'] ?? [];
+        if (! empty($removeIds)) {
+            $this->deleteProductImages($product, $removeIds);
         }
 
-        unset($validated['image'], $validated['remove_image']);
+        // 2. Actualizar imagen principal
+        if (! empty($validated['primary_image_id'])) {
+            $this->setPrimaryImage($product, $validated['primary_image_id']);
+        }
+
+        // 3. Actualizar orden de imágenes
+        if (! empty($validated['image_order'])) {
+            $this->reorderImages($validated['image_order']);
+        }
+
+        // 4. Subir nuevas imágenes
+        if ($request->hasFile('images')) {
+            $currentCount = ProductImage::where('product_id', (string) $product->_id)->count();
+            $this->storeProductImages($product, $request->file('images'), $currentCount);
+        }
+
+        // 5. Actualizar campos del producto (sin los campos de imágenes)
+        unset(
+            $validated['images'],
+            $validated['remove_image_ids'],
+            $validated['image_order'],
+            $validated['primary_image_id']
+        );
 
         $product->update($validated);
 
@@ -189,10 +190,14 @@ class ProductsController extends Controller
     }
 
     /**
-     * Elimina un producto.
+     * Elimina un producto y todas sus imágenes.
      */
     public function destroy(Product $product): RedirectResponse
     {
+        // Limpiar imágenes de la galería
+        $product->purgeAllImages();
+
+        // Limpiar imagen legacy si existe
         if (! empty($product->image_path)) {
             Storage::disk('public')->delete($product->image_path);
         }
@@ -203,5 +208,96 @@ class ProductsController extends Controller
             'type' => 'success',
             'message' => 'Producto eliminado del inventario.',
         ]);
+    }
+
+    /**
+     * Almacena imágenes de producto, crea registros en BD y despacha jobs de procesamiento.
+     *
+     * @param  Product  $product
+     * @param  array<\Illuminate\Http\UploadedFile>  $files
+     * @param  int  $startOrder  Orden inicial para las nuevas imágenes.
+     */
+    private function storeProductImages(Product $product, array $files, int $startOrder = 0): void
+    {
+        $hasExistingPrimary = ProductImage::where('product_id', (string) $product->_id)
+            ->where('is_primary', true)
+            ->exists();
+
+        foreach ($files as $index => $file) {
+            $path = $file->store('products/'.(string) $product->_id, 'public');
+
+            $image = ProductImage::create([
+                'company_id' => $product->company_id,
+                'product_id' => (string) $product->_id,
+                'path' => $path,
+                'original_name' => $file->getClientOriginalName(),
+                'order' => $startOrder + $index + 1,
+                'is_primary' => ! $hasExistingPrimary && $index === 0,
+                'is_processed' => false,
+                'mime_type' => $file->getMimeType(),
+                'size' => $file->getSize(),
+            ]);
+
+            ProcessProductImage::dispatch((string) $image->_id);
+        }
+    }
+
+    /**
+     * Elimina imágenes específicas de un producto (storage + BD).
+     */
+    private function deleteProductImages(Product $product, array $imageIds): void
+    {
+        $images = ProductImage::where('product_id', (string) $product->_id)
+            ->whereIn('_id', $imageIds)
+            ->get();
+
+        $wasPrimaryDeleted = false;
+
+        foreach ($images as $img) {
+            if ($img->is_primary) {
+                $wasPrimaryDeleted = true;
+            }
+            if (! empty($img->path)) {
+                Storage::disk('public')->delete($img->path);
+            }
+            $img->delete();
+        }
+
+        // Si se eliminó la primaria, promover la primera imagen restante
+        if ($wasPrimaryDeleted) {
+            $firstRemaining = ProductImage::where('product_id', (string) $product->_id)
+                ->orderBy('order')
+                ->first();
+
+            if ($firstRemaining) {
+                $firstRemaining->update(['is_primary' => true]);
+            }
+        }
+    }
+
+    /**
+     * Establece la imagen principal de un producto.
+     */
+    private function setPrimaryImage(Product $product, string $imageId): void
+    {
+        // Quitar is_primary de todas las imágenes del producto
+        ProductImage::where('product_id', (string) $product->_id)
+            ->update(['is_primary' => false]);
+
+        // Establecer la nueva primaria
+        ProductImage::where('_id', $imageId)
+            ->where('product_id', (string) $product->_id)
+            ->update(['is_primary' => true]);
+    }
+
+    /**
+     * Reordena las imágenes según el array de IDs proporcionado.
+     */
+    private function reorderImages(array $imageIds): void
+    {
+        foreach ($imageIds as $order => $imageId) {
+            ProductImage::where('_id', $imageId)
+                ->update(['order' => $order + 1]);
+        }
     }
 }

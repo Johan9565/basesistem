@@ -47,7 +47,9 @@ return [
         'key' => env('DEEPSEEK_API_KEY'),
         'base_url' => env('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
         'model' => env('DEEPSEEK_MODEL', 'deepseek-chat'),
-        'max_tokens' => (int) env('DEEPSEEK_MAX_TOKENS', 400),
+        // 800 truncaba tool_calls cuando el modelo "razonaba" (deepseek-flash
+        // consume tokens de razonamiento del mismo presupuesto de salida).
+        'max_tokens' => (int) env('DEEPSEEK_MAX_TOKENS', 1600),
         'temperature' => (float) env('DEEPSEEK_TEMPERATURE', 0.25),
         // Vacío por defecto: "\n\n" cortaba los resúmenes de confirmación a media frase.
         'stop' => array_values(array_filter(array_map(
@@ -60,7 +62,7 @@ return [
         'key' => env('MIMO_API_KEY'),
         'base_url' => env('MIMO_BASE_URL', 'https://api.xiaomimimo.com/v1'),
         'model' => env('MIMO_MODEL', 'mimo-v2-flash'),
-        'max_tokens' => (int) env('MIMO_MAX_TOKENS', 400),
+        'max_tokens' => (int) env('MIMO_MAX_TOKENS', 800),
         'temperature' => (float) env('MIMO_TEMPERATURE', 0.25),
         'stop' => array_values(array_filter(array_map(
             'trim',
@@ -132,6 +134,14 @@ return [
         'process_lock_seconds' => (int) env('WHATSAPP_PROCESS_LOCK_SECONDS', 120),
         'process_lock_wait_seconds' => (int) env('WHATSAPP_PROCESS_LOCK_WAIT_SECONDS', 90),
         'burst_debounce_ms' => (int) env('WHATSAPP_BURST_DEBOUNCE_MS', 2500),
+        // Handoff humano: pausa tras intervención del operador (minutos) y
+        // expiración de la sesión por inactividad (horas). Default por instancia.
+        'tiempo_pausa_humano' => (int) env('WHATSAPP_TIEMPO_PAUSA_HUMANO', 15),
+        'tiempo_expiracion_sesion' => (int) env('WHATSAPP_TIEMPO_EXPIRACION_SESION', 24),
+        // Búfer anti-metralleta: ventana de acumulación (segundos) y TTL del
+        // registro de envíos propios del bot en mensajes_bot (segundos).
+        'buffer_window_seconds' => (int) env('WHATSAPP_BUFFER_WINDOW_SECONDS', 8),
+        'bot_message_ttl' => (int) env('WHATSAPP_BOT_MESSAGE_TTL', 60),
         // Soft-hold de slot al entrar en CONFIRMING (minutos).
         'slot_hold_minutes' => (int) env('WHATSAPP_SLOT_HOLD_MINUTES', 10),
     ],

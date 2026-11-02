@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router, Link } from '@inertiajs/vue3';
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
@@ -9,6 +9,8 @@ import InputNumber from 'primevue/inputnumber';
 import Textarea from 'primevue/textarea';
 import Select from 'primevue/select';
 import ToggleSwitch from 'primevue/toggleswitch';
+
+const MAX_IMAGES = 5;
 
 const props = defineProps({
     products: Object,
@@ -24,13 +26,21 @@ const selectedBranch = ref(props.filters?.branch_id ?? '');
 const dialogVisible = ref(false);
 const isEditing = ref(false);
 const editingProductId = ref(null);
-const imagePreview = ref(null);
-const fileInputRef = ref(null);
 
 // Vistas: 'grid' (Catálogo Visual) y 'list' (Tabla Detallada)
 const viewMode = ref('grid');
 const imageModalVisible = ref(false);
 const selectedProductForImage = ref(null);
+const lightboxIndex = ref(0);
+
+// ── Multi-imagen ──
+const newImageFiles = ref([]);       // File[] — archivos nuevos seleccionados
+const newImagePreviews = ref([]);    // { file, url }[] — previews de nuevos archivos
+const existingImages = ref([]);      // Imágenes ya guardadas en BD
+const removedImageIds = ref([]);     // IDs de imágenes existentes a eliminar
+const primaryImageId = ref(null);    // ID de imagen principal
+const dragOverZone = ref(false);
+const fileInputRef = ref(null);
 
 onMounted(() => {
     const saved = localStorage.getItem('products_view_mode');
@@ -44,9 +54,35 @@ function setViewMode(mode) {
     localStorage.setItem('products_view_mode', mode);
 }
 
-function openImageModal(product) {
+// ── Lightbox con galería ──
+function openImageModal(product, index = 0) {
     selectedProductForImage.value = product;
+    lightboxIndex.value = index;
     imageModalVisible.value = true;
+}
+
+function lightboxImages() {
+    const product = selectedProductForImage.value;
+    if (!product) return [];
+    if (product.images && product.images.length > 0) {
+        return product.images.filter(img => img.url).sort((a, b) => a.order - b.order);
+    }
+    if (product.image_url) {
+        return [{ url: product.image_url, is_primary: true }];
+    }
+    return [];
+}
+
+function lightboxPrev() {
+    const imgs = lightboxImages();
+    if (imgs.length <= 1) return;
+    lightboxIndex.value = (lightboxIndex.value - 1 + imgs.length) % imgs.length;
+}
+
+function lightboxNext() {
+    const imgs = lightboxImages();
+    if (imgs.length <= 1) return;
+    lightboxIndex.value = (lightboxIndex.value + 1) % imgs.length;
 }
 
 const branchOptions = computed(() => [
@@ -67,25 +103,54 @@ const form = useForm({
     cost: 0,
     stock: 0,
     min_stock: 0,
-    image: null,
-    image_url: '',
-    remove_image: false,
     is_active: true,
+    images: [],
+    remove_image_ids: [],
+    image_order: [],
+    primary_image_id: null,
+});
+
+// ── Conteo total de imágenes ──
+const totalImageCount = computed(() => {
+    return existingImages.value.filter(img => !removedImageIds.value.includes(img.id)).length + newImageFiles.value.length;
+});
+
+const remainingSlots = computed(() => MAX_IMAGES - totalImageCount.value);
+
+// ── Todas las imágenes para mostrar en el editor (existentes + nuevas) ──
+const allEditorImages = computed(() => {
+    const existing = existingImages.value
+        .filter(img => !removedImageIds.value.includes(img.id))
+        .map(img => ({
+            type: 'existing',
+            id: img.id,
+            url: img.url,
+            order: img.order,
+            is_primary: img.id === primaryImageId.value,
+            is_processed: img.is_processed,
+        }));
+
+    const newOnes = newImagePreviews.value.map((preview, idx) => ({
+        type: 'new',
+        index: idx,
+        url: preview.url,
+        fileName: preview.file.name,
+        is_primary: existingImages.value.filter(img => !removedImageIds.value.includes(img.id)).length === 0 && idx === 0 && !primaryImageId.value,
+    }));
+
+    return [...existing, ...newOnes];
 });
 
 function openCreateDialog() {
     isEditing.value = false;
     editingProductId.value = null;
-    imagePreview.value = null;
+    resetImageState();
     form.reset();
     form.clearErrors();
-    form.image = null;
-    form.image_url = '';
-    form.remove_image = false;
+    form.is_active = true;
     if (fileInputRef.value) fileInputRef.value.value = '';
     const mainBranch = props.branches?.find((b) => b.is_main) || props.branches?.[0];
     form.branch_id = mainBranch ? mainBranch.id : '';
-    form.is_active = true;
     dialogVisible.value = true;
 }
 
@@ -103,48 +168,171 @@ function openEditDialog(product) {
     form.cost = Number(product.cost ?? 0);
     form.stock = Number(product.stock ?? 0);
     form.min_stock = Number(product.min_stock ?? 0);
-    form.image = null;
-    form.image_url = product.image_url ?? '';
-    form.remove_image = false;
-    imagePreview.value = product.image_url || null;
-    if (fileInputRef.value) fileInputRef.value.value = '';
     form.is_active = Boolean(product.is_active ?? true);
+
+    // Cargar imágenes existentes
+    resetImageState();
+    if (product.images && product.images.length > 0) {
+        existingImages.value = product.images.map(img => ({ ...img }));
+        const primary = product.images.find(img => img.is_primary);
+        primaryImageId.value = primary ? primary.id : (product.images[0]?.id || null);
+    }
+
+    if (fileInputRef.value) fileInputRef.value.value = '';
     dialogVisible.value = true;
 }
 
-function onFileSelect(e) {
-    const file = e.target.files?.[0];
-    if (file) {
-        form.image = file;
-        form.remove_image = false;
-        imagePreview.value = URL.createObjectURL(file);
-    }
+function resetImageState() {
+    // Revocar URLs de previews anteriores
+    newImagePreviews.value.forEach(p => URL.revokeObjectURL(p.url));
+    newImageFiles.value = [];
+    newImagePreviews.value = [];
+    existingImages.value = [];
+    removedImageIds.value = [];
+    primaryImageId.value = null;
+    dragOverZone.value = false;
 }
 
-function removeSelectedImage() {
-    form.image = null;
-    form.image_url = '';
-    form.remove_image = true;
-    imagePreview.value = null;
+// ── Manejo de archivos ──
+function onFilesSelect(e) {
+    const files = Array.from(e.target?.files || []);
+    addFiles(files);
     if (fileInputRef.value) fileInputRef.value.value = '';
 }
 
-function submitForm() {
-    if (isEditing.value) {
-        if (form.image) {
-            form.transform((data) => ({
-                ...data,
-                _method: 'patch',
-            })).post(route('products.update', editingProductId.value), {
-                onSuccess: () => { dialogVisible.value = false; },
-            });
-        } else {
-            form.patch(route('products.update', editingProductId.value), {
-                onSuccess: () => { dialogVisible.value = false; },
-            });
+function addFiles(files) {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    const maxSize = 10 * 1024 * 1024; // 10MB
+
+    for (const file of files) {
+        if (totalImageCount.value + 1 > MAX_IMAGES) {
+            break;
         }
+
+        if (!allowedTypes.includes(file.type)) {
+            continue;
+        }
+
+        if (file.size > maxSize) {
+            continue;
+        }
+
+        newImageFiles.value.push(file);
+        newImagePreviews.value.push({
+            file,
+            url: URL.createObjectURL(file),
+        });
+    }
+}
+
+function removeNewImage(index) {
+    URL.revokeObjectURL(newImagePreviews.value[index].url);
+    newImageFiles.value.splice(index, 1);
+    newImagePreviews.value.splice(index, 1);
+}
+
+function removeExistingImage(imageId) {
+    removedImageIds.value.push(imageId);
+    // Si se quitó la primaria, reasignar
+    if (primaryImageId.value === imageId) {
+        const remaining = existingImages.value.filter(img => !removedImageIds.value.includes(img.id));
+        primaryImageId.value = remaining.length > 0 ? remaining[0].id : null;
+    }
+}
+
+function setPrimary(imageId) {
+    primaryImageId.value = imageId;
+}
+
+// ── Drag & Drop ──
+function onDragOver(e) {
+    e.preventDefault();
+    dragOverZone.value = true;
+}
+
+function onDragLeave() {
+    dragOverZone.value = false;
+}
+
+function onDrop(e) {
+    e.preventDefault();
+    dragOverZone.value = false;
+    const files = Array.from(e.dataTransfer?.files || []);
+    addFiles(files);
+}
+
+// ── Reordenar ──
+const dragItem = ref(null);
+const dragOverItem = ref(null);
+
+function onImageDragStart(idx) {
+    dragItem.value = idx;
+}
+
+function onImageDragOver(e, idx) {
+    e.preventDefault();
+    dragOverItem.value = idx;
+}
+
+function onImageDrop(idx) {
+    if (dragItem.value === null || dragItem.value === idx) {
+        dragItem.value = null;
+        dragOverItem.value = null;
+        return;
+    }
+
+    // Reordenar el array visual de imágenes existentes
+    const allImgs = [...allEditorImages.value];
+    const moved = allImgs.splice(dragItem.value, 1)[0];
+    allImgs.splice(idx, 0, moved);
+
+    // Reconstruir el orden de existentes
+    const reorderedExisting = allImgs.filter(i => i.type === 'existing');
+    reorderedExisting.forEach((img, i) => {
+        const found = existingImages.value.find(e => e.id === img.id);
+        if (found) found.order = i + 1;
+    });
+
+    // Reconstruir el array de nuevos archivos en el orden correcto
+    const reorderedNew = allImgs.filter(i => i.type === 'new');
+    const newFiles = [];
+    const newPreviews = [];
+    reorderedNew.forEach(img => {
+        newFiles.push(newImageFiles.value[img.index]);
+        newPreviews.push(newImagePreviews.value[img.index]);
+    });
+    newImageFiles.value = newFiles;
+    newImagePreviews.value = newPreviews;
+
+    dragItem.value = null;
+    dragOverItem.value = null;
+}
+
+// ── Submit ──
+function submitForm() {
+    // Preparar los archivos y metadatos de imágenes
+    form.images = newImageFiles.value;
+    form.remove_image_ids = removedImageIds.value;
+    form.primary_image_id = primaryImageId.value;
+
+    // Orden de imágenes existentes (sin las eliminadas)
+    const ordered = existingImages.value
+        .filter(img => !removedImageIds.value.includes(img.id))
+        .sort((a, b) => a.order - b.order)
+        .map(img => img.id);
+    form.image_order = ordered;
+
+    if (isEditing.value) {
+        form.transform((data) => ({
+            ...data,
+            _method: 'patch',
+        })).post(route('products.update', editingProductId.value), {
+            forceFormData: true,
+            onSuccess: () => { dialogVisible.value = false; },
+        });
     } else {
         form.post(route('products.store'), {
+            forceFormData: true,
             onSuccess: () => { dialogVisible.value = false; },
         });
     }
@@ -164,6 +352,19 @@ function applyFilters() {
         preserveState: true,
         replace: true,
     });
+}
+
+// ── Helpers de vista ──
+function getProductPrimaryUrl(product) {
+    if (product.images && product.images.length > 0) {
+        const primary = product.images.find(i => i.is_primary) || product.images[0];
+        return primary?.url || null;
+    }
+    return product.image_url || null;
+}
+
+function getProductImageCount(product) {
+    return product.images?.length || (product.image_url ? 1 : 0);
 }
 </script>
 
@@ -272,8 +473,8 @@ function applyFilters() {
                             <!-- Imagen y Badges -->
                             <div class="relative aspect-square w-full bg-base-200 overflow-hidden cursor-pointer" @click="openImageModal(product)">
                                 <img
-                                    v-if="product.image_url"
-                                    :src="product.image_url"
+                                    v-if="getProductPrimaryUrl(product)"
+                                    :src="getProductPrimaryUrl(product)"
                                     :alt="product.name"
                                     class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                                     loading="lazy"
@@ -311,6 +512,14 @@ function applyFilters() {
                                     >
                                         <span class="h-1.5 w-1.5 rounded-full" :class="product.stock <= (product.min_stock || 0) ? 'bg-rose-400 animate-pulse' : 'bg-emerald-400'"></span>
                                         {{ product.stock }} en stock
+                                    </span>
+                                </div>
+
+                                <!-- Badge conteo de fotos -->
+                                <div v-if="getProductImageCount(product) > 1" class="absolute bottom-3 right-3">
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/60 text-white backdrop-blur-md">
+                                        <i class="pi pi-images text-[10px]"></i>
+                                        {{ getProductImageCount(product) }}
                                     </span>
                                 </div>
                             </div>
@@ -366,9 +575,9 @@ function applyFilters() {
                                     </div>
                                 </div>
 
-                                <div v-if="product.image_url" class="mt-2 pt-1.5 flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                <div v-if="getProductPrimaryUrl(product)" class="mt-2 pt-1.5 flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
                                     <i class="pi pi-whatsapp text-xs"></i>
-                                    <span>Envío de foto activo para el bot</span>
+                                    <span>Envío de {{ getProductImageCount(product) > 1 ? getProductImageCount(product) + ' fotos activo' : 'foto activo' }} para el bot</span>
                                 </div>
                             </div>
                         </div>
@@ -409,23 +618,27 @@ function applyFilters() {
                                                 title="Click para agrandar imagen"
                                             >
                                                 <img
-                                                    v-if="product.image_url"
-                                                    :src="product.image_url"
+                                                    v-if="getProductPrimaryUrl(product)"
+                                                    :src="getProductPrimaryUrl(product)"
                                                     :alt="product.name"
                                                     class="h-full w-full object-cover group-hover/thumb:scale-110 transition-transform"
                                                     loading="lazy"
                                                 />
                                                 <span v-else class="text-xl opacity-40">📦</span>
-                                                <div v-if="product.image_url" class="absolute inset-0 bg-black/30 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px]">
+                                                <div v-if="getProductPrimaryUrl(product)" class="absolute inset-0 bg-black/30 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px]">
                                                     <i class="pi pi-eye"></i>
+                                                </div>
+                                                <!-- Conteo de fotos en el thumb -->
+                                                <div v-if="getProductImageCount(product) > 1" class="absolute -bottom-0.5 -right-0.5 bg-primary text-primary-content text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow">
+                                                    {{ getProductImageCount(product) }}
                                                 </div>
                                             </div>
                                             <div class="min-w-0">
                                                 <div class="font-bold text-base-content truncate">{{ product.name }}</div>
                                                 <div class="text-xs font-mono text-primary flex items-center gap-1.5">
                                                     <span>{{ product.sku }}</span>
-                                                    <span v-if="product.image_url" class="badge badge-xs badge-success text-[9px] gap-0.5">
-                                                        <i class="pi pi-image text-[8px]"></i> con foto
+                                                    <span v-if="getProductPrimaryUrl(product)" class="badge badge-xs badge-success text-[9px] gap-0.5">
+                                                        <i class="pi pi-image text-[8px]"></i> {{ getProductImageCount(product) }} foto{{ getProductImageCount(product) > 1 ? 's' : '' }}
                                                     </span>
                                                 </div>
                                             </div>
@@ -518,26 +731,70 @@ function applyFilters() {
             </div>
         </div>
 
-        <!-- Modal Lightbox para ver foto ampliada del producto -->
+        <!-- Modal Lightbox para ver galería de fotos del producto -->
         <Dialog
             v-model:visible="imageModalVisible"
             modal
             :header="selectedProductForImage?.name || 'Detalle del Producto'"
-            :style="{ width: '560px' }"
+            :style="{ width: '620px' }"
             class="p-fluid overflow-hidden"
         >
             <div v-if="selectedProductForImage" class="space-y-4 pt-1">
+                <!-- Galería principal con navegación -->
                 <div class="relative w-full aspect-square rounded-2xl overflow-hidden bg-base-200 border border-base-300 shadow-inner">
-                    <img
-                        v-if="selectedProductForImage.image_url"
-                        :src="selectedProductForImage.image_url"
-                        :alt="selectedProductForImage.name"
-                        class="w-full h-full object-cover"
-                    />
+                    <template v-if="lightboxImages().length > 0">
+                        <img
+                            :src="lightboxImages()[lightboxIndex]?.url"
+                            :alt="selectedProductForImage.name"
+                            class="w-full h-full object-cover transition-all duration-300"
+                        />
+                        <!-- Controles de navegación -->
+                        <template v-if="lightboxImages().length > 1">
+                            <button
+                                type="button"
+                                class="absolute left-3 top-1/2 -translate-y-1/2 btn btn-sm btn-circle bg-black/50 hover:bg-black/70 text-white border-none shadow-lg"
+                                @click="lightboxPrev"
+                            >
+                                <i class="pi pi-chevron-left text-sm"></i>
+                            </button>
+                            <button
+                                type="button"
+                                class="absolute right-3 top-1/2 -translate-y-1/2 btn btn-sm btn-circle bg-black/50 hover:bg-black/70 text-white border-none shadow-lg"
+                                @click="lightboxNext"
+                            >
+                                <i class="pi pi-chevron-right text-sm"></i>
+                            </button>
+                            <!-- Indicador de posición -->
+                            <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/50 backdrop-blur-md rounded-full px-3 py-1.5">
+                                <button
+                                    v-for="(img, idx) in lightboxImages()"
+                                    :key="idx"
+                                    type="button"
+                                    class="h-2 w-2 rounded-full transition-all"
+                                    :class="idx === lightboxIndex ? 'bg-white scale-125' : 'bg-white/40 hover:bg-white/60'"
+                                    @click="lightboxIndex = idx"
+                                ></button>
+                            </div>
+                        </template>
+                    </template>
                     <div v-else class="w-full h-full flex flex-col items-center justify-center text-base-content/30 gap-2">
                         <span class="text-6xl">📦</span>
                         <span class="text-sm">Sin imagen disponible</span>
                     </div>
+                </div>
+
+                <!-- Miniaturas de la galería -->
+                <div v-if="lightboxImages().length > 1" class="flex gap-2 overflow-x-auto pb-1">
+                    <button
+                        v-for="(img, idx) in lightboxImages()"
+                        :key="idx"
+                        type="button"
+                        class="h-16 w-16 rounded-xl overflow-hidden border-2 shrink-0 transition-all"
+                        :class="idx === lightboxIndex ? 'border-primary shadow-md scale-105' : 'border-base-300 opacity-60 hover:opacity-100'"
+                        @click="lightboxIndex = idx"
+                    >
+                        <img :src="img.url" :alt="`Foto ${idx + 1}`" class="h-full w-full object-cover" />
+                    </button>
                 </div>
 
                 <div class="space-y-2">
@@ -570,9 +827,14 @@ function applyFilters() {
                         </div>
                     </div>
 
-                    <div v-if="selectedProductForImage.image_url" class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
+                    <div v-if="getProductPrimaryUrl(selectedProductForImage)" class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
                         <i class="pi pi-whatsapp text-base"></i>
-                        <span>Esta fotografía está lista y se enviará por WhatsApp cuando un cliente solicite fotos de este producto al asistente virtual.</span>
+                        <span>
+                            {{ getProductImageCount(selectedProductForImage) > 1
+                                ? `Las ${getProductImageCount(selectedProductForImage)} fotografías están listas y se enviarán por WhatsApp cuando un cliente solicite fotos de este producto al asistente virtual.`
+                                : 'Esta fotografía está lista y se enviará por WhatsApp cuando un cliente solicite fotos de este producto al asistente virtual.'
+                            }}
+                        </span>
                     </div>
                 </div>
 
@@ -587,7 +849,7 @@ function applyFilters() {
             v-model:visible="dialogVisible"
             modal
             :header="isEditing ? 'Editar Producto' : 'Nuevo Producto en Inventario'"
-            :style="{ width: '520px' }"
+            :style="{ width: '600px' }"
             class="p-fluid"
         >
             <form @submit.prevent="submitForm" class="space-y-4 pt-2">
@@ -632,49 +894,143 @@ function applyFilters() {
                     <Textarea v-model="form.description" rows="2" class="w-full text-sm mt-1" placeholder="Detalles o especificaciones" />
                 </div>
 
-                <!-- Imagen del Producto -->
+                <!-- ═══════════════════════════════════════════════ -->
+                <!-- GALERÍA DE IMÁGENES (Hasta 5 fotos)            -->
+                <!-- ═══════════════════════════════════════════════ -->
                 <div>
-                    <label class="text-xs font-semibold text-base-content/80 block mb-1">
-                        Fotografía / Imagen del Producto
-                    </label>
-                    <div class="flex items-center gap-4 p-3 rounded-xl border border-base-300 bg-base-200/40">
-                        <div class="h-16 w-16 rounded-xl border border-base-300 bg-base-100 flex items-center justify-center overflow-hidden shrink-0 shadow-xs relative">
-                            <img
-                                v-if="imagePreview"
-                                :src="imagePreview"
-                                alt="Vista previa"
-                                class="h-full w-full object-cover"
-                            />
-                            <span v-else class="text-2xl opacity-30">📷</span>
-                        </div>
-                        <div class="flex-1 min-w-0 space-y-1.5">
-                            <div class="flex items-center gap-2">
-                                <label class="btn btn-xs btn-primary gap-1 cursor-pointer">
-                                    <i class="pi pi-upload text-[10px]"></i>
-                                    <span>{{ imagePreview ? 'Cambiar Foto' : 'Subir Foto' }}</span>
-                                    <input
-                                        ref="fileInputRef"
-                                        type="file"
-                                        accept="image/*"
-                                        class="hidden"
-                                        @change="onFileSelect"
-                                    />
-                                </label>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-xs font-semibold text-base-content/80">
+                            📷 Fotografías del Producto
+                        </label>
+                        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                            :class="totalImageCount >= MAX_IMAGES
+                                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                                : 'bg-base-200 text-base-content/60'"
+                        >
+                            {{ totalImageCount }} de {{ MAX_IMAGES }} imágenes
+                        </span>
+                    </div>
+
+                    <!-- Grid de imágenes existentes + nuevas -->
+                    <div v-if="allEditorImages.length > 0" class="grid grid-cols-5 gap-2 mb-3">
+                        <div
+                            v-for="(img, idx) in allEditorImages"
+                            :key="img.type === 'existing' ? img.id : `new-${img.index}`"
+                            class="relative aspect-square rounded-xl overflow-hidden border-2 transition-all group/img cursor-grab"
+                            :class="[
+                                img.is_primary ? 'border-primary ring-2 ring-primary/30' : 'border-base-300',
+                                dragOverItem === idx ? 'scale-105 border-info' : ''
+                            ]"
+                            draggable="true"
+                            @dragstart="onImageDragStart(idx)"
+                            @dragover="onImageDragOver($event, idx)"
+                            @drop="onImageDrop(idx)"
+                        >
+                            <img :src="img.url" :alt="`Imagen ${idx + 1}`" class="h-full w-full object-cover" />
+
+                            <!-- Overlay con acciones -->
+                            <div class="absolute inset-0 bg-black/50 opacity-0 group-hover/img:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1">
+                                <!-- Hacer portada -->
                                 <button
-                                    v-if="imagePreview"
+                                    v-if="img.type === 'existing' && !img.is_primary"
                                     type="button"
-                                    class="btn btn-xs btn-ghost text-error hover:bg-error/10"
-                                    @click="removeSelectedImage"
+                                    class="btn btn-xs bg-primary/90 text-white border-none hover:bg-primary"
+                                    @click="setPrimary(img.id)"
+                                    title="Establecer como portada"
                                 >
-                                    <i class="pi pi-trash text-[10px]"></i>
-                                    Quitar
+                                    <i class="pi pi-star text-[10px]"></i>
+                                </button>
+                                <!-- Eliminar -->
+                                <button
+                                    type="button"
+                                    class="btn btn-xs bg-error/90 text-white border-none hover:bg-error"
+                                    @click="img.type === 'existing' ? removeExistingImage(img.id) : removeNewImage(img.index)"
+                                    title="Quitar imagen"
+                                >
+                                    <i class="pi pi-times text-[10px]"></i>
                                 </button>
                             </div>
-                            <p class="text-[11px] text-base-content/50">
-                                Sube una imagen (JPG, PNG, WEBP). El bot podrá enviarla por WhatsApp cuando los clientes la soliciten.
+
+                            <!-- Badge portada -->
+                            <div v-if="img.is_primary" class="absolute top-1 left-1">
+                                <span class="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-primary text-primary-content shadow">
+                                    <i class="pi pi-star-fill text-[8px]"></i> Portada
+                                </span>
+                            </div>
+
+                            <!-- Badge procesando -->
+                            <div v-if="img.type === 'existing' && !img.is_processed" class="absolute bottom-1 left-1">
+                                <span class="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-amber-500 text-white shadow animate-pulse">
+                                    <i class="pi pi-spin pi-spinner text-[8px]"></i> Optimizando
+                                </span>
+                            </div>
+
+                            <!-- Badge nuevo -->
+                            <div v-if="img.type === 'new'" class="absolute bottom-1 left-1">
+                                <span class="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-info text-info-content shadow">
+                                    Nueva
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Zona de Drop / Botón de Subir -->
+                    <div
+                        v-if="totalImageCount < MAX_IMAGES"
+                        class="relative rounded-xl border-2 border-dashed transition-all p-4"
+                        :class="dragOverZone
+                            ? 'border-primary bg-primary/5 scale-[1.01]'
+                            : 'border-base-300 bg-base-200/30 hover:border-primary/50 hover:bg-base-200/50'"
+                        @dragover="onDragOver"
+                        @dragleave="onDragLeave"
+                        @drop="onDrop"
+                    >
+                        <div class="flex flex-col items-center justify-center gap-2 text-center py-2">
+                            <div class="flex items-center gap-3">
+                                <div class="text-2xl opacity-40">
+                                    {{ dragOverZone ? '📥' : '📷' }}
+                                </div>
+                                <div>
+                                    <label class="btn btn-sm btn-primary gap-1.5 cursor-pointer">
+                                        <i class="pi pi-upload text-[10px]"></i>
+                                        <span>Subir Fotos</span>
+                                        <input
+                                            ref="fileInputRef"
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/webp"
+                                            multiple
+                                            class="hidden"
+                                            @change="onFilesSelect"
+                                        />
+                                    </label>
+                                </div>
+                            </div>
+                            <p class="text-[11px] text-base-content/50 max-w-xs">
+                                Arrastra y suelta o selecciona hasta <strong>{{ remainingSlots }}</strong> imagen{{ remainingSlots !== 1 ? 'es' : '' }} más.
+                                <span class="block mt-0.5">JPEG, PNG o WebP · Máximo 10MB c/u · Optimizadas para WhatsApp automáticamente.</span>
                             </p>
                         </div>
                     </div>
+
+                    <!-- Límite alcanzado -->
+                    <div v-else class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-center">
+                        <p class="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center justify-center gap-1.5">
+                            <i class="pi pi-info-circle text-sm"></i>
+                            Límite de {{ MAX_IMAGES }} imágenes alcanzado. Elimina una foto para subir otra.
+                        </p>
+                    </div>
+
+                    <!-- Errores de validación de imágenes -->
+                    <div v-if="form.errors.images" class="mt-2 text-xs text-error font-medium flex items-center gap-1">
+                        <i class="pi pi-exclamation-triangle text-xs"></i>
+                        {{ form.errors.images }}
+                    </div>
+                    <template v-for="(error, key) in form.errors" :key="key">
+                        <div v-if="key.startsWith('images.')" class="mt-1 text-xs text-error font-medium flex items-center gap-1">
+                            <i class="pi pi-exclamation-triangle text-xs"></i>
+                            {{ error }}
+                        </div>
+                    </template>
                 </div>
 
                 <div class="grid grid-cols-2 gap-3">
